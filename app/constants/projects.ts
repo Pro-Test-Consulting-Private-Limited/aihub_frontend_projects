@@ -1,5 +1,5 @@
 import { Breadcrumb } from "../interfaces/common";
-import { ProjectItem, ProjectSegmentItem } from "../interfaces/project";
+import { ProjectSegmentItem } from "../interfaces/project";
 import RequirementAnalysis from "../../public/icons/life-cycle/requirement-analysis.png";
 import TestExecution from "../../public/icons/life-cycle/test-execution.png";
 import TestPlan from "../../public/icons/life-cycle/test-plan.png";
@@ -15,7 +15,7 @@ export const ProjectBreadcrumbs: Breadcrumb[] = [
 export const ProjectSegmentsBreadcrumbs = (
   workplace: string,
   domain: string,
-  current: ProjectItem | null | undefined,
+  current: { id: string | number; name: string } | null | undefined,
 ) => {
   return [
     { label: "Home", href: "/home", active: false },
@@ -32,7 +32,7 @@ export const ProjectSegmentsBreadcrumbs = (
 export const ProjectGenerateDraftBreadcrumbs = (
   workplace: string,
   domain: string,
-  current: ProjectItem | null | undefined,
+  current: { id: string | number; name: string } | null | undefined,
   segment: string,
 ) => {
   return [
