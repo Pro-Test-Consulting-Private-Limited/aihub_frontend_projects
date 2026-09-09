@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { exchangeCodeForToken, getAccessibleResources } from "@/lib/jira";
+import { exchangeCodeForToken } from "@/lib/jira";
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
@@ -15,12 +15,12 @@ export async function GET(req: NextRequest) {
 
   try {
     const tokens = await exchangeCodeForToken(code);
-    // const resources = await getAccessibleResources(tokens.access_token);
 
-    // TODO: persist tokens.access_token, tokens.refresh_token, and
-    // resources[0].id (the Jira cloudId) to your database, scoped to the
-    // current logged-in user/org. The cookie below is for local testing
-    // only — do not ship this as-is to production.
+    // TODO: exchange the access token for accessible Jira resources and
+    // persist tokens.access_token, tokens.refresh_token, and the Jira
+    // cloudId to your database, scoped to the current logged-in user/org.
+    // The cookie below is for local testing only — do not ship this
+    // as-is to production.
     const res = NextResponse.redirect(
       new URL("/integrations?connected=jira", req.url)
     );
