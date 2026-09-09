@@ -1,0 +1,203 @@
+.auth-layout-wrapper {
+  width: 100%;
+  height: 100vh;
+  position: relative;
+
+  .auth-layout-logo {
+    height: 100%;
+    background: linear-gradient(to top right, #5223b0, #b024b5);
+    position: absolute;
+  }
+
+  .auth-layout-left-container {
+    width: 55%;
+    height: 100vh;
+    position: absolute;
+    left: 0%;
+    top: 0px;
+    font-weight: 600;
+    font-size: 16px;
+    color: #fff;
+    display: flex;
+    align-items: end;
+
+    .auth-inner {
+      width: 100%;
+      display: flex;
+      justify-content: center;
+      margin-bottom: 25px;
+    }
+  }
+
+  .auth-layout-form-container {
+    width: 45%;
+    height: 100vh;
+    position: absolute;
+    left: 55%;
+    top: 0px;
+    background-color: #000;
+    z-index: 9998;
+
+    .switch-auth {
+      position: absolute;
+      top: 35px;
+      right: 35px;
+      display: flex;
+      align-items: center;
+      color: #fff;
+      font-size: 14px;
+
+      .switch-button {
+        border: 1px solid #8664f2;
+        border-radius: 6px;
+        padding: 5px 15px;
+        color: #fff;
+        background-color: #000;
+        margin-left: 7px;
+        font-size: 13px;
+      }
+    }
+
+    .auth-form {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+
+      .form-container {
+        width: 70%;
+        max-width: 400px;
+
+        .welcome-back {
+          font-size: 25px;
+          font-weight: 600;
+          color: #fff;
+        }
+
+        .login-message {
+          font-size: 14px;
+          color: #fff;
+          margin-bottom: 30px;
+        }
+
+        .input-wrapper {
+          margin-bottom: 15px;
+          position: relative;
+
+          .label {
+            color: #fff;
+            font-size: 13px;
+            margin-bottom: 3px;
+          }
+
+          input {
+            background-color: rgba(249, 249, 249, 0.2);
+            border: none;
+            border-radius: 5px;
+            width: 100%;
+            height: 35px;
+            padding: 0 35px;
+            font-size: 14px;
+            color: #fff;
+          }
+
+          input::placeholder {
+            color: #aaa7a7;
+            font-size: 13px;
+          }
+
+          input:focus {
+            outline: none;
+          }
+
+          .input-icon {
+            position: absolute;
+            bottom: 10px;
+            left: 12px;
+          }
+
+          .action-icon {
+            position: absolute;
+            bottom: 10px;
+            right: 12px;
+            cursor: pointer;
+          }
+        }
+
+        .forgot-password {
+          border: none;
+          color: #8664f2;
+          font-size: 13px;
+          font-weight: 500;
+          text-align: right;
+          cursor: pointer;
+          margin-bottom: 30px;
+        }
+
+        .terms-and-conditions {
+          display: flex;
+          align-items: center;
+          flex-wrap: wrap;
+          color: #8692a6;
+          font-size: 11px;
+          margin-bottom: 30px;
+
+          .link {
+            color: #8664f2;
+            font-size: 11px;
+            font-weight: 500;
+            cursor: pointer;
+            margin: 0 3px;
+          }
+        }
+
+        .form-submit {
+          background: linear-gradient(0deg, #8664f2 26%, #a05dff 58%);
+          color: #ffffff;
+          height: 35px;
+          width: 100%;
+          border-radius: 5px;
+          font-size: 14px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .divider {
+          width: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          font-size: 12px;
+          color: #5e6066;
+          margin: 15px 0;
+
+          .line {
+            width: 45%;
+            height: 1px;
+            background-color: #5e6066;
+          }
+        }
+
+        .google {
+          background-color: rgba(249, 249, 249, 0.2);
+          border-radius: 5px;
+          width: 100%;
+          height: 35px;
+          font-size: 14px;
+          color: #fff;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+
+          img {
+            margin-right: 10px;
+          }
+        }
+      }
+    }
+  }
+}

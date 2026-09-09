@@ -1,0 +1,57 @@
+version: 0.2
+
+env:
+  variables:
+    AWS_REGION: "eu-west-2"
+    ECR_REPO_NAME: "ai-hub/frontend"
+    ECS_CLUSTER: "ai-accelerator-protest"
+    ECS_SERVICE: "ai-accelerator-protest-fe"
+
+phases:
+  pre_build:
+    commands:
+      - echo "Logging into ECR..."
+      - ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
+      - ECR_URI="$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
+      - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_URI
+
+      - echo "Setting IMAGE_TAG..."
+      - IMAGE_TAG=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c1-8)
+      - echo "IMAGE_TAG=$IMAGE_TAG"
+
+  build:
+    commands:
+      - echo "Building Docker image..."
+      - docker build -t $ECR_REPO_NAME:$IMAGE_TAG .
+      - docker tag $ECR_REPO_NAME:$IMAGE_TAG $ECR_URI/$ECR_REPO_NAME:$IMAGE_TAG
+
+  post_build:
+    commands:
+      - echo "Pushing image to ECR..."
+      - docker push $ECR_URI/$ECR_REPO_NAME:$IMAGE_TAG
+
+      - echo "Fetching current task definition ARN..."
+      - TASK_ARN=$(aws ecs describe-services --cluster $ECS_CLUSTER --services $ECS_SERVICE --query 'services[0].taskDefinition' --output text)
+
+      - echo "Downloading current task definition JSON..."
+      - aws ecs describe-task-definition --task-definition $TASK_ARN --query 'taskDefinition' > raw-taskdef.json
+
+      - echo "Cleaning task definition JSON..."
+      - jq 'del(.revision, .status, .taskDefinitionArn, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy, .deregisteredAt)' raw-taskdef.json > cleaned-taskdef.json
+
+      - echo "Updating container image..."
+      - NEW_IMAGE="$ECR_URI/$ECR_REPO_NAME:$IMAGE_TAG"
+      - jq --arg IMAGE "$NEW_IMAGE" '.containerDefinitions[0].image = $IMAGE' cleaned-taskdef.json > new-taskdef.json
+
+      - echo "Registering new task definition revision..."
+      - NEW_TASK_DEF=$(aws ecs register-task-definition --cli-input-json file://new-taskdef.json --query 'taskDefinition.taskDefinitionArn' --output text)
+
+      - echo "Updating ECS service..."
+      - aws ecs update-service --cluster $ECS_CLUSTER --service $ECS_SERVICE --task-definition $NEW_TASK_DEF
+
+      - echo "Waiting for ECS service to stabilize..."
+      - bash -c "aws ecs wait services-stable --cluster $ECS_CLUSTER --services $ECS_SERVICE"
+
+artifacts:
+  files:
+    - new-taskdef.json
