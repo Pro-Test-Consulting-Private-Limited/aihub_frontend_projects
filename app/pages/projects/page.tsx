@@ -494,7 +494,7 @@ export default function Projects() {
 
                 {projects.length === 0 && (
                   <div style={{ fontSize: 13, color: "var(--gray)" }}>
-                    No projects yet. Click "+ New Project" to create one.
+                    No projects yet. Click &quot;+ New Project&quot; to create one.
                   </div>
                 )}
 
@@ -615,7 +615,7 @@ export default function Projects() {
                             </div>
                           ))}
                         </div>
-                        <div className="aihub-helper">Domain is locked after creation and can't be changed here.</div>
+                        <div className="aihub-helper">Domain is locked after creation and can&apos;t be changed here.</div>
                       </div>
                       <div className="aihub-save-row">
                         <button className="aihub-btn ghost" onClick={() => setEditingBasic(false)}>

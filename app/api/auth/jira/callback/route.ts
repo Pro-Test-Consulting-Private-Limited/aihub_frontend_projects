@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const tokens = await exchangeCodeForToken(code);
-    const resources = await getAccessibleResources(tokens.access_token);
+    // const resources = await getAccessibleResources(tokens.access_token);
 
     // TODO: persist tokens.access_token, tokens.refresh_token, and
     // resources[0].id (the Jira cloudId) to your database, scoped to the

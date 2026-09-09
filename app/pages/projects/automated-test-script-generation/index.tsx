@@ -193,14 +193,7 @@ export default function ProjectAutomatedTestScriptGeneration() {
     setFile(null);
   };
 
-  /**
-   * Button text.
-   */
-  const generateButtonText = loading
-    ? "Generating..."
-    : response
-      ? "Generated Script"
-      : "Generate Script";
+
 
   return (
     <AuthGuard>
