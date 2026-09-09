@@ -4,7 +4,7 @@
 import Breadcrumbs from "@/app/components/breadcrumbs";
 import { ProjectGenerateDraftBreadcrumbs } from "@/app/constants/projects";
 // import { ProjectList } from "@/app/data/project";
-import { ProjectItem } from "@/app/interfaces/project";
+import { useProjects, type Project } from "@/app/lib/projectsStore";
 import { useSearchParams } from "next/navigation";
 import {
   ChangeEvent,
@@ -35,7 +35,7 @@ import {
 
 import { validateURL } from "@/app/utils";
 import AuthGuard from "@/app/lib/authguard";
-import { useProjects } from "@/app/lib/projectsStore";
+// import { useProjects } from "@/app/lib/projectsStore";
 
 import FileItem from "./file";
 import FileViewer from "@/app/components/fileviewer";
@@ -53,7 +53,7 @@ export default function ProjectAutomatedTestScriptGenerationCypress() {
     searchParams?.get("domain") || "";
 
   const [projectDetails, setProjectDetails] =
-    useState<ProjectItem | null>(null);
+    useState<Project | null>(null);
 
   const [inputvalue, setInputValue] =
     useState<string>("");
@@ -109,7 +109,7 @@ export default function ProjectAutomatedTestScriptGenerationCypress() {
       (project) => String(project.id) === String(projectId)
     );
 
-    setProjectDetails(matched as ProjectItem | null);
+    setProjectDetails(matched ?? null);
   }, [projects, projectId]);
 
   /*
