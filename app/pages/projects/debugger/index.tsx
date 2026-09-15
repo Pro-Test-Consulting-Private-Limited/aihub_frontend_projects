@@ -13,7 +13,6 @@ import Image from "next/image";
 import { DEBUGGER_ACCEPTED_FILES } from "@/app/constants/common";
 import { processImage } from "@/app/services/generate";
 import Markdown from "react-markdown";
-import AuthGuard from "@/app/lib/authguard";
 
 export default function ProjectDebugger() {
   const searchParams = useSearchParams();
