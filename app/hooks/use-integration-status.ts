@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useMsal } from "@azure/msal-react";
-import { loginRequest } from "@/app/lib/msal";
+import { getFreshIdToken } from "@/app/lib/auth-client";
 
 export type IntegrationProvider = "jira" | "github" | "swagger";
 
@@ -46,23 +46,6 @@ const EMPTY_SWAGGER: SwaggerStatus = {
   specUrl: null,
 };
 
-async function getIdToken(
-  instance: ReturnType<typeof useMsal>["instance"],
-  accounts: ReturnType<typeof useMsal>["accounts"],
-) {
-  if (accounts.length === 0) return null;
-  try {
-    const result = await instance.acquireTokenSilent({
-      ...loginRequest,
-      account: accounts[0],
-    });
-    return result.idToken;
-  } catch {
-    const result = await instance.acquireTokenPopup(loginRequest);
-    return result.idToken;
-  }
-}
-
 export function useIntegrationStatus() {
   const { instance, accounts } = useMsal();
   const [jira, setJira] = useState<JiraStatus>(EMPTY_JIRA);
@@ -71,13 +54,16 @@ export function useIntegrationStatus() {
   const [stored, setStored] = useState<StoredIntegration[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const authHeaders = useCallback(async () => {
-    const token = await getIdToken(instance, accounts);
-    return {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    };
-  }, [instance, accounts]);
+  const authHeaders = useCallback(
+    async (forceRefresh = false) => {
+      const token = await getFreshIdToken(instance, accounts, forceRefresh);
+      return {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
+    },
+    [instance, accounts],
+  );
 
   const refresh = useCallback(async () => {
     try {
@@ -156,12 +142,19 @@ export function useIntegrationStatus() {
         meta?: Record<string, unknown>;
       }>,
     ) => {
-      const headers = await authHeaders();
-      const res = await fetch("/api/integrations", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ providers }),
-      });
+      const post = async (forceRefresh: boolean) => {
+        const headers = await authHeaders(forceRefresh);
+        return fetch("/api/integrations", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ providers }),
+        });
+      };
+
+      let res = await post(false);
+      if (res.status === 401) {
+        res = await post(true);
+      }
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || "Failed to save integrations");
@@ -173,11 +166,18 @@ export function useIntegrationStatus() {
 
   const disconnectProvider = useCallback(
     async (provider: IntegrationProvider) => {
-      const headers = await authHeaders();
-      const res = await fetch(`/api/integrations?provider=${provider}`, {
-        method: "DELETE",
-        headers,
-      });
+      const del = async (forceRefresh: boolean) => {
+        const headers = await authHeaders(forceRefresh);
+        return fetch(`/api/integrations?provider=${provider}`, {
+          method: "DELETE",
+          headers,
+        });
+      };
+
+      let res = await del(false);
+      if (res.status === 401) {
+        res = await del(true);
+      }
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || "Failed to disconnect");

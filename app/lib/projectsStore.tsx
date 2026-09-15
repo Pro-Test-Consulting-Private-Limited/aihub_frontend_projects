@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from "react";
 import { useMsal } from "@azure/msal-react";
-import { loginRequest } from "@/app/lib/msal";
+import { getFreshIdToken } from "@/app/lib/auth-client";
 
 export type Project = {
   id: string;
@@ -41,14 +41,7 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
 
   const getIdToken = useCallback(async () => {
-    if (accounts.length === 0) return null;
-    try {
-      const result = await instance.acquireTokenSilent({ ...loginRequest, account: accounts[0] });
-      return result.idToken;
-    } catch {
-      const result = await instance.acquireTokenPopup(loginRequest);
-      return result.idToken;
-    }
+    return getFreshIdToken(instance, accounts);
   }, [instance, accounts]);
 
   const refresh = useCallback(async () => {
