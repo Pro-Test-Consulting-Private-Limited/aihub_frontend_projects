@@ -1,6 +1,8 @@
 ﻿"use client";
 
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from "react";
+import { useMsal } from "@azure/msal-react";
+import { loginRequest } from "@/app/lib/msal";
 
 export type Project = {
   id: string;
@@ -22,116 +24,77 @@ export type Project = {
 
 type ProjectsContextType = {
   projects: Project[];
-  addProject: (p: Omit<Project, "id">) => Project;
-  updateProject: (id: string, updates: Partial<Project>) => void;
-  deleteProject: (id: string) => void;
+  loading: boolean;
+  error: string | null;
+  refresh: () => Promise<void>;
+  addProject: (p: Omit<Project, "id" | "owner">) => Promise<Project>;
+  updateProject: (id: string, updates: Partial<Project>) => Promise<void>;
+  deleteProject: (id: string) => Promise<void>;
 };
 
 const ProjectsContext = createContext<ProjectsContextType | null>(null);
 
-const STORAGE_KEY = "aihub_projects";
-
-// Seeded so existing demo rows keep showing up even after this change.
-// Ids "1".."5" match the old static data/project.ts ids (as strings).
-const DEFAULT_PROJECTS: Project[] = [
-  {
-    id: "1",
-    name: "QA Workbench",
-    description: "",
-    domain: "Testing",
-    department: "Information Technology",
-    workspace: "Pro Test",
-    owner: "Divya K",
-    dateOfCreation: "10 Jun 2025",
-    applicationUrl: "",
-    authRequired: false,
-    authType: "",
-    product: "AI Hub",
-    status: "Active",
-    dueDate: "18/10/2025",
-    progress: 78,
-  },
-  {
-    id: "4",
-    name: "Digital Wallet",
-    description:
-      "Digital wallet application for payments, transfers, and balance management.",
-    domain: "Testing",
-    department: "Information Technology",
-    workspace: "Pro Test",
-    owner: "Divya K",
-    dateOfCreation: "28 Aug 2026",
-    applicationUrl: "https://app-atlas.protestcorp.com/",
-    authRequired: false,
-    authType: "",
-    product: "App Atlas",
-    status: "Active",
-    dueDate: "04/11/2026",
-    progress: 78,
-  },
-  {
-    id: "5",
-    name: "Data Bank",
-    description: "",
-    domain: "Testing",
-    department: "Information Technology",
-    workspace: "Pro Test",
-    owner: "Divya K",
-    dateOfCreation: "01 Sep 2026",
-    applicationUrl: "https://app-atlas.protestcorp.com/",
-    authRequired: false,
-    authType: "",
-    product: "App Atlas",
-    status: "Active",
-    dueDate: "12/12/2026",
-    progress: 45,
-  },
-];
-
 export function ProjectsProvider({ children }: { children: ReactNode }) {
+  const { instance, accounts } = useMsal();
   const [projects, setProjects] = useState<Project[]>([]);
-  const [initialized, setInitialized] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const getIdToken = useCallback(async () => {
+    if (accounts.length === 0) return null;
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        setProjects(JSON.parse(raw));
-      } else {
-        setProjects(DEFAULT_PROJECTS);
-      }
+      const result = await instance.acquireTokenSilent({ ...loginRequest, account: accounts[0] });
+      return result.idToken;
     } catch {
-      setProjects(DEFAULT_PROJECTS);
+      const result = await instance.acquireTokenPopup(loginRequest);
+      return result.idToken;
+    }
+  }, [instance, accounts]);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/projects");
+      if (!res.ok) throw new Error(`Failed to load projects (${res.status})`);
+      setProjects(await res.json());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load projects");
     } finally {
-      setInitialized(true);
+      setLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    if (!initialized) return; // never write until the initial load has finished
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
-    } catch {
-      // ignore quota errors
-    }
-  }, [projects, initialized]);
+  useEffect(() => { refresh(); }, [refresh]);
 
-  const addProject = (p: Omit<Project, "id">) => {
-    const newProject: Project = { ...p, id: crypto.randomUUID() };
-    setProjects((prev) => [...prev, newProject]);
-    return newProject;
+  const authHeaders = async () => {
+    const token = await getIdToken();
+    return { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) };
   };
 
-  const updateProject = (id: string, updates: Partial<Project>) => {
+  const addProject = async (p: Omit<Project, "id" | "owner">) => {
+    const res = await fetch("/api/projects", { method: "POST", headers: await authHeaders(), body: JSON.stringify(p) });
+    if (!res.ok) throw new Error("Failed to create project");
+    const created: Project = await res.json();
+    setProjects((prev) => [created, ...prev]);
+    return created;
+  };
+
+  const updateProject = async (id: string, updates: Partial<Project>) => {
+    const res = await fetch(`/api/projects/${id}`, { method: "PATCH", headers: await authHeaders(), body: JSON.stringify(updates) });
+    if (!res.ok) throw new Error("Failed to update project");
     setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates } : p)));
   };
 
-  const deleteProject = (id: string) => {
+  const deleteProject = async (id: string) => {
+    const token = await getIdToken();
+    const res = await fetch(`/api/projects/${id}`, { method: "DELETE", headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    if (!res.ok) throw new Error("Failed to delete project");
     setProjects((prev) => prev.filter((p) => p.id !== id));
   };
 
   return (
-    <ProjectsContext.Provider value={{ projects, addProject, updateProject , deleteProject }}>
+    <ProjectsContext.Provider value={{ projects, loading, error, refresh, addProject, updateProject, deleteProject }}>
       {children}
     </ProjectsContext.Provider>
   );
@@ -142,6 +105,3 @@ export function useProjects() {
   if (!ctx) throw new Error("useProjects must be used inside <ProjectsProvider>");
   return ctx;
 }
-
-
-

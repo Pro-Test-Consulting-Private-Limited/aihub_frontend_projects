@@ -25,10 +25,13 @@ export default function AuthenticationLayout({
 
   return (
     <div className="auth-layout-wrapper flex">
-      <div className="auth-layout-logo flex items-center justify-center">
+      <div className="auth-layout-logo relative flex items-center justify-center">
         <Image
           src={AuthImage}
-          className="h-[100%] object-cover object-center"
+          fill
+          priority
+          sizes="55vw"
+          className="object-cover object-center"
           alt="Logo"
         />
       </div>

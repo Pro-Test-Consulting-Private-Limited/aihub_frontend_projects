@@ -3,11 +3,14 @@
   height: 100vh;
   position: relative;
 
-  .auth-layout-logo {
-    height: 100%;
-    background: linear-gradient(to top right, #5223b0, #b024b5);
-    position: absolute;
-  }
+ .auth-layout-logo {
+  width: 55%;      /* ← add: matches .auth-layout-left-container's width */
+  height: 100%;
+  left: 0;          /* ← add */
+  top: 0;            /* ← add */
+  background: linear-gradient(to top right, #5223b0, #b024b5);
+  position: absolute;
+}
 
   .auth-layout-left-container {
     width: 55%;
