@@ -1,6 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useMsal } from "@azure/msal-react";
+import { loginRequest } from "@/app/lib/msal";
+
+export type IntegrationProvider = "jira" | "github" | "swagger";
+
+export type StoredIntegration = {
+  provider: IntegrationProvider;
+  meta: Record<string, unknown>;
+  connectedAt?: string;
+};
 
 export type JiraStatus = {
   connected: boolean;
@@ -24,33 +34,144 @@ const EMPTY_GITHUB: GitHubStatus = {
   username: null,
 };
 
+async function getIdToken(
+  instance: ReturnType<typeof useMsal>["instance"],
+  accounts: ReturnType<typeof useMsal>["accounts"],
+) {
+  if (accounts.length === 0) return null;
+  try {
+    const result = await instance.acquireTokenSilent({
+      ...loginRequest,
+      account: accounts[0],
+    });
+    return result.idToken;
+  } catch {
+    const result = await instance.acquireTokenPopup(loginRequest);
+    return result.idToken;
+  }
+}
+
 export function useIntegrationStatus() {
+  const { instance, accounts } = useMsal();
   const [jira, setJira] = useState<JiraStatus>(EMPTY_JIRA);
   const [github, setGithub] = useState<GitHubStatus>(EMPTY_GITHUB);
+  const [swaggerConnected, setSwaggerConnected] = useState(false);
+  const [stored, setStored] = useState<StoredIntegration[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const authHeaders = useCallback(async () => {
+    const token = await getIdToken(instance, accounts);
+    return {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+  }, [instance, accounts]);
 
   const refresh = useCallback(async () => {
     try {
-      const [jiraRes, githubRes] = await Promise.all([
+      const headers = await authHeaders();
+      const [dbRes, jiraRes, githubRes] = await Promise.all([
+        fetch("/api/integrations", { cache: "no-store", headers }),
         fetch("/api/auth/jira/status", { cache: "no-store" }),
         fetch("/api/auth/github/status", { cache: "no-store" }),
       ]);
-      if (jiraRes.ok) setJira(await jiraRes.json());
-      if (githubRes.ok) setGithub(await githubRes.json());
+
+      let dbIntegrations: StoredIntegration[] = [];
+      if (dbRes.ok) {
+        const data = await dbRes.json();
+        dbIntegrations = data.integrations ?? [];
+        setStored(dbIntegrations);
+      }
+
+      const cookieJira = jiraRes.ok ? await jiraRes.json() : EMPTY_JIRA;
+      const cookieGithub = githubRes.ok ? await githubRes.json() : EMPTY_GITHUB;
+
+      const dbJira = dbIntegrations.find((i) => i.provider === "jira");
+      const dbGithub = dbIntegrations.find((i) => i.provider === "github");
+      const dbSwagger = dbIntegrations.find((i) => i.provider === "swagger");
+
+      setJira({
+        connected: Boolean(cookieJira.connected || dbJira),
+        siteName:
+          cookieJira.siteName ||
+          (typeof dbJira?.meta?.label === "string" ? dbJira.meta.label : null) ||
+          null,
+        siteUrl: cookieJira.siteUrl ?? null,
+      });
+
+      setGithub({
+        connected: Boolean(cookieGithub.connected || dbGithub),
+        username:
+          cookieGithub.username ||
+          (typeof dbGithub?.meta?.username === "string"
+            ? dbGithub.meta.username
+            : null) ||
+          null,
+      });
+
+      setSwaggerConnected(Boolean(dbSwagger));
     } catch (err) {
       console.error("Failed to load integration status", err);
     }
-  }, []);
+  }, [authHeaders]);
 
   useEffect(() => {
     refresh().finally(() => setLoading(false));
   }, [refresh]);
 
-  return { jira, github, loading, refresh };
-}
+  const saveProviders = useCallback(
+    async (
+      providers: Array<{
+        provider: IntegrationProvider;
+        meta?: Record<string, unknown>;
+      }>,
+    ) => {
+      const headers = await authHeaders();
+      const res = await fetch("/api/integrations", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ providers }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to save integrations");
+      }
+      await refresh();
+    },
+    [authHeaders, refresh],
+  );
 
-export function startOAuth(provider: "jira" | "github", returnTo?: string) {
-  const url = new URL(`/api/auth/${provider}/authorize`, window.location.origin);
-  if (returnTo) url.searchParams.set("returnTo", returnTo);
-  window.location.href = url.toString();
+  const disconnectProvider = useCallback(
+    async (provider: IntegrationProvider) => {
+      const headers = await authHeaders();
+      const res = await fetch(`/api/integrations?provider=${provider}`, {
+        method: "DELETE",
+        headers,
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to disconnect");
+      }
+
+      if (provider === "jira" || provider === "github") {
+        await fetch(`/api/auth/${provider}/disconnect`, { method: "POST" }).catch(
+          () => undefined,
+        );
+      }
+
+      await refresh();
+    },
+    [authHeaders, refresh],
+  );
+
+  return {
+    jira,
+    github,
+    swaggerConnected,
+    stored,
+    loading,
+    refresh,
+    saveProviders,
+    disconnectProvider,
+  };
 }

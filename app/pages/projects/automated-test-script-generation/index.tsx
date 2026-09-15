@@ -403,9 +403,9 @@ export default function ProjectAutomatedTestScriptGeneration() {
                       src="/icons/loading.gif"
                       width={15}
                       height={15}
+                      unoptimized
                       className="mr-1"
                       alt="loading"
-                      unoptimized
                     />
 
                     Generating...

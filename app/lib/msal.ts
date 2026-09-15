@@ -13,7 +13,6 @@ const msalConfig: Configuration = {
       ? `https://login.microsoftonline.com/${tenantId}`
       : "https://login.microsoftonline.com/common",
     redirectUri,
-    navigateToLoginRequestUrl: true,
   },
   cache: {
     cacheLocation: "sessionStorage",

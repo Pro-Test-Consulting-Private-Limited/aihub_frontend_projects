@@ -41,8 +41,11 @@ export default function AuthenticationLayout({
           <div>Powered</div>
           <Image
             src={FullLogo}
+            width={140}
+            height={30}
             className="h-[30px] w-auto ml-[10px]"
             alt="Logo"
+            priority
           />
         </div>
       </div>

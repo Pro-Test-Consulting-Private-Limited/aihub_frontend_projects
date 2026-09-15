@@ -25,9 +25,10 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
       <div className="w-[100%] h-[calc(100%-80px)] flex items-center justify-center">
         <Image
           src={"/icons/loading.gif"}
-          width={15}
-          height={15}
+          width={100}
+          height={100}
           alt="Loading..."
+          unoptimized
           className="w-[100px] h-[100px]"
         />
       </div>

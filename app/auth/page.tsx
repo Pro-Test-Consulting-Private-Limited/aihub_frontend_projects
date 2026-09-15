@@ -10,6 +10,7 @@ import HideIcon from "../../public/icons/hide.svg";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMsal } from "@azure/msal-react";
+import { toast } from "react-toastify";
 import { loginRequest } from "../lib/msal";
 
 const Login = () => {
@@ -66,13 +67,14 @@ const Login = () => {
           className={`google ${loading ? "opacity-[0.5]" : ""}`}
           onClick={() => handleLogin()}
         >
-          <Image src={MicrosoftIcon} alt="google" width={17} />
+          <Image src={MicrosoftIcon} alt="microsoft" width={17} height={17} className="h-[17px] w-auto" />
           Sign in with Microsoft
           {loading && (
             <Image
               src={"/icons/loading.gif"}
               width={15}
               height={15}
+              unoptimized
               className="ml-1"
               alt="loading"
             />
@@ -123,14 +125,22 @@ const Login = () => {
           />
         </div>
 
-        <div className="forgot-password">Forgot Password?</div>
+        <div
+          className="forgot-password cursor-pointer"
+          onClick={() => toast.info("Password reset is coming soon")}
+        >
+          Forgot Password?
+        </div>
 
         <button
+          type="button"
           className={`form-submit ${
             !username || !password || loading ? "opacity-[0.5]" : ""
           }`}
-          disabled={!username || !password}
-          onClick={() => null}
+          disabled={!username || !password || loading}
+          onClick={() =>
+            toast.info("Email login is coming soon. Use Sign in with Microsoft.")
+          }
         >
           Login
         </button>
