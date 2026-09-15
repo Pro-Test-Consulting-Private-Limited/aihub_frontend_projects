@@ -1,11 +1,11 @@
 "use client";
 import Breadcrumbs from "@/app/components/breadcrumbs";
 import { ProjectGenerateDraftBreadcrumbs } from "@/app/constants/projects";
-import { ProjectList } from "@/app/data/project";
-import { ProjectItem, TestResultsItem } from "@/app/interfaces/project";
+import { TestResultsItem } from "@/app/interfaces/project";
 import AuthGuard from "@/app/lib/authguard";
+import { useProjects } from "@/app/lib/projectsStore";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
+import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import FileIcon from "../../../../public/icons/projects/file.svg";
 import JiraIcon from "../../../../public/icons/projects/jira.svg";
 import CloseIcon from "../../../../public/icons/projects/close.svg";
@@ -31,14 +31,14 @@ function filenameFromContentDisposition(header: string | undefined, fallback: st
 export default function ProjectGenerateDraft() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const projectId: number | null | undefined = Number(
-    searchParams.get("projectId"),
-  );
+  const { projects } = useProjects();
+  const projectId = searchParams.get("projectId") || "";
   const workplace: string = searchParams.get("workplace") || "";
   const domain: string = searchParams.get("domain") || "";
-  const [projectDetails, setProjectDetails] = useState<
-    ProjectItem | null | undefined
-  >(null);
+  const projectDetails = useMemo(
+    () => projects.find((project) => String(project.id) === String(projectId)) ?? null,
+    [projects, projectId],
+  );
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [downloadingExcel, setDownloadingExcel] = useState(false);
@@ -47,15 +47,6 @@ export default function ProjectGenerateDraft() {
   const { jira, refresh } = useIntegrationStatus();
   const [connectJira, setConnectJira] = useState(false);
   const handledJiraCallback = useRef(false);
-
-  const fetchProjectDetails = useCallback(() => {
-    const matched = ProjectList.find((elem) => elem.id === projectId);
-    setProjectDetails(matched);
-  }, [projectId]);
-
-  useEffect(() => {
-    fetchProjectDetails();
-  }, [fetchProjectDetails]);
 
   useEffect(() => {
     const connected = searchParams.get("connected");
@@ -127,7 +118,6 @@ export default function ProjectGenerateDraft() {
       anchor.click();
       anchor.remove();
       window.URL.revokeObjectURL(url);
-      toast.success("Excel downloaded");
     } catch (err: unknown) {
       console.log(err);
       const maybeAxios = err as { data?: Blob | { error?: string } };
@@ -163,7 +153,7 @@ export default function ProjectGenerateDraft() {
             workplace,
             domain,
             projectDetails,
-            "Test Case Generation",
+            "Testcase Generation + Test Data creation",
           )}
         />
 

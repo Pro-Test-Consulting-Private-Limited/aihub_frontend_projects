@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Modal from "./modal";
 
-type Provider = "jira" | "github";
+type Provider = "jira" | "github" | "swagger";
 
 export default function ConnectIntegrationModal({
   provider,
@@ -12,37 +12,56 @@ export default function ConnectIntegrationModal({
 }: {
   provider: Provider | null;
   onClose: () => void;
-  onConnected: (provider: Provider) => void;
+  onConnected: (
+    provider: Provider,
+    meta?: { title?: string; specUrl?: string; username?: string; siteName?: string },
+  ) => void;
 }) {
   const [siteUrl, setSiteUrl] = useState("");
   const [email, setEmail] = useState("");
   const [apiToken, setApiToken] = useState("");
   const [githubToken, setGithubToken] = useState("");
+  const [specUrl, setSpecUrl] = useState("");
+  const [swaggerToken, setSwaggerToken] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const isJira = provider === "jira";
-  const title = isJira ? "Connect Jira" : "Connect GitHub";
+  const title =
+    provider === "jira"
+      ? "Connect Jira"
+      : provider === "github"
+        ? "Connect GitHub"
+        : "Connect Swagger";
 
   const handleSubmit = async () => {
+    if (!provider) return;
     setError("");
     setSaving(true);
     try {
+      const body =
+        provider === "jira"
+          ? { siteUrl, email, apiToken }
+          : provider === "github"
+            ? { token: githubToken }
+            : { specUrl, token: swaggerToken || undefined };
+
       const res = await fetch(`/api/auth/${provider}/connect`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(
-          isJira
-            ? { siteUrl, email, apiToken }
-            : { token: githubToken },
-        ),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || "Could not connect. Check your details and try again.");
         return;
       }
-      if (provider) onConnected(provider);
+
+      onConnected(provider, {
+        title: data.title,
+        specUrl: data.specUrl,
+        username: data.username,
+        siteName: data.siteName,
+      });
       onClose();
     } catch {
       setError("Could not connect. Please try again.");
@@ -59,12 +78,14 @@ export default function ConnectIntegrationModal({
       modalStyle="w-[440px] dark:bg-[#141414]"
     >
       <p className="text-[13px] text-[#7E7E7E] dark:text-[#9ca3af] mb-4">
-        {isJira
+        {provider === "jira"
           ? "Use your Jira Cloud site, Atlassian email, and an API token. The app will verify the account and mark Jira as connected."
-          : "Paste a GitHub personal access token. The app will verify it and mark GitHub as connected."}
+          : provider === "github"
+            ? "Paste a GitHub personal access token. The app will verify it and mark GitHub as connected."
+            : "Paste a public OpenAPI / Swagger JSON or YAML URL. Add a bearer token only if the spec is private."}
       </p>
 
-      {isJira ? (
+      {provider === "jira" ? (
         <div className="flex flex-col gap-3">
           <label className="text-[12px] font-[600] text-[#1F1F1F] dark:text-[#ededed]">
             Jira site URL
@@ -104,7 +125,7 @@ export default function ConnectIntegrationModal({
             Create a Jira API token
           </a>
         </div>
-      ) : (
+      ) : provider === "github" ? (
         <div className="flex flex-col gap-3">
           <label className="text-[12px] font-[600] text-[#1F1F1F] dark:text-[#ededed]">
             Personal access token
@@ -123,6 +144,36 @@ export default function ConnectIntegrationModal({
             className="text-[12px] text-[#2684FF]"
           >
             Create a GitHub token
+          </a>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <label className="text-[12px] font-[600] text-[#1F1F1F] dark:text-[#ededed]">
+            OpenAPI / Swagger URL
+            <input
+              value={specUrl}
+              onChange={(e) => setSpecUrl(e.target.value)}
+              placeholder="https://petstore3.swagger.io/api/v3/openapi.json"
+              className="mt-1 w-full h-[38px] px-3 rounded-[8px] border border-[rgba(94,96,102,0.3)] dark:border-[#2a2a2a] bg-white dark:bg-[#1a1a1a] text-[13px] outline-none"
+            />
+          </label>
+          <label className="text-[12px] font-[600] text-[#1F1F1F] dark:text-[#ededed]">
+            Access token (optional)
+            <input
+              type="password"
+              value={swaggerToken}
+              onChange={(e) => setSwaggerToken(e.target.value)}
+              placeholder="Bearer token if the spec is private"
+              className="mt-1 w-full h-[38px] px-3 rounded-[8px] border border-[rgba(94,96,102,0.3)] dark:border-[#2a2a2a] bg-white dark:bg-[#1a1a1a] text-[13px] outline-none"
+            />
+          </label>
+          <a
+            href="https://petstore3.swagger.io/api/v3/openapi.json"
+            target="_blank"
+            rel="noreferrer"
+            className="text-[12px] text-[#2684FF]"
+          >
+            Try the public Petstore OpenAPI example
           </a>
         </div>
       )}

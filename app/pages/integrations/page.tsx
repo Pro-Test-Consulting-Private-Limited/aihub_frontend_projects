@@ -15,7 +15,7 @@ import {
 } from "@/app/hooks/use-integration-status";
 import ConnectIntegrationModal from "@/app/components/connect-integration-modal";
 
-type LiveProvider = "jira" | "github";
+type LiveProvider = "jira" | "github" | "swagger";
 
 interface IntegrationTool {
   id: string;
@@ -82,6 +82,7 @@ const CATEGORIES: IntegrationCategory[] = [
         buttons: ["Connect Swagger"],
         Icon: SiSwagger,
         color: "#85EA2D",
+        provider: "swagger",
       },
       {
         id: "redocly",
@@ -202,7 +203,7 @@ function IntegrationsContent() {
   const {
     jira,
     github,
-    swaggerConnected,
+    swagger,
     refresh,
     saveProviders,
     disconnectProvider,
@@ -243,14 +244,16 @@ function IntegrationsContent() {
   }, [searchParams, router, saveProviders]);
 
   const resolveTool = (tool: IntegrationTool): IntegrationTool => {
-    if (tool.id === "swagger") {
+    if (tool.provider === "swagger") {
       return {
         ...tool,
-        status: swaggerConnected ? "connected" : "disconnected",
-        description: swaggerConnected
-          ? `Connected to demo OpenAPI workspace. ${tool.description}`
+        status: swagger.connected ? "connected" : "disconnected",
+        description: swagger.connected
+          ? `Connected to ${swagger.title || "OpenAPI spec"}${
+              swagger.specUrl ? ` (${swagger.specUrl})` : ""
+            }. ${tool.description}`
           : tool.description,
-        buttons: swaggerConnected ? ["Disconnect Swagger"] : ["Connect Swagger"],
+        buttons: swagger.connected ? ["Disconnect Swagger"] : ["Connect Swagger"],
       };
     }
 
@@ -296,19 +299,10 @@ function IntegrationsContent() {
   };
 
   const handleAction = async (tool: IntegrationTool, label: string) => {
-    if (tool.id === "swagger" && label.startsWith("Connect")) {
-      toast.info("Swagger integration is coming soon");
-      return;
-    }
-
-    if (
-      (tool.id === "swagger" || tool.provider) &&
-      label.startsWith("Disconnect")
-    ) {
-      const provider = (tool.provider || tool.id) as "jira" | "github" | "swagger";
-      setBusy(provider);
+    if (tool.provider && label.startsWith("Disconnect")) {
+      setBusy(tool.provider);
       try {
-        await disconnectProvider(provider);
+        await disconnectProvider(tool.provider);
       } catch {
         toast.error(`Could not disconnect ${tool.name}. Please try again.`);
       } finally {
@@ -450,21 +444,43 @@ function IntegrationsContent() {
       <ConnectIntegrationModal
         provider={connectProvider}
         onClose={() => setConnectProvider(null)}
-        onConnected={async (connected) => {
+        onConnected={async (connected, meta) => {
           try {
             if (connected === "jira") {
               await saveProviders([
-                { provider: "jira", meta: { label: "Jira Cloud" } },
+                {
+                  provider: "jira",
+                  meta: { label: meta?.siteName || "Jira Cloud" },
+                },
+              ]);
+            } else if (connected === "github") {
+              await saveProviders([
+                {
+                  provider: "github",
+                  meta: { username: meta?.username || "github-user" },
+                },
               ]);
             } else {
               await saveProviders([
-                { provider: "github", meta: { username: "github-user" } },
+                {
+                  provider: "swagger",
+                  meta: {
+                    label: meta?.title || "OpenAPI Spec",
+                    specUrl: meta?.specUrl || "",
+                  },
+                },
               ]);
             }
           } catch {
             await refresh();
           }
-          toast.success(connected === "github" ? "GitHub connected" : "Jira connected");
+          toast.success(
+            connected === "github"
+              ? "GitHub connected"
+              : connected === "swagger"
+                ? "Swagger connected"
+                : "Jira connected",
+          );
         }}
       />
     </div>

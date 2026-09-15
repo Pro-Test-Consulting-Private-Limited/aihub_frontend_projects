@@ -2,10 +2,9 @@
 
 import Breadcrumbs from "@/app/components/breadcrumbs";
 import { ProjectGenerateDraftBreadcrumbs } from "@/app/constants/projects";
-import { ProjectList } from "@/app/data/project";
-import { ProjectItem } from "@/app/interfaces/project";
+import { useProjects } from "@/app/lib/projectsStore";
 import { useSearchParams } from "next/navigation";
-import { ChangeEvent, useCallback, useEffect, useState } from "react";
+import { ChangeEvent, useCallback, useMemo, useState } from "react";
 
 import FileIcon from "../../../../public/icons/projects/file.svg";
 import PasteIcon from "../../../../public/icons/projects/paste.svg";
@@ -26,18 +25,18 @@ import AuthGuard from "@/app/lib/authguard";
 
 export default function ProjectAutomatedTestScriptGeneration() {
   const searchParams = useSearchParams();
+  const { projects } = useProjects();
 
-  const projectId: number | null | undefined = Number(
-    searchParams?.get("projectId"),
-  );
+  const projectId = searchParams?.get("projectId") || "";
 
   const workplace: string = searchParams?.get("workplace") || "";
   const domain: string = searchParams?.get("domain") || "";
   const segment: string = searchParams?.get("segment") || "Selenium";
 
-  const [projectDetails, setProjectDetails] = useState<
-    ProjectItem | null | undefined
-  >(null);
+  const projectDetails = useMemo(
+    () => projects.find((project) => String(project.id) === String(projectId)) ?? null,
+    [projects, projectId],
+  );
 
   const [inputvalue, setInputValue] = useState<string | null>(null);
   const [error, setError] = useState<boolean>(false);
@@ -49,11 +48,6 @@ export default function ProjectAutomatedTestScriptGeneration() {
 
   // Generated script
   const [response, setResponse] = useState<string>("");
-
-  useEffect(() => {
-    const matched = ProjectList.find((elem) => elem.id === projectId);
-    setProjectDetails(matched);
-  }, [projectId]);
 
   /**
    * Validate URL when Enter is pressed.

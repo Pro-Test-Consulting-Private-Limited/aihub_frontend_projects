@@ -85,7 +85,10 @@ export default function ProjectSegments({
   }, []);
 
   useEffect(() => {
-    params.then((res: { slug: string }) => setProjectId(res.slug));
+    params.then((res: { slug: string | string[] }) => {
+      const slug = res.slug;
+      setProjectId(Array.isArray(slug) ? slug[0] ?? null : slug);
+    });
   }, [params]);
 
 

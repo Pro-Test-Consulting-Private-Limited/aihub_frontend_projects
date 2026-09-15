@@ -23,6 +23,12 @@ export type GitHubStatus = {
   username: string | null;
 };
 
+export type SwaggerStatus = {
+  connected: boolean;
+  title: string | null;
+  specUrl: string | null;
+};
+
 const EMPTY_JIRA: JiraStatus = {
   connected: false,
   siteName: null,
@@ -32,6 +38,12 @@ const EMPTY_JIRA: JiraStatus = {
 const EMPTY_GITHUB: GitHubStatus = {
   connected: false,
   username: null,
+};
+
+const EMPTY_SWAGGER: SwaggerStatus = {
+  connected: false,
+  title: null,
+  specUrl: null,
 };
 
 async function getIdToken(
@@ -55,7 +67,7 @@ export function useIntegrationStatus() {
   const { instance, accounts } = useMsal();
   const [jira, setJira] = useState<JiraStatus>(EMPTY_JIRA);
   const [github, setGithub] = useState<GitHubStatus>(EMPTY_GITHUB);
-  const [swaggerConnected, setSwaggerConnected] = useState(false);
+  const [swagger, setSwagger] = useState<SwaggerStatus>(EMPTY_SWAGGER);
   const [stored, setStored] = useState<StoredIntegration[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -70,10 +82,11 @@ export function useIntegrationStatus() {
   const refresh = useCallback(async () => {
     try {
       const headers = await authHeaders();
-      const [dbRes, jiraRes, githubRes] = await Promise.all([
+      const [dbRes, jiraRes, githubRes, swaggerRes] = await Promise.all([
         fetch("/api/integrations", { cache: "no-store", headers }),
         fetch("/api/auth/jira/status", { cache: "no-store" }),
         fetch("/api/auth/github/status", { cache: "no-store" }),
+        fetch("/api/auth/swagger/status", { cache: "no-store" }),
       ]);
 
       let dbIntegrations: StoredIntegration[] = [];
@@ -85,6 +98,9 @@ export function useIntegrationStatus() {
 
       const cookieJira = jiraRes.ok ? await jiraRes.json() : EMPTY_JIRA;
       const cookieGithub = githubRes.ok ? await githubRes.json() : EMPTY_GITHUB;
+      const cookieSwagger = swaggerRes.ok
+        ? await swaggerRes.json()
+        : EMPTY_SWAGGER;
 
       const dbJira = dbIntegrations.find((i) => i.provider === "jira");
       const dbGithub = dbIntegrations.find((i) => i.provider === "github");
@@ -109,7 +125,21 @@ export function useIntegrationStatus() {
           null,
       });
 
-      setSwaggerConnected(Boolean(dbSwagger));
+      setSwagger({
+        connected: Boolean(cookieSwagger.connected || dbSwagger),
+        title:
+          cookieSwagger.title ||
+          (typeof dbSwagger?.meta?.label === "string"
+            ? dbSwagger.meta.label
+            : null) ||
+          null,
+        specUrl:
+          cookieSwagger.specUrl ||
+          (typeof dbSwagger?.meta?.specUrl === "string"
+            ? dbSwagger.meta.specUrl
+            : null) ||
+          null,
+      });
     } catch (err) {
       console.error("Failed to load integration status", err);
     }
@@ -153,11 +183,9 @@ export function useIntegrationStatus() {
         throw new Error(data.error || "Failed to disconnect");
       }
 
-      if (provider === "jira" || provider === "github") {
-        await fetch(`/api/auth/${provider}/disconnect`, { method: "POST" }).catch(
-          () => undefined,
-        );
-      }
+      await fetch(`/api/auth/${provider}/disconnect`, { method: "POST" }).catch(
+        () => undefined,
+      );
 
       await refresh();
     },
@@ -167,7 +195,8 @@ export function useIntegrationStatus() {
   return {
     jira,
     github,
-    swaggerConnected,
+    swagger,
+    swaggerConnected: swagger.connected,
     stored,
     loading,
     refresh,

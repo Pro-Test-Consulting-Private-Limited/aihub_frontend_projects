@@ -11,6 +11,9 @@ export const OAUTH_COOKIES = {
   githubState: "github_oauth_state",
   githubToken: "github_access_token",
   githubUsername: "github_username",
+  swaggerSpecUrl: "swagger_spec_url",
+  swaggerTitle: "swagger_title",
+  swaggerToken: "swagger_access_token",
   returnTo: "oauth_return_to",
 } as const;
 

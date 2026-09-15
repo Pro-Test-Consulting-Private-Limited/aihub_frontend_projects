@@ -1,17 +1,17 @@
 "use client";
 import Breadcrumbs from "@/app/components/breadcrumbs";
 import AuthGuard from "@/app/lib/authguard";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Pagination from "@/app/components/pagination";
 import { ProjectGenerateDraftBreadcrumbs } from "@/app/constants/projects";
 import { useSearchParams } from "next/navigation";
-import { ProjectItem } from "@/app/interfaces/project";
-import { ProjectList } from "@/app/data/project";
+import { useProjects } from "@/app/lib/projectsStore";
 import { getExecutions } from "@/app/services/generate";
 import ExecutionsTable from "./table";
 
 export default function ErrorLog() {
   const searchParams = useSearchParams();
+  const { projects } = useProjects();
   const limit = 5;
   const [executions, setExecutions] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -21,20 +21,14 @@ export default function ErrorLog() {
   const start = (page - 1) * limit + 1;
   const end = Math.min(page * limit, total);
 
-  const projectId: number | null | undefined = Number(
-    searchParams.get("projectId"),
-  );
+  const projectId = searchParams.get("projectId") || "";
   const workplace: string = searchParams.get("workplace") || "";
   const domain: string = searchParams.get("domain") || "";
 
-  const [projectDetails, setProjectDetails] = useState<
-    ProjectItem | null | undefined
-  >(null);
-
-  const fetchProjectDetails = useCallback(() => {
-    const matched = ProjectList.find((elem) => elem.id === projectId);
-    setProjectDetails(matched);
-  }, [projectId]);
+  const projectDetails = useMemo(
+    () => projects.find((project) => String(project.id) === String(projectId)) ?? null,
+    [projects, projectId],
+  );
 
   const fetchList = useCallback(() => {
     setLoading(true);
@@ -51,10 +45,6 @@ export default function ErrorLog() {
   useEffect(() => {
     fetchList();
   }, [fetchList]);
-
-  useEffect(() => {
-    fetchProjectDetails();
-  }, [fetchProjectDetails]);
 
   return (
     <AuthGuard>
