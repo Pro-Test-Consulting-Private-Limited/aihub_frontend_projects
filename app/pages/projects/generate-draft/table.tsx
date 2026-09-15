@@ -1,5 +1,4 @@
 import Checkbox from "@/app/components/checkbox";
-import { RenderObject } from "@/app/components/renderobject";
 import { TestDataItem, TestResultsItem } from "@/app/interfaces/project";
 import React, { useState } from "react";
 
@@ -92,11 +91,7 @@ const TestResultsTable = ({ data }: { data: TestResultsItem[] }) => {
                 {item.TestSteps?.join(", ")}
               </td>
               <td className="border w-[180px] border-[rgba(130,130,130,0.3)] p-4 border-collapse text-center text-sm">
-                {item.TestDataId
-                  ? item.TestDataId
-                  : item.Inputs
-                    ? <RenderObject data={item.Inputs} />
-                    : "—"}
+                {cell(item.TestDataId)}
               </td>
               <td className="border w-[250px] border-[rgba(130,130,130,0.3)] p-4 border-collapse text-center text-sm">
                 {item.ExpectedResult}
@@ -152,12 +147,6 @@ export const TestDataTable = ({ data }: { data: TestDataItem[] }) => {
           <th className="border border-[rgba(130,130,130,0.3)] border-collapse px-3">
             OTP
           </th>
-          <th className="border border-[rgba(130,130,130,0.3)] border-collapse px-3">
-            Status
-          </th>
-          <th className="border border-[rgba(130,130,130,0.3)] border-collapse px-3">
-            Generation Strategy
-          </th>
         </tr>
       </thead>
       <tbody>
@@ -192,12 +181,6 @@ export const TestDataTable = ({ data }: { data: TestDataItem[] }) => {
             </td>
             <td className="border border-[rgba(130,130,130,0.3)] p-4 border-collapse text-center text-sm">
               {cell(item.OTP)}
-            </td>
-            <td className="border border-[rgba(130,130,130,0.3)] p-4 border-collapse text-center text-sm">
-              {cell(item.Status)}
-            </td>
-            <td className="border border-[rgba(130,130,130,0.3)] p-4 border-collapse text-center text-sm">
-              {cell(item.GenerationStrategy)}
             </td>
           </tr>
         ))}

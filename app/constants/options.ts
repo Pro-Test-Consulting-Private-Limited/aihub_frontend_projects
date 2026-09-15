@@ -75,6 +75,4 @@ export const GENERATE_DRAFT_TEST_DATA_HEADER = [
   { label: "Password", key: "Password" },
   { label: "Amount", key: "Amount" },
   { label: "OTP", key: "OTP" },
-  { label: "Status", key: "Status" },
-  { label: "Generation Strategy", key: "GenerationStrategy" },
 ];
