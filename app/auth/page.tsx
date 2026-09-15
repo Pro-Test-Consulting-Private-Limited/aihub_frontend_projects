@@ -33,9 +33,13 @@ const Login = () => {
   }, [accounts, fetchSession, router]);
 
   const handleLogin = async () => {
-    await setLoading(true);
-    await instance.loginRedirect(loginRequest);
-    await setLoading(false);
+    setLoading(true);
+    try {
+      await instance.loginRedirect(loginRequest);
+    } catch (err) {
+      console.error("Microsoft login failed:", err);
+      setLoading(false);
+    }
   };
 
   return (
@@ -57,6 +61,7 @@ const Login = () => {
         <div className="login-message">Login to continue</div>
 
         <button
+          type="button"
           disabled={loading}
           className={`google ${loading ? "opacity-[0.5]" : ""}`}
           onClick={() => handleLogin()}

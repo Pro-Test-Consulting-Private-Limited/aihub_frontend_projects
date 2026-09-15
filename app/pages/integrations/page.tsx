@@ -1,20 +1,31 @@
 "use client";
 
-import React from "react";
+import React, { Suspense, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { toast } from "react-toastify";
 import { IconType } from "react-icons";
 import { SiJira, SiLinear, SiGithub, SiGitlab, SiGit, SiFigma, SiSwagger } from "react-icons/si";
 import { VscAzureDevops } from "react-icons/vsc";
 import { FaMicrosoft, FaAws, FaSlack, FaBook, FaCode } from "react-icons/fa";
 import Breadcrumbs from "../../components/breadcrumbs";
 import { IntegrationsBreadcrumbs } from "../../constants/metrics";
+import AuthGuard from "@/app/lib/authguard";
+import {
+  useIntegrationStatus,
+} from "@/app/hooks/use-integration-status";
+import ConnectIntegrationModal from "@/app/components/connect-integration-modal";
+
+type LiveProvider = "jira" | "github";
 
 interface IntegrationTool {
+  id: string;
   name: string;
   status: "connected" | "disconnected";
   description: string;
   buttons: string[];
   Icon: IconType;
   color: string;
+  provider?: LiveProvider;
 }
 
 interface IntegrationCategory {
@@ -23,20 +34,33 @@ interface IntegrationCategory {
   tools: IntegrationTool[];
 }
 
+const ERROR_MESSAGES: Record<string, string> = {
+  invalid_state: "The connection request expired. Please try again.",
+  token_exchange_failed: "Could not complete the connection. Please try again.",
+  jira_not_configured:
+    "Jira is not configured. Add JIRA_CLIENT_ID, JIRA_CLIENT_SECRET, and JIRA_REDIRECT_URI to your environment.",
+  github_not_configured:
+    "GitHub is not configured. Add GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, and GITHUB_REDIRECT_URI to your environment.",
+  access_denied: "Connection was cancelled.",
+};
+
 const CATEGORIES: IntegrationCategory[] = [
   {
     title: "AGILE PROJECT MANAGEMENT & ISSUE TRACKING",
     subtitle: "Product ops, sprints, and issue tracking",
     tools: [
       {
+        id: "jira",
         name: "Jira",
         status: "disconnected",
         description: "Test cases push as issues. Execution results sync back.",
         buttons: ["Connect Jira"],
         Icon: SiJira,
         color: "#2684FF",
+        provider: "jira",
       },
       {
+        id: "linear",
         name: "Linear",
         status: "disconnected",
         description: "Connect to push test cases as Linear issues.",
@@ -51,6 +75,7 @@ const CATEGORIES: IntegrationCategory[] = [
     subtitle: "Define, mock, and validate API contracts",
     tools: [
       {
+        id: "swagger",
         name: "Swagger / OpenAPI",
         status: "disconnected",
         description: "Import API specs to generate and validate test cases.",
@@ -59,6 +84,7 @@ const CATEGORIES: IntegrationCategory[] = [
         color: "#85EA2D",
       },
       {
+        id: "redocly",
         name: "Redoc / Redocly",
         status: "disconnected",
         description: "Pull published API docs to keep contracts in sync.",
@@ -67,6 +93,7 @@ const CATEGORIES: IntegrationCategory[] = [
         color: "#263238",
       },
       {
+        id: "stoplight",
         name: "Stoplight",
         status: "disconnected",
         description: "Sync API design and mock servers for contract testing.",
@@ -81,14 +108,17 @@ const CATEGORIES: IntegrationCategory[] = [
     subtitle: "Repos, branches, and script commits",
     tools: [
       {
+        id: "github",
         name: "GitHub",
         status: "disconnected",
         description: "Scripts synced to main branch. Auto-commit on heal.",
         buttons: ["Connect GitHub"],
         Icon: SiGithub,
         color: "#24292E",
+        provider: "github",
       },
       {
+        id: "gitlab",
         name: "GitLab",
         status: "disconnected",
         description: "Sync page objects and tests to a GitLab repository.",
@@ -97,6 +127,7 @@ const CATEGORIES: IntegrationCategory[] = [
         color: "#FC6D26",
       },
       {
+        id: "gitbucket",
         name: "GitBucket",
         status: "disconnected",
         description: "Self-hosted Git — sync scripts to your GitBucket instance.",
@@ -105,6 +136,7 @@ const CATEGORIES: IntegrationCategory[] = [
         color: "#F05032",
       },
       {
+        id: "codecommit",
         name: "AWS CodeCommit",
         status: "disconnected",
         description: "Push generated test scripts to an AWS CodeCommit repo.",
@@ -113,6 +145,7 @@ const CATEGORIES: IntegrationCategory[] = [
         color: "#FF9900",
       },
       {
+        id: "azure-repos",
         name: "Azure Repos",
         status: "disconnected",
         description: "Sync with Azure DevOps Repos for source control.",
@@ -127,6 +160,7 @@ const CATEGORIES: IntegrationCategory[] = [
     subtitle: "Compare specs against crawled screens",
     tools: [
       {
+        id: "figma",
         name: "Figma",
         status: "disconnected",
         description: "Compare UI specs against crawled screenshots.",
@@ -141,6 +175,7 @@ const CATEGORIES: IntegrationCategory[] = [
     subtitle: "Alerts, summaries, and notifications",
     tools: [
       {
+        id: "teams",
         name: "Microsoft Teams",
         status: "disconnected",
         description: "Failure alerts and daily summaries posted to a Teams channel.",
@@ -149,6 +184,7 @@ const CATEGORIES: IntegrationCategory[] = [
         color: "#6264A7",
       },
       {
+        id: "slack",
         name: "Slack",
         status: "disconnected",
         description: "Failure alerts to #qa-alerts. Daily summary to #engineering.",
@@ -160,7 +196,84 @@ const CATEGORIES: IntegrationCategory[] = [
   },
 ];
 
-export default function Integrations() {
+function IntegrationsContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { jira, github, refresh } = useIntegrationStatus();
+  const [busy, setBusy] = useState<LiveProvider | null>(null);
+  const [connectProvider, setConnectProvider] = useState<LiveProvider | null>(null);
+  const handledCallback = useRef(false);
+
+  useEffect(() => {
+    if (handledCallback.current) return;
+    const connected = searchParams.get("connected");
+    const error = searchParams.get("error");
+    if (!connected && !error) return;
+
+    handledCallback.current = true;
+    if (connected === "jira") toast.success("Jira connected");
+    else if (connected === "github") toast.success("GitHub connected");
+    else if (error) toast.error(ERROR_MESSAGES[error] || "Connection failed");
+
+    router.replace("/integrations");
+  }, [searchParams, router]);
+
+  const resolveTool = (tool: IntegrationTool): IntegrationTool => {
+    if (tool.provider === "jira") {
+      return {
+        ...tool,
+        status: jira.connected ? "connected" : "disconnected",
+        description: jira.connected
+          ? jira.siteName
+            ? `Connected to ${jira.siteName}. ${tool.description}`
+            : `Connected. ${tool.description}`
+          : tool.description,
+        buttons: jira.connected ? ["Disconnect Jira"] : ["Connect Jira"],
+      };
+    }
+
+    if (tool.provider === "github") {
+      return {
+        ...tool,
+        status: github.connected ? "connected" : "disconnected",
+        description: github.connected
+          ? github.username
+            ? `Connected as @${github.username}. ${tool.description}`
+            : `Connected. ${tool.description}`
+          : tool.description,
+        buttons: github.connected ? ["Disconnect GitHub"] : ["Connect GitHub"],
+      };
+    }
+
+    return tool;
+  };
+
+  const handleAction = async (tool: IntegrationTool, label: string) => {
+    if (tool.provider && label.startsWith("Connect")) {
+      setConnectProvider(tool.provider);
+      return;
+    }
+
+    if (tool.provider && label.startsWith("Disconnect")) {
+      setBusy(tool.provider);
+      try {
+        const res = await fetch(`/api/auth/${tool.provider}/disconnect`, {
+          method: "POST",
+        });
+        if (!res.ok) throw new Error("Disconnect failed");
+        await refresh();
+        toast.success(`${tool.name} disconnected`);
+      } catch {
+        toast.error(`Could not disconnect ${tool.name}. Please try again.`);
+      } finally {
+        setBusy(null);
+      }
+      return;
+    }
+
+    toast.info(`${tool.name} integration is coming soon`);
+  };
+
   return (
     <div className="p-6 pb-[4.5rem] h-full overflow-y-auto">
       <Breadcrumbs breadcrumbs={IntegrationsBreadcrumbs} />
@@ -170,9 +283,8 @@ export default function Integrations() {
       </div>
 
       {CATEGORIES.map((category) => {
-        const connectedCount = category.tools.filter(
-          (t) => t.status === "connected",
-        ).length;
+        const tools = category.tools.map(resolveTool);
+        const connectedCount = tools.filter((t) => t.status === "connected").length;
 
         return (
           <div key={category.title} className="mb-[35px]">
@@ -191,11 +303,12 @@ export default function Integrations() {
             </div>
 
             <div className="flex flex-wrap gap-[20px]">
-              {category.tools.map((tool) => {
+              {tools.map((tool) => {
                 const Icon = tool.Icon;
+                const isBusy = tool.provider ? busy === tool.provider : false;
                 return (
                   <div
-                    key={tool.name}
+                    key={tool.id}
                     className="w-[320px] rounded-xl p-5 bg-[#fff] dark:bg-[#141414] border-[0.7px] border-[#E2ECF9] dark:border-[#2a2a2a]"
                   >
                     <div className="flex items-center gap-[12px] mb-[12px]">
@@ -226,9 +339,14 @@ export default function Integrations() {
                       {tool.buttons.map((label) => (
                         <button
                           key={label}
-                          className="w-full h-[36px] rounded-[8px] border border-[rgba(94,96,102,0.3)] dark:border-[#2a2a2a] text-[13px] font-[500] text-[#1F1F1F] dark:text-[#ededed] hover:bg-[#F5F6F6] dark:hover:bg-[#1a1a1a] transition-colors"
+                          type="button"
+                          disabled={isBusy}
+                          onClick={() => handleAction(tool, label)}
+                          className="w-full h-[36px] rounded-[8px] border border-[rgba(94,96,102,0.3)] dark:border-[#2a2a2a] text-[13px] font-[500] text-[#1F1F1F] dark:text-[#ededed] hover:bg-[#F5F6F6] dark:hover:bg-[#1a1a1a] transition-colors disabled:opacity-60"
                         >
-                          {label}
+                          {isBusy && label.startsWith("Disconnect")
+                            ? "Disconnecting..."
+                            : label}
                         </button>
                       ))}
                     </div>
@@ -239,6 +357,25 @@ export default function Integrations() {
           </div>
         );
       })}
+
+      <ConnectIntegrationModal
+        provider={connectProvider}
+        onClose={() => setConnectProvider(null)}
+        onConnected={async (connected) => {
+          await refresh();
+          toast.success(connected === "github" ? "GitHub connected" : "Jira connected");
+        }}
+      />
     </div>
+  );
+}
+
+export default function Integrations() {
+  return (
+    <AuthGuard>
+      <Suspense fallback={null}>
+        <IntegrationsContent />
+      </Suspense>
+    </AuthGuard>
   );
 }

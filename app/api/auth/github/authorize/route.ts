@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
-import { getJiraAuthorizeUrl, isJiraConfigured } from "@/lib/jira";
+import { getGitHubAuthorizeUrl, isGitHubConfigured } from "@/lib/github";
 import {
   OAUTH_COOKIES,
   oauthStateCookieOptions,
@@ -10,17 +10,17 @@ import {
 } from "@/lib/oauth";
 
 export async function GET(req: NextRequest) {
-  if (!isJiraConfigured()) {
-    return redirectToApp(req, { error: "jira_not_configured" }, readReturnTo(req));
+  if (!isGitHubConfigured()) {
+    return redirectToApp(req, { error: "github_not_configured" }, readReturnTo(req));
   }
 
   const state = randomBytes(16).toString("hex");
   const res = withReturnTo(
-    NextResponse.redirect(getJiraAuthorizeUrl(state)),
+    NextResponse.redirect(getGitHubAuthorizeUrl(state)),
     readReturnTo(req),
   );
 
-  res.cookies.set(OAUTH_COOKIES.jiraState, state, oauthStateCookieOptions());
+  res.cookies.set(OAUTH_COOKIES.githubState, state, oauthStateCookieOptions());
 
   return res;
 }

@@ -4,8 +4,8 @@ import { ProjectGenerateDraftBreadcrumbs } from "@/app/constants/projects";
 import { ProjectList } from "@/app/data/project";
 import { ProjectItem, TestResultsItem } from "@/app/interfaces/project";
 import AuthGuard from "@/app/lib/authguard";
-import { useSearchParams } from "next/navigation";
-import { ChangeEvent, useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
 import FileIcon from "../../../../public/icons/projects/file.svg";
 import JiraIcon from "../../../../public/icons/projects/jira.svg";
 import CloseIcon from "../../../../public/icons/projects/close.svg";
@@ -18,8 +18,12 @@ import TestResultsTable from "./table";
 import { generateDraft } from "@/app/services/generate";
 import { CSVLink } from "react-csv";
 import { GENERATE_DRAFT_HEADER } from "@/app/constants/options";
+import { useIntegrationStatus } from "@/app/hooks/use-integration-status";
+import ConnectIntegrationModal from "@/app/components/connect-integration-modal";
+import { toast } from "react-toastify";
 
 export default function ProjectGenerateDraft() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const projectId: number | null | undefined = Number(
     searchParams.get("projectId"),
@@ -33,6 +37,9 @@ export default function ProjectGenerateDraft() {
   const [loading, setLoading] = useState<boolean>(false);
   const [generated, setGenerated] = useState<boolean>(false);
   const [response, setResponse] = useState<TestResultsItem[]>([]);
+  const { jira, refresh } = useIntegrationStatus();
+  const [connectJira, setConnectJira] = useState(false);
+  const handledJiraCallback = useRef(false);
 
   const fetchProjectDetails = useCallback(() => {
     const matched = ProjectList.find((elem) => elem.id === projectId);
@@ -42,6 +49,23 @@ export default function ProjectGenerateDraft() {
   useEffect(() => {
     fetchProjectDetails();
   }, [fetchProjectDetails]);
+
+  useEffect(() => {
+    const connected = searchParams.get("connected");
+    const error = searchParams.get("error");
+    if (!connected && !error) return;
+    if (handledJiraCallback.current) return;
+    handledJiraCallback.current = true;
+
+    if (connected === "jira") toast.success("Jira connected");
+    if (error) toast.error("Could not connect to Jira. Please try again.");
+
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete("connected");
+    next.delete("error");
+    const qs = next.toString();
+    router.replace(`${window.location.pathname}${qs ? `?${qs}` : ""}`);
+  }, [searchParams, router]);
 
   const handleFile = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -114,10 +138,21 @@ export default function ProjectGenerateDraft() {
             </div>
           )}
           {!generated && (
-            <button className="flex min-w-[150px] justify-center items-center px-3 py-2 border border-[#8664f2] rounded-[7px] bg-[#ffffff] text-sm text-[#8664f2]">
-              <Image src={JiraIcon} width={20} className="mr-1" alt="jira" />
-              Connect to Jira
-            </button>
+            jira.connected ? (
+              <div className="flex min-w-[150px] justify-center items-center px-3 py-2 border border-[#28A745] rounded-[7px] bg-[#ffffff] text-sm text-[#28A745]">
+                <Image src={JiraIcon} width={20} className="mr-1" alt="jira" />
+                {jira.siteName ? `Connected to ${jira.siteName}` : "Connected to Jira"}
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConnectJira(true)}
+                className="flex min-w-[150px] justify-center items-center px-3 py-2 border border-[#8664f2] rounded-[7px] bg-[#ffffff] text-sm text-[#8664f2]"
+              >
+                <Image src={JiraIcon} width={20} className="mr-1" alt="jira" />
+                Connect to Jira
+              </button>
+            )
           )}
         </div>
 
@@ -198,6 +233,14 @@ export default function ProjectGenerateDraft() {
           </div>
         )}
       </div>
+      <ConnectIntegrationModal
+        provider={connectJira ? "jira" : null}
+        onClose={() => setConnectJira(false)}
+        onConnected={async () => {
+          await refresh();
+          toast.success("Jira connected");
+        }}
+      />
     </AuthGuard>
   );
 }

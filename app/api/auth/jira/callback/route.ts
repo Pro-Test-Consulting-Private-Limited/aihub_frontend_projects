@@ -1,44 +1,62 @@
-import { NextRequest, NextResponse } from "next/server";
-import { exchangeCodeForToken } from "@/lib/jira";
+import { NextRequest } from "next/server";
+import { exchangeCodeForToken, getAccessibleResources } from "@/lib/jira";
+import {
+  OAUTH_COOKIES,
+  oauthCookieOptions,
+  readReturnTo,
+  redirectToApp,
+} from "@/lib/oauth";
 
 export async function GET(req: NextRequest) {
-  const url = new URL(req.url);
+  const url = req.nextUrl;
+  const providerError = url.searchParams.get("error");
+  const returnTo = readReturnTo(req);
+
+  if (providerError) {
+    const res = redirectToApp(
+      req,
+      { error: providerError === "access_denied" ? "access_denied" : "token_exchange_failed" },
+      returnTo,
+    );
+    res.cookies.set(OAUTH_COOKIES.jiraState, "", { ...oauthCookieOptions(0), maxAge: 0 });
+    return res;
+  }
+
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
-  const savedState = req.cookies.get("jira_oauth_state")?.value;
+  const savedState = req.cookies.get(OAUTH_COOKIES.jiraState)?.value;
 
   if (!code || !state || state !== savedState) {
-    return NextResponse.redirect(
-      new URL("/integrations?error=invalid_state", req.url)
-    );
+    return redirectToApp(req, { error: "invalid_state" }, returnTo);
   }
 
   try {
     const tokens = await exchangeCodeForToken(code);
+    const sites = await getAccessibleResources(tokens.access_token);
+    const site = sites[0];
 
-    // TODO: exchange the access token for accessible Jira resources and
-    // persist tokens.access_token, tokens.refresh_token, and the Jira
-    // cloudId to your database, scoped to the current logged-in user/org.
-    // The cookie below is for local testing only — do not ship this
-    // as-is to production.
-    const res = NextResponse.redirect(
-      new URL("/integrations?connected=jira", req.url)
-    );
+    const res = redirectToApp(req, { connected: "jira" }, returnTo);
 
-    res.cookies.set("jira_refresh_token", tokens.refresh_token, {
-      httpOnly: true,
-      secure: true,
-      path: "/",
-      maxAge: 60 * 60 * 24 * 90, // 90 days
-    });
+    res.cookies.set(OAUTH_COOKIES.jiraRefresh, tokens.refresh_token, oauthCookieOptions());
+    res.cookies.set(OAUTH_COOKIES.jiraState, "", { ...oauthCookieOptions(0), maxAge: 0 });
 
-    res.cookies.delete("jira_oauth_state");
+    if (site) {
+      res.cookies.set(OAUTH_COOKIES.jiraCloudId, site.id, oauthCookieOptions());
+      res.cookies.set(
+        OAUTH_COOKIES.jiraSiteName,
+        encodeURIComponent(site.name),
+        oauthCookieOptions(),
+      );
+      res.cookies.set(
+        OAUTH_COOKIES.jiraSiteUrl,
+        encodeURIComponent(site.url),
+        oauthCookieOptions(),
+      );
+    }
 
     return res;
   } catch (err) {
     console.error("Jira OAuth callback error:", err);
-    return NextResponse.redirect(
-      new URL("/integrations?error=token_exchange_failed", req.url)
-    );
+    return redirectToApp(req, { error: "token_exchange_failed" }, returnTo);
   }
 }
