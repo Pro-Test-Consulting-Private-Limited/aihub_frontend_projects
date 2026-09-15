@@ -34,14 +34,14 @@ export default function ProjectGenerateDraft() {
   const [generated, setGenerated] = useState<boolean>(false);
   const [response, setResponse] = useState<TestResultsItem[]>([]);
 
-  useEffect(() => {
-    fetchProjectDetails();
-  }, [projectId]);
-
-  const fetchProjectDetails = () => {
+  const fetchProjectDetails = useCallback(() => {
     const matched = ProjectList.find((elem) => elem.id === projectId);
     setProjectDetails(matched);
-  };
+  }, [projectId]);
+
+  useEffect(() => {
+    fetchProjectDetails();
+  }, [fetchProjectDetails]);
 
   const handleFile = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {

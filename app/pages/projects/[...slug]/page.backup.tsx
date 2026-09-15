@@ -9,7 +9,7 @@ import { ProjectList } from "@/app/data/project";
 import { ProjectItem } from "@/app/interfaces/project";
 import AuthGuard from "@/app/lib/authguard";
 import Image from "next/image";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -88,14 +88,14 @@ export default function ProjectSegments({
     params.then((res: { slug: string }) => setProjectId(Number(res.slug)));
   }, [params]);
 
-  useEffect(() => {
-    fetchProjectDetails();
-  }, [projectId]);
-
-  const fetchProjectDetails = () => {
+  const fetchProjectDetails = useCallback(() => {
     const matched = ProjectList.find((elem) => elem.id === projectId);
     setProjectDetails(matched);
-  };
+  }, [projectId]);
+
+  useEffect(() => {
+    fetchProjectDetails();
+  }, [fetchProjectDetails]);
 
   const handleClick = (index: number) => {
     if (index === activeIndex) {

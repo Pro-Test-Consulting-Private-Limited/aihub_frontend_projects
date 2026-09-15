@@ -43,15 +43,14 @@ export default function ProjectActionDrivenTestCaseGenerationNewrun() {
   const [showModal, setShowModal] = useState<boolean>(false);
   const [success, setSuccess] = useState<boolean>(false);
 
-  useEffect(() => {
-    fetchProjectDetails();
-  }, [projectId]);
-
-  const fetchProjectDetails = () => {
+    const fetchProjectDetails = useCallback(() => {
     const matched = ProjectList.find((elem) => elem.id === projectId);
     setProjectDetails(matched);
-  };
+  }, [projectId]);
 
+  useEffect(() => {
+    fetchProjectDetails();
+  }, [fetchProjectDetails]);
   useEffect(() => {
     const project = projects.find(
       (item) => item.id === String(projectId),

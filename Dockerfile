@@ -1,5 +1,5 @@
 # Stage 1: Install dependencies
-FROM node:18
+FROM node:24-slim
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
@@ -12,7 +12,7 @@ COPY . .
 RUN npm run build
 
 # Stage 3: Run
-# FROM node:18 AS runner
+# FROM node:24-slim AS runner
 ENV NODE_ENV=production
 #WORKDIR /app
 

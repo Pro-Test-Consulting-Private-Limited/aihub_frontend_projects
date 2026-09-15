@@ -1,4 +1,48 @@
-node_modules
-.next
-package-lock.json
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Next.js build output
+.next/
+out/
+
+# Production build artifacts
+build/
+dist/
+
+# Local environment files
+.env
+.env.*
+!.env.example
+!.env.*.example
 .env.local
+.env.local.*
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/extensions.json
+
+# Test and coverage output
+coverage/
+*.lcov
+
+# Cache and temp folders
+.cache/
+.turbo/
+.tmp/
+.temp/
+
+# Optional local deployment output
+.vercel/
+.firebase/
