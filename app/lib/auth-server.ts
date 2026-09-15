@@ -18,6 +18,8 @@ export async function verifyRequestUser(req: Request): Promise<VerifiedUser | nu
     const { payload } = await jwtVerify(token, JWKS, {
       issuer: `https://login.microsoftonline.com/${TENANT_ID}/v2.0`,
       audience: CLIENT_ID,
+      // Tolerate small VM/client clock drift so freshly issued tokens are not rejected.
+      clockTolerance: 120,
     });
     return {
       oid: String(payload.oid ?? payload.sub),
