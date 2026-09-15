@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import Checkbox from "@/app/components/checkbox";
 import { RenderObject } from "@/app/components/renderobject";
 import { TestResultsItem } from "@/app/interfaces/project";

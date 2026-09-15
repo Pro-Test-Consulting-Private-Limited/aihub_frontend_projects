@@ -31,15 +31,14 @@ export default function ProjectDebugger() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [response, setResponse] = useState<any>(null);
 
-  useEffect(() => {
-    fetchProjectDetails();
-  }, [projectId]);
-
-  const fetchProjectDetails = () => {
+   const fetchProjectDetails = useCallback(() => {
     const matched = ProjectList.find((elem) => elem.id === projectId);
     setProjectDetails(matched);
-  };
+  }, [projectId]);
 
+  useEffect(() => {
+    fetchProjectDetails();
+  }, [fetchProjectDetails]);
   const handleFile = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const selected = e.target.files[0];

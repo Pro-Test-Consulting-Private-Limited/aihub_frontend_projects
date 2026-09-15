@@ -1,7 +1,7 @@
 "use client";
 import Breadcrumbs from "@/app/components/breadcrumbs";
 import AuthGuard from "@/app/lib/authguard";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Pagination from "@/app/components/pagination";
 import { ProjectGenerateDraftBreadcrumbs } from "@/app/constants/projects";
 import { useSearchParams } from "next/navigation";
@@ -31,20 +31,12 @@ export default function ErrorLog() {
     ProjectItem | null | undefined
   >(null);
 
-  useEffect(() => {
-    fetchList();
-  }, [page]);
-
-  useEffect(() => {
-    fetchProjectDetails();
-  }, [projectId]);
-
-  const fetchProjectDetails = () => {
+  const fetchProjectDetails = useCallback(() => {
     const matched = ProjectList.find((elem) => elem.id === projectId);
     setProjectDetails(matched);
-  };
+  }, [projectId]);
 
-  const fetchList = () => {
+  const fetchList = useCallback(() => {
     setLoading(true);
     getExecutions(page, limit)
       .then((res) => {
@@ -54,7 +46,15 @@ export default function ErrorLog() {
       })
       .catch((err) => console.log(err))
       .finally(() => setLoading(false));
-  };
+  }, [page, limit]);
+
+  useEffect(() => {
+    fetchList();
+  }, [fetchList]);
+
+  useEffect(() => {
+    fetchProjectDetails();
+  }, [fetchProjectDetails]);
 
   return (
     <AuthGuard>

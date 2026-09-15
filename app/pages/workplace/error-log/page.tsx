@@ -6,7 +6,7 @@ import {
 } from "@/app/constants/workplace";
 import AuthGuard from "@/app/lib/authguard";
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import SearchImage from "../../../../public/icons/navbar/search.png";
 import Dropdown from "@/app/components/dropdown";
 import { DropdownItem } from "@/app/interfaces/dropdown";
@@ -28,11 +28,7 @@ export default function ErrorLog() {
   const start = (page - 1) * limit + 1;
   const end = Math.min(page * limit, total);
 
-  useEffect(() => {
-    fetchList();
-  }, [page]);
-
-  const fetchList = () => {
+  const fetchList = useCallback(() => {
     setLoading(true);
     fetchErrorLogs(page, limit)
       .then((res) => {
@@ -42,7 +38,11 @@ export default function ErrorLog() {
       })
       .catch((err) => console.log(err))
       .finally(() => setLoading(false));
-  };
+  }, [page, limit]);
+
+  useEffect(() => {
+    fetchList();
+  }, [fetchList]);
 
   return (
     <AuthGuard>

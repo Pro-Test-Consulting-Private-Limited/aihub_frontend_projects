@@ -5,7 +5,7 @@ import { ProjectGenerateDraftBreadcrumbs } from "@/app/constants/projects";
 import { ProjectList } from "@/app/data/project";
 import { ProjectItem } from "@/app/interfaces/project";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import PasteIcon from "../../../../public/icons/projects/paste.svg";
 import Image from "next/image";
 import {
@@ -49,24 +49,24 @@ export default function ProjectAutomatedTestScriptGenerationSelenium() {
   const [breakTest, setBreakTest] = useState(true);
   const [healedPath, setHealedPath] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchFilesTree();
-  }, []);
-
-  useEffect(() => {
-    fetchProjectDetails();
-  }, [projectId]);
-
-  const fetchFilesTree = () => {
+  const fetchFilesTree = useCallback(() => {
     getSelfHealingRepoStructure()
       .then((res) => setResTree(res.data))
       .catch((err) => console.log(err));
-  };
+  }, []);
 
-  const fetchProjectDetails = () => {
+  const fetchProjectDetails = useCallback(() => {
     const matched = ProjectList.find((elem) => elem.id === projectId);
     setProjectDetails(matched);
-  };
+  }, [projectId]);
+
+  useEffect(() => {
+    fetchFilesTree();
+  }, [fetchFilesTree]);
+
+  useEffect(() => {
+    fetchProjectDetails();
+  }, [fetchProjectDetails]);
 
   const handleEnter = async () => {
     if (validateURL(inputvalue || "")) {
