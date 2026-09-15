@@ -1,7 +1,5 @@
 "use client";
-import Breadcrumbs from "@/app/components/breadcrumbs";
-import { ProjectGenerateDraftBreadcrumbs } from "@/app/constants/projects";
-import { TestResultsItem } from "@/app/interfaces/project";
+import { TestDataItem, TestResultsItem } from "@/app/interfaces/project";
 import AuthGuard from "@/app/lib/authguard";
 import { useProjects } from "@/app/lib/projectsStore";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -14,11 +12,13 @@ import ReGenerateIcon from "../../../../public/icons/projects/regenerate.svg";
 import DownloadIcon from "../../../../public/icons/projects/download.svg";
 import Image from "next/image";
 import { GENERATE_DRAFT_ACCEPTED_FILES } from "@/app/constants/common";
-import TestResultsTable from "./table";
+import TestResultsTable, { TestDataTable } from "./table";
 import { downloadExcelDraft, generateDraft } from "@/app/services/generate";
 import { useIntegrationStatus } from "@/app/hooks/use-integration-status";
 import ConnectIntegrationModal from "@/app/components/connect-integration-modal";
 import { toast } from "react-toastify";
+import Breadcrumbs from "@/app/components/breadcrumbs";
+import { ProjectGenerateDraftBreadcrumbs } from "@/app/constants/projects";
 
 function filenameFromContentDisposition(header: string | undefined, fallback: string) {
   if (!header) return fallback;
@@ -44,6 +44,7 @@ export default function ProjectGenerateDraft() {
   const [downloadingExcel, setDownloadingExcel] = useState(false);
   const [generated, setGenerated] = useState<boolean>(false);
   const [response, setResponse] = useState<TestResultsItem[]>([]);
+  const [testData, setTestData] = useState<TestDataItem[]>([]);
   const { jira, refresh } = useIntegrationStatus();
   const [connectJira, setConnectJira] = useState(false);
   const handledJiraCallback = useRef(false);
@@ -77,7 +78,15 @@ export default function ProjectGenerateDraft() {
     setLoading(true);
     generateDraft(file)
       .then((res) => {
-        setResponse(res.data || []);
+        const payload = res.data;
+        const cases = Array.isArray(payload)
+          ? payload
+          : payload?.test_cases || [];
+        const dataRows = Array.isArray(payload)
+          ? []
+          : payload?.test_data || [];
+        setResponse(cases);
+        setTestData(dataRows);
         setGenerated(true);
       })
       .catch((err) => {
@@ -143,6 +152,8 @@ export default function ProjectGenerateDraft() {
   const handleClear = useCallback(() => {
     setGenerated(false);
     setFile(null);
+    setResponse([]);
+    setTestData([]);
   }, []);
 
   return (
@@ -234,14 +245,15 @@ export default function ProjectGenerateDraft() {
 
         {generated && (
           <div className="w-[100%] overflow-x-auto mt-[10px]">
-            {/* <div className="flex flex-wrap justify-between items-center mt-4">
-              <div className="text-sm text-[#081332]">Project Name: </div>
-              <div className="text-sm text-[#081332]">Module Tested: </div>
-              <div className="text-sm text-[#081332]">Testing Type: </div>
-              <div className="text-sm text-[#081332]">Tested on/in: </div>
-            </div> */}
-
+            <div className="text-sm font-medium text-[#081332] dark:text-[#ededed] mt-4">
+              Test Cases
+            </div>
             <TestResultsTable data={response || []} />
+
+            <div className="text-sm font-medium text-[#081332] dark:text-[#ededed] mt-8">
+              Test Data
+            </div>
+            <TestDataTable data={testData || []} />
           </div>
         )}
 
