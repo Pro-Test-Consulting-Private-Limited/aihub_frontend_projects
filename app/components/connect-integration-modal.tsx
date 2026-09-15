@@ -82,7 +82,7 @@ export default function ConnectIntegrationModal({
           ? "Use your Jira Cloud site, Atlassian email, and an API token. The app will verify the account and mark Jira as connected."
           : provider === "github"
             ? "Paste a GitHub personal access token. The app will verify it and mark GitHub as connected."
-            : "Paste a public OpenAPI / Swagger JSON or YAML URL. Add a bearer token only if the spec is private."}
+            : "Paste an OpenAPI / Swagger JSON or YAML URL. Swagger UI pages like /docs are OK — we'll resolve the JSON. Add a bearer token only if the spec is private."}
       </p>
 
       {provider === "jira" ? (

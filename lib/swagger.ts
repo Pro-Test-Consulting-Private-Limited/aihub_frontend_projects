@@ -22,6 +22,9 @@ export function normalizeSwaggerSpecUrl(raw: string) {
     throw new Error("Spec URL must use http or https");
   }
 
+  // Swagger UI links often include #/ — drop the fragment.
+  url.hash = "";
+
   const host = url.hostname.toLowerCase();
   if (
     BLOCKED_HOSTS.has(host) ||
@@ -35,6 +38,26 @@ export function normalizeSwaggerSpecUrl(raw: string) {
   }
 
   return url.toString();
+}
+
+/** NestJS/Swagger UI pages are HTML; their JSON usually lives at sibling paths. */
+function candidateSpecUrls(specUrl: string): string[] {
+  const url = new URL(specUrl);
+  const path = url.pathname.replace(/\/+$/, "") || "/";
+  const urls = [url.toString()];
+
+  if (/\/docs$/i.test(path)) {
+    url.pathname = `${path}-json`;
+    urls.push(url.toString());
+  }
+  if (/\/swagger$/i.test(path)) {
+    url.pathname = `${path}-json`;
+    urls.push(url.toString());
+    url.pathname = path.replace(/\/swagger$/i, "/v3/api-docs");
+    urls.push(url.toString());
+  }
+
+  return [...new Set(urls)];
 }
 
 function titleFromYaml(text: string) {
@@ -51,6 +74,28 @@ function titleFromYaml(text: string) {
   };
 }
 
+function parseOpenApiDocument(text: string) {
+  try {
+    const json = JSON.parse(text) as {
+      openapi?: string;
+      swagger?: string;
+      info?: { title?: string; version?: string };
+    };
+    if (!json.openapi && !json.swagger) {
+      throw new Error("not openapi json");
+    }
+    return {
+      title: json.info?.title?.trim() || "OpenAPI Spec",
+      version: json.info?.version?.trim() || null,
+      openapi: json.openapi || json.swagger || null,
+    };
+  } catch {
+    const yaml = titleFromYaml(text);
+    if (!yaml) return null;
+    return yaml;
+  }
+}
+
 export async function verifySwaggerSpec(
   specUrl: string,
   token?: string,
@@ -60,50 +105,46 @@ export async function verifySwaggerSpec(
   };
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const res = await fetch(specUrl, {
-    method: "GET",
-    headers,
-    redirect: "follow",
-    signal: AbortSignal.timeout(15000),
-  });
+  let lastAuthError = false;
+  let lastFetchError = false;
 
-  if (!res.ok) {
-    throw new Error(
-      res.status === 401 || res.status === 403
-        ? "Spec URL requires a valid access token"
-        : "Could not fetch the OpenAPI / Swagger spec",
-    );
+  for (const candidate of candidateSpecUrls(specUrl)) {
+    try {
+      const res = await fetch(candidate, {
+        method: "GET",
+        headers,
+        redirect: "follow",
+        signal: AbortSignal.timeout(15000),
+      });
+
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) lastAuthError = true;
+        else lastFetchError = true;
+        continue;
+      }
+
+      const text = await res.text();
+      const parsed = parseOpenApiDocument(text);
+      if (!parsed) continue;
+
+      return {
+        title: parsed.title,
+        version: parsed.version,
+        openapi: parsed.openapi,
+        specUrl: candidate,
+      };
+    } catch {
+      lastFetchError = true;
+    }
   }
 
-  const text = await res.text();
-  let title = "OpenAPI Spec";
-  let version: string | null = null;
-  let openapi: string | null = null;
-
-  try {
-    const json = JSON.parse(text) as {
-      openapi?: string;
-      swagger?: string;
-      info?: { title?: string; version?: string };
-    };
-    if (!json.openapi && !json.swagger) {
-      throw new Error("URL is not a valid OpenAPI / Swagger document");
-    }
-    title = json.info?.title?.trim() || title;
-    version = json.info?.version?.trim() || null;
-    openapi = json.openapi || json.swagger || null;
-  } catch (err) {
-    if (err instanceof Error && err.message.includes("not a valid OpenAPI")) {
-      throw err;
-    }
-    const yaml = titleFromYaml(text);
-    if (!yaml) {
-      throw new Error("URL is not a valid OpenAPI / Swagger document");
-    }
-    title = yaml.title;
-    version = yaml.version;
-    openapi = yaml.openapi;
+  if (lastAuthError) {
+    throw new Error("Spec URL requires a valid access token");
   }
-
-  return { title, version, openapi, specUrl };
+  if (lastFetchError) {
+    throw new Error("Could not fetch the OpenAPI / Swagger spec");
+  }
+  throw new Error(
+    "URL is not a valid OpenAPI / Swagger document. Use the JSON/YAML spec URL (e.g. .../docs-json), not the Swagger UI page.",
+  );
 }
