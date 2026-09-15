@@ -51,6 +51,7 @@ export default function Projects() {
   const [appUrl, setAppUrl] = useState("");
   const [authRequired, setAuthRequired] = useState(true);
   const [authType, setAuthType] = useState("Username & Password");
+  const [creating, setCreating] = useState(false);
 
   const startCreate = () => {
     setProjectName("");
@@ -93,25 +94,71 @@ export default function Projects() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProjectId]);
 
-  const handleSaveBasic = () => {
+  const handleSaveBasic = async () => {
     if (!selectedProjectId) return;
-    updateProject(selectedProjectId, {
-      name: editName,
-      description: editDescription,
-      workspace: editWorkspace,
-      department: editDept,
-    });
-    setEditingBasic(false);
+    try {
+      await updateProject(selectedProjectId, {
+        name: editName,
+        description: editDescription,
+        workspace: editWorkspace,
+        department: editDept,
+      });
+      setEditingBasic(false);
+    } catch {
+      alert("Failed to save changes. Please try again.");
+    }
   };
 
-  const handleSaveTarget = () => {
+  const handleSaveTarget = async () => {
     if (!selectedProjectId) return;
-    updateProject(selectedProjectId, {
-      applicationUrl: editAppUrl,
-      authRequired: editAuthRequired,
-      authType: editAuthType,
-    });
-    setEditingTarget(false);
+    try {
+      await updateProject(selectedProjectId, {
+        applicationUrl: editAppUrl,
+        authRequired: editAuthRequired,
+        authType: editAuthType,
+      });
+      setEditingTarget(false);
+    } catch {
+      alert("Failed to save changes. Please try again.");
+    }
+  };
+
+  const handleDelete = async (id: string, name: string) => {
+    if (!window.confirm(`Delete "${name}"? This cannot be undone.`)) return;
+    try {
+      await deleteProject(id);
+    } catch {
+      alert("Failed to delete project. Please try again.");
+    }
+  };
+
+  const handleCreate = async () => {
+    if (current !== STEPS.length - 1) {
+      goNext();
+      return;
+    }
+    setCreating(true);
+    try {
+      const created = await addProject({
+        name: projectName || "Untitled Project",
+        description,
+        domain: selectedDomain,
+        department: selectedDept,
+        workspace,
+        dateOfCreation: todayFormatted(),
+        applicationUrl: appUrl,
+        authRequired,
+        authType,
+        product: "AI Hub",
+        status: "Active",
+      });
+      setMode("view");
+      setSelectedProjectId(created.id);
+    } catch {
+      alert("Failed to create project. Please try again.");
+    } finally {
+      setCreating(false);
+    }
   };
 
   const pageTitle =
@@ -456,30 +503,10 @@ export default function Projects() {
                     <button className="aihub-btn ghost">Save Draft</button>
                     <button
                       className="aihub-btn primary"
-                      onClick={() => {
-                        if (current === STEPS.length - 1) {
-                          const created = addProject({
-                            name: projectName || "Untitled Project",
-                            description,
-                            domain: selectedDomain,
-                            department: selectedDept,
-                            workspace,
-                            owner: "Divya K",
-                            dateOfCreation: todayFormatted(),
-                            applicationUrl: appUrl,
-                            authRequired,
-                            authType,
-                            product: "AI Hub",
-                            status: "Active",
-                          });
-                          setMode("view");
-                          setSelectedProjectId(created.id);
-                        } else {
-                          goNext();
-                        }
-                      }}
+                      onClick={handleCreate}
+                      disabled={creating}
                     >
-                      {current === STEPS.length - 1 ? "Create Project" : "Next"}
+                      {creating ? "Creating..." : current === STEPS.length - 1 ? "Create Project" : "Next"}
                     </button>
                   </div>
                 </div>
@@ -511,9 +538,7 @@ export default function Projects() {
                         className="aihub-delete-btn"
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (window.confirm(`Delete "${p.name}"? This cannot be undone.`)) {
-                            deleteProject(p.id);
-                          }
+                          handleDelete(p.id, p.name);
                         }}
                       >
                         Delete
@@ -561,6 +586,10 @@ export default function Projects() {
                       <div className="aihub-view-row">
                         <div className="k">Workspace</div>
                         <div className="v">{selectedProject.workspace}</div>
+                      </div>
+                      <div className="aihub-view-row">
+                        <div className="k">Owner</div>
+                        <div className="v">{selectedProject.owner}</div>
                       </div>
                       <div className="aihub-view-row">
                         <div className="k">Date of Creation</div>
@@ -729,5 +758,3 @@ export default function Projects() {
     </AuthGuard>
   );
 }
-
-
