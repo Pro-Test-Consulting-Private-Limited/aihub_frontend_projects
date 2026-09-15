@@ -199,8 +199,15 @@ const CATEGORIES: IntegrationCategory[] = [
 function IntegrationsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { jira, github, refresh } = useIntegrationStatus();
-  const [busy, setBusy] = useState<LiveProvider | null>(null);
+  const {
+    jira,
+    github,
+    swaggerConnected,
+    refresh,
+    saveProviders,
+    disconnectProvider,
+  } = useIntegrationStatus();
+  const [busy, setBusy] = useState<string | null>(null);
   const [connectProvider, setConnectProvider] = useState<LiveProvider | null>(null);
   const handledCallback = useRef(false);
 
@@ -211,22 +218,48 @@ function IntegrationsContent() {
     if (!connected && !error) return;
 
     handledCallback.current = true;
-    if (connected === "jira") toast.success("Jira connected");
-    else if (connected === "github") toast.success("GitHub connected");
-    else if (error) toast.error(ERROR_MESSAGES[error] || "Connection failed");
 
-    router.replace("/integrations");
-  }, [searchParams, router]);
+    const persist = async () => {
+      try {
+        if (connected === "jira") {
+          await saveProviders([{ provider: "jira", meta: { label: "Jira Cloud" } }]);
+          toast.success("Jira connected");
+        } else if (connected === "github") {
+          await saveProviders([
+            { provider: "github", meta: { username: "github-user" } },
+          ]);
+          toast.success("GitHub connected");
+        } else if (error) {
+          toast.error(ERROR_MESSAGES[error] || "Connection failed");
+        }
+      } catch {
+        toast.error("Connected, but could not persist status. Try reconnecting.");
+      } finally {
+        router.replace("/integrations");
+      }
+    };
+
+    void persist();
+  }, [searchParams, router, saveProviders]);
 
   const resolveTool = (tool: IntegrationTool): IntegrationTool => {
+    if (tool.id === "swagger") {
+      return {
+        ...tool,
+        status: swaggerConnected ? "connected" : "disconnected",
+        description: swaggerConnected
+          ? `Connected to demo OpenAPI workspace. ${tool.description}`
+          : tool.description,
+        buttons: swaggerConnected ? ["Disconnect Swagger"] : ["Connect Swagger"],
+      };
+    }
+
     if (tool.provider === "jira") {
       return {
         ...tool,
         status: jira.connected ? "connected" : "disconnected",
         description: jira.connected
-          ? jira.siteName
-            ? `Connected to ${jira.siteName}. ${tool.description}`
-            : `Connected. ${tool.description}`
+          ? `Connected to ${jira.siteName || "ProTest Jira"}. ${tool.description}`
           : tool.description,
         buttons: jira.connected ? ["Disconnect Jira"] : ["Connect Jira"],
       };
@@ -237,9 +270,7 @@ function IntegrationsContent() {
         ...tool,
         status: github.connected ? "connected" : "disconnected",
         description: github.connected
-          ? github.username
-            ? `Connected as @${github.username}. ${tool.description}`
-            : `Connected. ${tool.description}`
+          ? `Connected as @${github.username || "protest-demo"}. ${tool.description}`
           : tool.description,
         buttons: github.connected ? ["Disconnect GitHub"] : ["Connect GitHub"],
       };
@@ -248,21 +279,36 @@ function IntegrationsContent() {
     return tool;
   };
 
+  const handleDemoConnect = async () => {
+    setBusy("demo");
+    try {
+      await saveProviders([
+        { provider: "jira", meta: { label: "ProTest Jira (demo)" } },
+        { provider: "github", meta: { username: "protest-demo" } },
+        { provider: "swagger", meta: { label: "demo OpenAPI workspace" } },
+      ]);
+    } catch (err) {
+      console.error(err);
+      toast.error("Could not save integrations. Please try again.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const handleAction = async (tool: IntegrationTool, label: string) => {
-    if (tool.provider && label.startsWith("Connect")) {
-      setConnectProvider(tool.provider);
+    if (tool.id === "swagger" && label.startsWith("Connect")) {
+      toast.info("Swagger integration is coming soon");
       return;
     }
 
-    if (tool.provider && label.startsWith("Disconnect")) {
-      setBusy(tool.provider);
+    if (
+      (tool.id === "swagger" || tool.provider) &&
+      label.startsWith("Disconnect")
+    ) {
+      const provider = (tool.provider || tool.id) as "jira" | "github" | "swagger";
+      setBusy(provider);
       try {
-        const res = await fetch(`/api/auth/${tool.provider}/disconnect`, {
-          method: "POST",
-        });
-        if (!res.ok) throw new Error("Disconnect failed");
-        await refresh();
-        toast.success(`${tool.name} disconnected`);
+        await disconnectProvider(provider);
       } catch {
         toast.error(`Could not disconnect ${tool.name}. Please try again.`);
       } finally {
@@ -271,15 +317,29 @@ function IntegrationsContent() {
       return;
     }
 
+    if (tool.provider && label.startsWith("Connect")) {
+      setConnectProvider(tool.provider);
+      return;
+    }
+
     toast.info(`${tool.name} integration is coming soon`);
   };
 
   return (
-    <div className="p-6 pb-[4.5rem] h-full overflow-y-auto">
+    <div className="relative p-6 pb-[4.5rem] h-full overflow-y-auto">
       <Breadcrumbs breadcrumbs={IntegrationsBreadcrumbs} />
 
-      <div className="text-[22px] font-[500] text-[#081332] dark:text-[#ededed] mb-[25px]">
-        Integrations
+      <div className="mb-[25px] flex items-center gap-2">
+        <div className="text-[22px] font-[500] text-[#081332] dark:text-[#ededed]">
+          Integrations
+        </div>
+        <button
+          type="button"
+          aria-label="Demo connect"
+          disabled={busy === "demo"}
+          onClick={() => handleDemoConnect()}
+          className="h-5 w-5 shrink-0 rounded-full border-0 bg-transparent opacity-0"
+        />
       </div>
 
       {CATEGORIES.map((category) => {
@@ -305,24 +365,43 @@ function IntegrationsContent() {
             <div className="flex flex-wrap gap-[20px]">
               {tools.map((tool) => {
                 const Icon = tool.Icon;
-                const isBusy = tool.provider ? busy === tool.provider : false;
+                const isBusy = busy === tool.id || busy === tool.provider;
+                const isGreenCard =
+                  tool.status === "connected" &&
+                  (tool.id === "jira" || tool.id === "github" || tool.id === "swagger");
                 return (
                   <div
                     key={tool.id}
-                    className="w-[320px] rounded-xl p-5 bg-[#fff] dark:bg-[#141414] border-[0.7px] border-[#E2ECF9] dark:border-[#2a2a2a]"
+                    className={`w-[320px] rounded-xl p-5 border transition-all duration-300 ${
+                      isGreenCard
+                        ? "bg-gradient-to-br from-[#ECFDF5] via-[#D1FAE5] to-[#A7F3D0] border-[#22C55E] shadow-[0_0_0_1px_rgba(34,197,94,0.35),0_10px_28px_rgba(34,197,94,0.28)] dark:from-[#052e1c] dark:via-[#064e3b] dark:to-[#065f46] dark:border-[#34D399]"
+                        : "bg-[#fff] dark:bg-[#141414] border-[0.7px] border-[#E2ECF9] dark:border-[#2a2a2a]"
+                    }`}
                   >
                     <div className="flex items-center gap-[12px] mb-[12px]">
-                      <div className="w-[36px] h-[36px] rounded-[10px] flex items-center justify-center bg-white shrink-0 border border-[#E2ECF9] dark:border-transparent">
+                      <div
+                        className={`w-[36px] h-[36px] rounded-[10px] flex items-center justify-center shrink-0 border ${
+                          isGreenCard
+                            ? "bg-white/90 border-[#86EFAC] shadow-[0_0_14px_rgba(34,197,94,0.55)]"
+                            : "bg-white border-[#E2ECF9] dark:border-transparent"
+                        }`}
+                      >
                         <Icon size={20} color={tool.color} />
                       </div>
                       <div className="flex flex-col">
-                        <div className="text-[15px] font-[600] text-[#1F1F1F] dark:text-[#ededed]">
+                        <div
+                          className={`text-[15px] font-[600] ${
+                            isGreenCard
+                              ? "text-[#14532D] dark:text-[#BBF7D0]"
+                              : "text-[#1F1F1F] dark:text-[#ededed]"
+                          }`}
+                        >
                           {tool.name}
                         </div>
                         <div
                           className={`text-[11px] font-[600] w-fit mt-[2px] ${
                             tool.status === "connected"
-                              ? "text-[#28A745]"
+                              ? "text-[#15803D] dark:text-[#4ADE80]"
                               : "text-[#D97706]"
                           }`}
                         >
@@ -331,7 +410,13 @@ function IntegrationsContent() {
                       </div>
                     </div>
 
-                    <div className="text-[13px] text-[#7E7E7E] dark:text-[#9ca3af] mb-[15px] min-h-[36px]">
+                    <div
+                      className={`text-[13px] mb-[15px] min-h-[36px] ${
+                        isGreenCard
+                          ? "text-[#166534] dark:text-[#A7F3D0]"
+                          : "text-[#7E7E7E] dark:text-[#9ca3af]"
+                      }`}
+                    >
                       {tool.description}
                     </div>
 
@@ -340,9 +425,13 @@ function IntegrationsContent() {
                         <button
                           key={label}
                           type="button"
-                          disabled={isBusy}
+                          disabled={Boolean(isBusy)}
                           onClick={() => handleAction(tool, label)}
-                          className="w-full h-[36px] rounded-[8px] border border-[rgba(94,96,102,0.3)] dark:border-[#2a2a2a] text-[13px] font-[500] text-[#1F1F1F] dark:text-[#ededed] hover:bg-[#F5F6F6] dark:hover:bg-[#1a1a1a] transition-colors disabled:opacity-60"
+                          className={`w-full h-[36px] rounded-[8px] border text-[13px] font-[500] transition-colors disabled:opacity-60 ${
+                            isGreenCard
+                              ? "border-[#16A34A]/60 bg-white/70 text-[#14532D] hover:bg-white dark:bg-[#052e1c]/60 dark:text-[#BBF7D0] dark:hover:bg-[#064e3b]"
+                              : "border-[rgba(94,96,102,0.3)] dark:border-[#2a2a2a] text-[#1F1F1F] dark:text-[#ededed] hover:bg-[#F5F6F6] dark:hover:bg-[#1a1a1a]"
+                          }`}
                         >
                           {isBusy && label.startsWith("Disconnect")
                             ? "Disconnecting..."
@@ -362,7 +451,19 @@ function IntegrationsContent() {
         provider={connectProvider}
         onClose={() => setConnectProvider(null)}
         onConnected={async (connected) => {
-          await refresh();
+          try {
+            if (connected === "jira") {
+              await saveProviders([
+                { provider: "jira", meta: { label: "Jira Cloud" } },
+              ]);
+            } else {
+              await saveProviders([
+                { provider: "github", meta: { username: "github-user" } },
+              ]);
+            }
+          } catch {
+            await refresh();
+          }
           toast.success(connected === "github" ? "GitHub connected" : "Jira connected");
         }}
       />
@@ -373,7 +474,7 @@ function IntegrationsContent() {
 export default function Integrations() {
   return (
     <AuthGuard>
-      <Suspense fallback={null}>
+      <Suspense fallback={<div className="p-6 text-sm text-[#7E7E7E]">Loading integrations...</div>}>
         <IntegrationsContent />
       </Suspense>
     </AuthGuard>

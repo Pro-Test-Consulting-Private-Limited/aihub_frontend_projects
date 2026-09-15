@@ -1,9 +1,5 @@
-import AuthGuard from "@/app/lib/authguard";
+import ComingSoon from "@/app/components/coming-soon";
 
 export default function CurrentPlan() {
-  return (
-    <AuthGuard>
-      <div className="p-6 pb-[4.5rem] h-full overflow-y-auto">Current Plan</div>
-    </AuthGuard>
-  );
+  return <ComingSoon title="Current Plan" />;
 }

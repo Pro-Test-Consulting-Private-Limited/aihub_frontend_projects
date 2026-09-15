@@ -31,7 +31,13 @@ export default function Breadcrumbs({
             )}
             {index < breadcrumbs.length - 1 ? (
               <span className="mx-3 inline-block">
-                <Image src={RightIcon} width={6.5} alt="right" className="dark:invert" />
+                <Image
+                  src={RightIcon}
+                  width={7}
+                  height={12}
+                  alt="right"
+                  className="dark:invert h-3 w-auto"
+                />
               </span>
             ) : null}
           </li>

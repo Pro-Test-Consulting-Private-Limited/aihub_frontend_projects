@@ -34,13 +34,17 @@ export default function SideNav() {
             src={Logo}
             alt="logo"
             height={50}
-            className="hidden md:block"
+            width={180}
+            priority
+            className="hidden md:block h-[50px] w-auto"
           />
           <Image
             src={LogoMobile}
             alt="logo"
             height={50}
-            className="block md:hidden"
+            width={50}
+            priority
+            className="block md:hidden h-[50px] w-auto"
           />
         </div>
         <div className="flex grow flex-col">
@@ -67,7 +71,8 @@ export default function SideNav() {
               src={LightImage}
               alt="light"
               width={20}
-              className="mr-[0px] md:mr-[5px]"
+              height={20}
+              className="mr-[0px] md:mr-[5px] h-5 w-auto"
             />
             <div className="hidden md:block">Light</div>
           </div>
@@ -81,7 +86,8 @@ export default function SideNav() {
               src={DarkImage}
               alt="dark"
               width={20}
-              className="mr-[0px] md:mr-[5px]"
+              height={20}
+              className="mr-[0px] md:mr-[5px] h-5 w-auto"
             />
             <div className="hidden md:block">Dark</div>
           </div>

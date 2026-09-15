@@ -105,14 +105,17 @@ export default function ProjectGenerateDraft() {
     setDownloadingExcel(true);
     try {
       const res = await downloadExcelDraft(file);
-      const blob = new Blob([res.data], {
-        type:
-          res.headers?.["content-type"] ||
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      });
+      const contentTypeHeader = res.headers?.["content-type"];
+      const contentType =
+        typeof contentTypeHeader === "string"
+          ? contentTypeHeader
+          : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+      const blob = new Blob([res.data], { type: contentType });
       const fallbackName = `${file.name.replace(/\.pdf$/i, "")}_test_suite.xlsx`;
       const downloadName = filenameFromContentDisposition(
-        res.headers?.["content-disposition"],
+        typeof res.headers?.["content-disposition"] === "string"
+          ? res.headers["content-disposition"]
+          : undefined,
         fallbackName,
       );
 
@@ -229,6 +232,7 @@ export default function ProjectGenerateDraft() {
                 src={"/icons/loading.gif"}
                 width={15}
                 height={15}
+                unoptimized
                 className="mr-1"
                 alt="loading"
               />
