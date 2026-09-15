@@ -38,14 +38,20 @@ export default async function request(httpOptions: any) {
   delete httpOptions.skipAuth;
 
   const token = skipAuth ? null : await getAccessToken();
+  const isFormData =
+    typeof FormData !== "undefined" && httpOptions.data instanceof FormData;
 
   httpOptions.headers = {
-    "Content-Type": httpOptions.files
-      ? "multipart/form-data"
-      : httpOptions.urlEncoded
-        ? "application/x-www-form-urlencoded"
-        : "application/json",
-    Accept: "application/json",
+    ...(isFormData
+      ? {}
+      : {
+          "Content-Type": httpOptions.files
+            ? "multipart/form-data"
+            : httpOptions.urlEncoded
+              ? "application/x-www-form-urlencoded"
+              : "application/json",
+        }),
+    Accept: httpOptions.responseType === "blob" ? "*/*" : "application/json",
     // Authorization: token ? `Bearer ${token}` : "",
     ...httpOptions.headers,
   };

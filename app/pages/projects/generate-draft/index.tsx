@@ -15,12 +15,18 @@ import DownloadIcon from "../../../../public/icons/projects/download.svg";
 import Image from "next/image";
 import { GENERATE_DRAFT_ACCEPTED_FILES } from "@/app/constants/common";
 import TestResultsTable from "./table";
-import { generateDraft } from "@/app/services/generate";
-import { CSVLink } from "react-csv";
-import { GENERATE_DRAFT_HEADER } from "@/app/constants/options";
+import { downloadExcelDraft, generateDraft } from "@/app/services/generate";
 import { useIntegrationStatus } from "@/app/hooks/use-integration-status";
 import ConnectIntegrationModal from "@/app/components/connect-integration-modal";
 import { toast } from "react-toastify";
+
+function filenameFromContentDisposition(header: string | undefined, fallback: string) {
+  if (!header) return fallback;
+  const utfMatch = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (utfMatch?.[1]) return decodeURIComponent(utfMatch[1]);
+  const plainMatch = /filename="?([^"]+)"?/i.exec(header);
+  return plainMatch?.[1] || fallback;
+}
 
 export default function ProjectGenerateDraft() {
   const router = useRouter();
@@ -35,6 +41,7 @@ export default function ProjectGenerateDraft() {
   >(null);
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
+  const [downloadingExcel, setDownloadingExcel] = useState(false);
   const [generated, setGenerated] = useState<boolean>(false);
   const [response, setResponse] = useState<TestResultsItem[]>([]);
   const { jira, refresh } = useIntegrationStatus();
@@ -75,14 +82,69 @@ export default function ProjectGenerateDraft() {
   }, []);
 
   const handleGenerate = () => {
+    if (!file) return;
     setLoading(true);
     generateDraft(file)
       .then((res) => {
         setResponse(res.data || []);
         setGenerated(true);
       })
-      .catch((err) => console.log(err))
+      .catch((err) => {
+        console.log(err);
+        toast.error(err?.data?.error || "Failed to generate test cases");
+      })
       .finally(() => setLoading(false));
+  };
+
+  const handleDownloadExcel = async () => {
+    if (!file) {
+      toast.error("Upload the same PDF again before exporting Excel");
+      return;
+    }
+
+    setDownloadingExcel(true);
+    try {
+      const res = await downloadExcelDraft(file);
+      const blob = new Blob([res.data], {
+        type:
+          res.headers?.["content-type"] ||
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const fallbackName = `${file.name.replace(/\.pdf$/i, "")}_test_suite.xlsx`;
+      const downloadName = filenameFromContentDisposition(
+        res.headers?.["content-disposition"],
+        fallbackName,
+      );
+
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = downloadName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success("Excel downloaded");
+    } catch (err: unknown) {
+      console.log(err);
+      const maybeAxios = err as { data?: Blob | { error?: string } };
+      if (maybeAxios?.data instanceof Blob) {
+        try {
+          const text = await maybeAxios.data.text();
+          const parsed = JSON.parse(text) as { error?: string };
+          toast.error(parsed.error || "Failed to download Excel");
+        } catch {
+          toast.error("Failed to download Excel");
+        }
+      } else {
+        toast.error(
+          (maybeAxios?.data as { error?: string } | undefined)?.error ||
+            "Failed to download Excel",
+        );
+      }
+    } finally {
+      setDownloadingExcel(false);
+    }
   };
 
   const handleClear = useCallback(() => {
@@ -199,7 +261,12 @@ export default function ProjectGenerateDraft() {
             </button>
 
             <div className="flex items-center">
-              <button className="flex items-center border px-5 h-9 rounded-[7px] border-[#8664f2] bg-[#8664f2] text-[#FFFFFF] text-sm font-medium">
+              <button
+                type="button"
+                onClick={() => handleGenerate()}
+                disabled={loading || !file}
+                className="flex items-center border px-5 h-9 rounded-[7px] border-[#8664f2] bg-[#8664f2] text-[#FFFFFF] text-sm font-medium disabled:opacity-60"
+              >
                 <Image
                   src={ReGenerateIcon}
                   alt="regenerate"
@@ -208,27 +275,20 @@ export default function ProjectGenerateDraft() {
                 />
                 Regenerate
               </button>
-              <CSVLink
-                filename={`${file?.name.split(".")[0]}.csv`}
-                data={
-                  response?.map((item) => ({
-                    ...item,
-                    Inputs: JSON.stringify(item.Inputs)?.replaceAll(",", '"'),
-                  })) || []
-                }
-                target="_blank"
-                headers={GENERATE_DRAFT_HEADER}
+              <button
+                type="button"
+                onClick={() => handleDownloadExcel()}
+                disabled={downloadingExcel || !file}
+                className="flex items-center border px-5 h-9 rounded-[7px] border-[#8664f2] bg-[#FFFFFF] text-[#8664f2] text-sm font-medium ml-5 disabled:opacity-60"
               >
-                <button className="flex items-center border px-5 h-9 rounded-[7px] border-[#8664f2] bg-[#FFFFFF] text-[#8664f2] text-sm font-medium ml-5">
-                  <Image
-                    src={DownloadIcon}
-                    alt="regenerate"
-                    width={17}
-                    className="mr-2"
-                  />
-                  Download as Excel
-                </button>
-              </CSVLink>
+                <Image
+                  src={DownloadIcon}
+                  alt="download excel"
+                  width={17}
+                  className="mr-2"
+                />
+                {downloadingExcel ? "Downloading..." : "Download as Excel"}
+              </button>
             </div>
           </div>
         )}
