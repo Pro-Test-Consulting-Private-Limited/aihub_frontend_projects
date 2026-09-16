@@ -3,7 +3,7 @@ import ProjectAutomatedTestScriptGenerationSelenium from ".";
 
 export default function DebuggerPage() {
   return (
-    <Suspense fallback={<div>Loading debugger...</div>}>
+    <Suspense fallback={<div>Loading...</div>}>
       <ProjectAutomatedTestScriptGenerationSelenium />
     </Suspense>
   );

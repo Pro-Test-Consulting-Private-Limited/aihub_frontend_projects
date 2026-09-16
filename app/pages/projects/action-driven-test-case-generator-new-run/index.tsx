@@ -1,11 +1,10 @@
-﻿/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 import Breadcrumbs from "@/app/components/breadcrumbs";
 import { ProjectGenerateDraftBreadcrumbs } from "@/app/constants/projects";
-import { ProjectList } from "@/app/data/project";
-import { ProjectItem } from "@/app/interfaces/project";
+import { useProjects } from "@/app/lib/projectsStore";
 import { useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import PasteIcon from "../../../../public/icons/projects/paste.svg";
 import GenerateImage from "../../../../public/icons/projects/generate.svg";
 import Image from "next/image";
@@ -20,21 +19,19 @@ import { ACTION_DRIVEN_TEST_CASE_GENERATOR_SITE } from "@/app/config/urls";
 import Modal from "@/app/components/modal";
 import { openExternalTabAndWait } from "./actions";
 import AuthGuard from "@/app/lib/authguard";
-import { useProjects } from "@/app/lib/projectsStore";
 import SaveExecutions from "./executions";
 
 export default function ProjectActionDrivenTestCaseGenerationNewrun() {
   const searchParams = useSearchParams();
   const { projects } = useProjects();
-  const projectId: number | null | undefined = Number(
-    searchParams.get("projectId"),
-  );
+  const projectId = searchParams.get("projectId") || "";
   const workplace: string = searchParams.get("workplace") || "";
   const domain: string = searchParams.get("domain") || "";
 
-  const [projectDetails, setProjectDetails] = useState<
-    ProjectItem | null | undefined
-  >(null);
+  const projectDetails = useMemo(
+    () => projects.find((project) => String(project.id) === String(projectId)) ?? null,
+    [projects, projectId],
+  );
   const [inputvalue, setInputValue] = useState<string | null>(null);
   const [link, setLink] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
@@ -43,17 +40,9 @@ export default function ProjectActionDrivenTestCaseGenerationNewrun() {
   const [showModal, setShowModal] = useState<boolean>(false);
   const [success, setSuccess] = useState<boolean>(false);
 
-    const fetchProjectDetails = useCallback(() => {
-    const matched = ProjectList.find((elem) => elem.id === projectId);
-    setProjectDetails(matched);
-  }, [projectId]);
-
-  useEffect(() => {
-    fetchProjectDetails();
-  }, [fetchProjectDetails]);
   useEffect(() => {
     const project = projects.find(
-      (item) => item.id === String(projectId),
+      (item) => String(item.id) === String(projectId),
     );
 
     if (project?.applicationUrl) {
@@ -158,6 +147,7 @@ export default function ProjectActionDrivenTestCaseGenerationNewrun() {
                   src={"/icons/loading.gif"}
                   width={15}
                   height={15}
+                  unoptimized
                   className="mr-1"
                   alt="loading"
                 />

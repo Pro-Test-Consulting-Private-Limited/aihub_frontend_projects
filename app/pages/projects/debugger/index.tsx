@@ -1,10 +1,10 @@
 "use client";
 import Breadcrumbs from "@/app/components/breadcrumbs";
 import { ProjectGenerateDraftBreadcrumbs } from "@/app/constants/projects";
-import { ProjectList } from "@/app/data/project";
-import { ProjectItem } from "@/app/interfaces/project";
+import AuthGuard from "@/app/lib/authguard";
+import { useProjects } from "@/app/lib/projectsStore";
 import { useSearchParams } from "next/navigation";
-import { ChangeEvent, useCallback, useEffect, useState } from "react";
+import { ChangeEvent, useCallback, useMemo, useState } from "react";
 import FileIcon from "../../../../public/icons/projects/file.svg";
 import CloseIcon from "../../../../public/icons/projects/close.svg";
 import DeleteImage from "../../../../public/icons/delete.svg";
@@ -13,32 +13,22 @@ import Image from "next/image";
 import { DEBUGGER_ACCEPTED_FILES } from "@/app/constants/common";
 import { processImage } from "@/app/services/generate";
 import Markdown from "react-markdown";
-import AuthGuard from "@/app/lib/authguard";
 
 export default function ProjectDebugger() {
   const searchParams = useSearchParams();
-  const projectId: number | null | undefined = Number(
-    searchParams.get("projectId"),
-  );
+  const { projects } = useProjects();
+  const projectId = searchParams.get("projectId") || "";
   const workplace: string = searchParams.get("workplace") || "";
   const domain: string = searchParams.get("domain") || "";
-  const [projectDetails, setProjectDetails] = useState<
-    ProjectItem | null | undefined
-  >(null);
+  const projectDetails = useMemo(
+    () => projects.find((project) => String(project.id) === String(projectId)) ?? null,
+    [projects, projectId],
+  );
   const [file, setFile] = useState<File | null>(null);
   const [image, setImage] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [response, setResponse] = useState<any>(null);
-
-   const fetchProjectDetails = useCallback(() => {
-    const matched = ProjectList.find((elem) => elem.id === projectId);
-    setProjectDetails(matched);
-  }, [projectId]);
-
-  useEffect(() => {
-    fetchProjectDetails();
-  }, [fetchProjectDetails]);
   const handleFile = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const selected = e.target.files[0];
@@ -158,6 +148,7 @@ export default function ProjectDebugger() {
                 src={"/icons/loading.gif"}
                 width={15}
                 height={15}
+                unoptimized
                 className="mr-1"
                 alt="loading"
               />

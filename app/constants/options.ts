@@ -53,11 +53,26 @@ export const HOME_PROJECT_STATS = [
 
 export const GENERATE_DRAFT_HEADER = [
   { label: "Test Case ID", key: "TestCaseId" },
+  { label: "Requirement ID", key: "RequirementId" },
   { label: "Module", key: "Module" },
-  { label: "Sub Module", key: "SubModule" },
-  { label: "Scenario Description", key: "ScenarioDescription" },
+  { label: "Feature", key: "Feature" },
+  { label: "Scenario", key: "Scenario" },
+  { label: "Test Type", key: "TestType" },
   { label: "Preconditions", key: "Preconditions" },
   { label: "Test Steps", key: "TestSteps" },
-  { label: "Inputs", key: "Inputs" },
+  { label: "Test Data ID", key: "TestDataId" },
   { label: "Expected Result", key: "ExpectedResult" },
+];
+
+export const GENERATE_DRAFT_TEST_DATA_HEADER = [
+  { label: "Test Data ID", key: "TestDataId" },
+  { label: "Linked Test Case", key: "LinkedTestCaseId" },
+  { label: "First Name", key: "FirstName" },
+  { label: "Last Name", key: "LastName" },
+  { label: "Email", key: "Email" },
+  { label: "Phone", key: "Phone" },
+  { label: "Age", key: "Age" },
+  { label: "Password", key: "Password" },
+  { label: "Amount", key: "Amount" },
+  { label: "OTP", key: "OTP" },
 ];

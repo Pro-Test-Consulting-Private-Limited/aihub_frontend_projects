@@ -1,11 +1,5 @@
-import AuthGuard from "@/app/lib/authguard";
+import ComingSoon from "@/app/components/coming-soon";
 
 export default function FinancialReports() {
-  return (
-    <AuthGuard>
-      <div className="p-6 pb-[4.5rem] h-full overflow-y-auto">
-        Financial Reports
-      </div>
-    </AuthGuard>
-  );
+  return <ComingSoon title="Financial Reports" />;
 }

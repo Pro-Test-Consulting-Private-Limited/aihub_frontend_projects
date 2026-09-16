@@ -30,13 +30,42 @@ export interface JSONObject {
 
 export interface TestResultsItem {
   TestCaseId: string;
+  RequirementId?: string;
   Module: string;
-  ScenarioDescription: string;
+  Feature?: string;
+  Scenario?: string;
+  TestType?: string;
   Preconditions: string;
-  SubModule: string;
   TestSteps: string[];
-  Inputs: JSONObject;
+  TestDataId?: string;
   ExpectedResult: string;
+  /** Legacy send_money / action-driven payloads */
+  Inputs?: JSONObject;
+  SubModule?: string;
+  ScenarioDescription?: string;
+}
+
+export interface TestDataItem {
+  TestDataId: string;
+  LinkedTestCaseId: string;
+  FirstName: string | null;
+  LastName: string | null;
+  Email: string | null;
+  Phone: string | null;
+  Age: string | number | null;
+  Password: string | null;
+  Amount: string | number | null;
+  OTP: string | null;
+  Status: string | null;
+  GenerationStrategy: string | null;
+}
+
+export interface GenerateDraftResponse {
+  ticket?: string;
+  pdf?: string;
+  excel?: string;
+  test_cases: TestResultsItem[];
+  test_data: TestDataItem[];
 }
 
 export interface ActionDrivenTestCaseSession {

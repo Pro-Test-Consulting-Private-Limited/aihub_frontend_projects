@@ -1,11 +1,9 @@
 "use client";
-import Breadcrumbs from "@/app/components/breadcrumbs";
-import { ProjectGenerateDraftBreadcrumbs } from "@/app/constants/projects";
-import { ProjectList } from "@/app/data/project";
-import { ProjectItem, TestResultsItem } from "@/app/interfaces/project";
+import { TestDataItem, TestResultsItem } from "@/app/interfaces/project";
 import AuthGuard from "@/app/lib/authguard";
-import { useSearchParams } from "next/navigation";
-import { ChangeEvent, useCallback, useEffect, useState } from "react";
+import { useProjects } from "@/app/lib/projectsStore";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import FileIcon from "../../../../public/icons/projects/file.svg";
 import JiraIcon from "../../../../public/icons/projects/jira.svg";
 import CloseIcon from "../../../../public/icons/projects/close.svg";
@@ -14,34 +12,59 @@ import ReGenerateIcon from "../../../../public/icons/projects/regenerate.svg";
 import DownloadIcon from "../../../../public/icons/projects/download.svg";
 import Image from "next/image";
 import { GENERATE_DRAFT_ACCEPTED_FILES } from "@/app/constants/common";
-import TestResultsTable from "./table";
-import { generateDraft } from "@/app/services/generate";
-import { CSVLink } from "react-csv";
-import { GENERATE_DRAFT_HEADER } from "@/app/constants/options";
+import TestResultsTable, { TestDataTable } from "./table";
+import { downloadExcelDraft, generateDraft } from "@/app/services/generate";
+import { useIntegrationStatus } from "@/app/hooks/use-integration-status";
+import ConnectIntegrationModal from "@/app/components/connect-integration-modal";
+import { toast } from "react-toastify";
+import Breadcrumbs from "@/app/components/breadcrumbs";
+import { ProjectGenerateDraftBreadcrumbs } from "@/app/constants/projects";
+
+function filenameFromContentDisposition(header: string | undefined, fallback: string) {
+  if (!header) return fallback;
+  const utfMatch = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (utfMatch?.[1]) return decodeURIComponent(utfMatch[1]);
+  const plainMatch = /filename="?([^"]+)"?/i.exec(header);
+  return plainMatch?.[1] || fallback;
+}
 
 export default function ProjectGenerateDraft() {
+  const router = useRouter();
   const searchParams = useSearchParams();
-  const projectId: number | null | undefined = Number(
-    searchParams.get("projectId"),
-  );
+  const { projects } = useProjects();
+  const projectId = searchParams.get("projectId") || "";
   const workplace: string = searchParams.get("workplace") || "";
   const domain: string = searchParams.get("domain") || "";
-  const [projectDetails, setProjectDetails] = useState<
-    ProjectItem | null | undefined
-  >(null);
+  const projectDetails = useMemo(
+    () => projects.find((project) => String(project.id) === String(projectId)) ?? null,
+    [projects, projectId],
+  );
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
+  const [downloadingExcel, setDownloadingExcel] = useState(false);
   const [generated, setGenerated] = useState<boolean>(false);
   const [response, setResponse] = useState<TestResultsItem[]>([]);
-
-  const fetchProjectDetails = useCallback(() => {
-    const matched = ProjectList.find((elem) => elem.id === projectId);
-    setProjectDetails(matched);
-  }, [projectId]);
+  const [testData, setTestData] = useState<TestDataItem[]>([]);
+  const { jira, refresh } = useIntegrationStatus();
+  const [connectJira, setConnectJira] = useState(false);
+  const handledJiraCallback = useRef(false);
 
   useEffect(() => {
-    fetchProjectDetails();
-  }, [fetchProjectDetails]);
+    const connected = searchParams.get("connected");
+    const error = searchParams.get("error");
+    if (!connected && !error) return;
+    if (handledJiraCallback.current) return;
+    handledJiraCallback.current = true;
+
+    if (connected === "jira") toast.success("Jira connected");
+    if (error) toast.error("Could not connect to Jira. Please try again.");
+
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete("connected");
+    next.delete("error");
+    const qs = next.toString();
+    router.replace(`${window.location.pathname}${qs ? `?${qs}` : ""}`);
+  }, [searchParams, router]);
 
   const handleFile = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -51,19 +74,86 @@ export default function ProjectGenerateDraft() {
   }, []);
 
   const handleGenerate = () => {
+    if (!file) return;
     setLoading(true);
     generateDraft(file)
       .then((res) => {
-        setResponse(res.data || []);
+        const payload = res.data;
+        const cases = Array.isArray(payload)
+          ? payload
+          : payload?.test_cases || [];
+        const dataRows = Array.isArray(payload)
+          ? []
+          : payload?.test_data || [];
+        setResponse(cases);
+        setTestData(dataRows);
         setGenerated(true);
       })
-      .catch((err) => console.log(err))
+      .catch((err) => {
+        console.log(err);
+        toast.error(err?.data?.error || "Failed to generate test cases");
+      })
       .finally(() => setLoading(false));
+  };
+
+  const handleDownloadExcel = async () => {
+    if (!file) {
+      toast.error("Upload the same PDF again before exporting Excel");
+      return;
+    }
+
+    setDownloadingExcel(true);
+    try {
+      const res = await downloadExcelDraft(file);
+      const contentTypeHeader = res.headers?.["content-type"];
+      const contentType =
+        typeof contentTypeHeader === "string"
+          ? contentTypeHeader
+          : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+      const blob = new Blob([res.data], { type: contentType });
+      const fallbackName = `${file.name.replace(/\.pdf$/i, "")}_test_suite.xlsx`;
+      const downloadName = filenameFromContentDisposition(
+        typeof res.headers?.["content-disposition"] === "string"
+          ? res.headers["content-disposition"]
+          : undefined,
+        fallbackName,
+      );
+
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = downloadName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: unknown) {
+      console.log(err);
+      const maybeAxios = err as { data?: Blob | { error?: string } };
+      if (maybeAxios?.data instanceof Blob) {
+        try {
+          const text = await maybeAxios.data.text();
+          const parsed = JSON.parse(text) as { error?: string };
+          toast.error(parsed.error || "Failed to download Excel");
+        } catch {
+          toast.error("Failed to download Excel");
+        }
+      } else {
+        toast.error(
+          (maybeAxios?.data as { error?: string } | undefined)?.error ||
+            "Failed to download Excel",
+        );
+      }
+    } finally {
+      setDownloadingExcel(false);
+    }
   };
 
   const handleClear = useCallback(() => {
     setGenerated(false);
     setFile(null);
+    setResponse([]);
+    setTestData([]);
   }, []);
 
   return (
@@ -74,7 +164,7 @@ export default function ProjectGenerateDraft() {
             workplace,
             domain,
             projectDetails,
-            "Test Case Generation",
+            "Testcase Generation + Test Data creation",
           )}
         />
 
@@ -114,10 +204,21 @@ export default function ProjectGenerateDraft() {
             </div>
           )}
           {!generated && (
-            <button className="flex min-w-[150px] justify-center items-center px-3 py-2 border border-[#8664f2] rounded-[7px] bg-[#ffffff] text-sm text-[#8664f2]">
-              <Image src={JiraIcon} width={20} className="mr-1" alt="jira" />
-              Connect to Jira
-            </button>
+            jira.connected ? (
+              <div className="flex min-w-[150px] justify-center items-center px-3 py-2 border border-[#28A745] rounded-[7px] bg-[#ffffff] text-sm text-[#28A745]">
+                <Image src={JiraIcon} width={20} className="mr-1" alt="jira" />
+                {jira.siteName ? `Connected to ${jira.siteName}` : "Connected to Jira"}
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConnectJira(true)}
+                className="flex min-w-[150px] justify-center items-center px-3 py-2 border border-[#8664f2] rounded-[7px] bg-[#ffffff] text-sm text-[#8664f2]"
+              >
+                <Image src={JiraIcon} width={20} className="mr-1" alt="jira" />
+                Connect to Jira
+              </button>
+            )
           )}
         </div>
 
@@ -132,6 +233,7 @@ export default function ProjectGenerateDraft() {
                 src={"/icons/loading.gif"}
                 width={15}
                 height={15}
+                unoptimized
                 className="mr-1"
                 alt="loading"
               />
@@ -143,14 +245,15 @@ export default function ProjectGenerateDraft() {
 
         {generated && (
           <div className="w-[100%] overflow-x-auto mt-[10px]">
-            {/* <div className="flex flex-wrap justify-between items-center mt-4">
-              <div className="text-sm text-[#081332]">Project Name: </div>
-              <div className="text-sm text-[#081332]">Module Tested: </div>
-              <div className="text-sm text-[#081332]">Testing Type: </div>
-              <div className="text-sm text-[#081332]">Tested on/in: </div>
-            </div> */}
-
+            <div className="text-sm font-medium text-[#081332] dark:text-[#ededed] mt-4">
+              Test Cases
+            </div>
             <TestResultsTable data={response || []} />
+
+            <div className="text-sm font-medium text-[#081332] dark:text-[#ededed] mt-8">
+              Test Data
+            </div>
+            <TestDataTable data={testData || []} />
           </div>
         )}
 
@@ -164,7 +267,12 @@ export default function ProjectGenerateDraft() {
             </button>
 
             <div className="flex items-center">
-              <button className="flex items-center border px-5 h-9 rounded-[7px] border-[#8664f2] bg-[#8664f2] text-[#FFFFFF] text-sm font-medium">
+              <button
+                type="button"
+                onClick={() => handleGenerate()}
+                disabled={loading || !file}
+                className="flex items-center border px-5 h-9 rounded-[7px] border-[#8664f2] bg-[#8664f2] text-[#FFFFFF] text-sm font-medium disabled:opacity-60"
+              >
                 <Image
                   src={ReGenerateIcon}
                   alt="regenerate"
@@ -173,31 +281,32 @@ export default function ProjectGenerateDraft() {
                 />
                 Regenerate
               </button>
-              <CSVLink
-                filename={`${file?.name.split(".")[0]}.csv`}
-                data={
-                  response?.map((item) => ({
-                    ...item,
-                    Inputs: JSON.stringify(item.Inputs)?.replaceAll(",", '"'),
-                  })) || []
-                }
-                target="_blank"
-                headers={GENERATE_DRAFT_HEADER}
+              <button
+                type="button"
+                onClick={() => handleDownloadExcel()}
+                disabled={downloadingExcel || !file}
+                className="flex items-center border px-5 h-9 rounded-[7px] border-[#8664f2] bg-[#FFFFFF] text-[#8664f2] text-sm font-medium ml-5 disabled:opacity-60"
               >
-                <button className="flex items-center border px-5 h-9 rounded-[7px] border-[#8664f2] bg-[#FFFFFF] text-[#8664f2] text-sm font-medium ml-5">
-                  <Image
-                    src={DownloadIcon}
-                    alt="regenerate"
-                    width={17}
-                    className="mr-2"
-                  />
-                  Download as Excel
-                </button>
-              </CSVLink>
+                <Image
+                  src={DownloadIcon}
+                  alt="download excel"
+                  width={17}
+                  className="mr-2"
+                />
+                {downloadingExcel ? "Downloading..." : "Download as Excel"}
+              </button>
             </div>
           </div>
         )}
       </div>
+      <ConnectIntegrationModal
+        provider={connectJira ? "jira" : null}
+        onClose={() => setConnectJira(false)}
+        onConnected={async () => {
+          await refresh();
+          toast.success("Jira connected");
+        }}
+      />
     </AuthGuard>
   );
 }

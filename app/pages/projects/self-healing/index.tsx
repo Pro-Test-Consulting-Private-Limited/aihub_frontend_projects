@@ -2,10 +2,8 @@
 "use client";
 import Breadcrumbs from "@/app/components/breadcrumbs";
 import { ProjectGenerateDraftBreadcrumbs } from "@/app/constants/projects";
-import { ProjectList } from "@/app/data/project";
-import { ProjectItem } from "@/app/interfaces/project";
 import { useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import PasteIcon from "../../../../public/icons/projects/paste.svg";
 import Image from "next/image";
 import {
@@ -18,20 +16,21 @@ import {
 import { validateURL } from "@/app/utils";
 import FileViewer from "@/app/components/fileviewer";
 import AuthGuard from "@/app/lib/authguard";
+import { useProjects } from "@/app/lib/projectsStore";
 import FileItem from "./file";
 import { BASE_URL, SELF_HEALING_SPEC } from "@/app/config/urls";
 import { toast } from "react-toastify";
 
 export default function ProjectAutomatedTestScriptGenerationSelenium() {
   const searchParams = useSearchParams();
-  const projectId: number | null | undefined = Number(
-    searchParams?.get("projectId"),
-  );
+  const { projects } = useProjects();
+  const projectId = searchParams?.get("projectId") || "";
   const workplace: string = searchParams.get("workplace") || "";
   const domain: string = searchParams.get("domain") || "";
-  const [projectDetails, setProjectDetails] = useState<
-    ProjectItem | null | undefined
-  >(null);
+  const projectDetails = useMemo(
+    () => projects.find((project) => String(project.id) === String(projectId)) ?? null,
+    [projects, projectId],
+  );
   const [inputvalue, setInputValue] = useState<string | null>(null);
   const [error, setError] = useState<boolean>(false);
   const [link, setLink] = useState<string | null>(null);
@@ -55,18 +54,9 @@ export default function ProjectAutomatedTestScriptGenerationSelenium() {
       .catch((err) => console.log(err));
   }, []);
 
-  const fetchProjectDetails = useCallback(() => {
-    const matched = ProjectList.find((elem) => elem.id === projectId);
-    setProjectDetails(matched);
-  }, [projectId]);
-
   useEffect(() => {
     fetchFilesTree();
   }, [fetchFilesTree]);
-
-  useEffect(() => {
-    fetchProjectDetails();
-  }, [fetchProjectDetails]);
 
   const handleEnter = async () => {
     if (validateURL(inputvalue || "")) {
@@ -325,6 +315,7 @@ export default function ProjectAutomatedTestScriptGenerationSelenium() {
                       src={"/icons/loading.gif"}
                       width={15}
                       height={15}
+                      unoptimized
                       className="mr-1"
                       alt="loading"
                     />
@@ -343,6 +334,7 @@ export default function ProjectAutomatedTestScriptGenerationSelenium() {
                         src={"/icons/loading.gif"}
                         width={15}
                         height={15}
+                        unoptimized
                         className="mr-1"
                         alt="loading"
                       />
@@ -362,6 +354,7 @@ export default function ProjectAutomatedTestScriptGenerationSelenium() {
                         src={"/icons/loading.gif"}
                         width={15}
                         height={15}
+                        unoptimized
                         className="mr-1"
                         alt="loading"
                       />

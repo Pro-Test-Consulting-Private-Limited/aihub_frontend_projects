@@ -1,4 +1,4 @@
-﻿/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import Breadcrumbs from "@/app/components/breadcrumbs";
@@ -817,9 +817,9 @@ export default function ProjectAutomatedTestScriptGenerationCypress() {
                       src="/icons/loading.gif"
                       width={15}
                       height={15}
+                      unoptimized
                       className="mr-1"
                       alt="loading"
-                      unoptimized
                     />
 
                     Generating...
@@ -878,9 +878,9 @@ export default function ProjectAutomatedTestScriptGenerationCypress() {
               src="/icons/loading.gif"
               width={15}
               height={15}
+              unoptimized
               className="mr-2"
               alt="loading"
-              unoptimized
             />
 
             <span>

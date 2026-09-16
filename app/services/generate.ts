@@ -11,6 +11,20 @@ export const generateDraft = async (files: unknown) =>
     files: true,
   });
 
+/** POST the same story PDF to /upload-excel and return the .xlsx blob. */
+export const downloadExcelDraft = async (file: File) => {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  return request({
+    method: "post",
+    url: BASE_URL + "upload-excel",
+    data: formData,
+    files: true,
+    responseType: "blob",
+  });
+};
+
 export const processImage = async (files: unknown) =>
   request({
     method: "post",

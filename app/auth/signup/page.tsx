@@ -9,6 +9,7 @@ import UserIcon from "../../../public/icons/user.svg";
 import ShowIcon from "../../../public/icons/show.svg";
 import HideIcon from "../../../public/icons/hide.svg";
 import Link from "next/link";
+import { toast } from "react-toastify";
 
 const Signup = () => {
   const [name, setName] = useState("");
@@ -21,20 +22,7 @@ const Signup = () => {
     useState(false);
 
   const handleSignup = async () => {
-    // setLoading(true);
-    // signUp({
-    //   username: name,
-    //   password: password,
-    //   options: { userAttributes: { email: email } },
-    // })
-    //   .then(() => {
-    //     toast(
-    //       "Signed up successfully, Please contact your admin to confirm your account",
-    //     );
-    //     router.push("/");
-    //   })
-    //   .catch((err) => toast.error(err.message))
-    //   .finally(() => setLoading(false));
+    toast.info("Email signup is coming soon. Use Sign in with Microsoft.");
   };
 
   return (
@@ -150,6 +138,7 @@ const Signup = () => {
               src={"/icons/loading.gif"}
               width={15}
               height={15}
+              unoptimized
               className="ml-1"
               alt="loading"
             />
@@ -163,7 +152,7 @@ const Signup = () => {
         </div>
 
         <div className="google" onClick={() => null}>
-          <Image src={MicrosoftIcon} alt="google" width={17} />
+          <Image src={MicrosoftIcon} alt="microsoft" width={17} height={17} className="h-[17px] w-auto" />
           Register with Microsoft
         </div>
       </div>

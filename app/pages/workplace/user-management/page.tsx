@@ -1,11 +1,5 @@
-import AuthGuard from "@/app/lib/authguard";
+import ComingSoon from "@/app/components/coming-soon";
 
 export default function UserManagement() {
-  return (
-    <AuthGuard>
-      <div className="p-6 pb-[4.5rem] h-full overflow-y-auto">
-        User Management
-      </div>
-    </AuthGuard>
-  );
+  return <ComingSoon title="User Management" />;
 }

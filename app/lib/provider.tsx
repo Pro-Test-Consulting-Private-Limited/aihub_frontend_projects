@@ -21,6 +21,7 @@ export default function AuthProvider({
         await msalInstance.handleRedirectPromise();
       } catch (err) {
         console.error("MSAL initialization error:", err);
+        clearBrokenMsalCache();
       } finally {
         setReady(true);
       }
@@ -31,4 +32,16 @@ export default function AuthProvider({
   return ready ? (
     <MsalProvider instance={msalInstance}>{children}</MsalProvider>
   ) : null;
+}
+
+function clearBrokenMsalCache() {
+  if (typeof window === "undefined") return;
+  try {
+    const keys = Object.keys(sessionStorage).filter((key) =>
+      key.toLowerCase().includes("msal"),
+    );
+    keys.forEach((key) => sessionStorage.removeItem(key));
+  } catch {
+    // ignore storage access errors
+  }
 }

@@ -12,6 +12,12 @@ export const ProjectBreadcrumbs: Breadcrumb[] = [
   { label: "Projects", href: "/projects", active: true },
 ];
 
+function projectBreadcrumbLabel(
+  current: { id: string | number; name: string } | null | undefined,
+) {
+  return current?.name ? `Projects : ${current.name}` : "Projects";
+}
+
 export const ProjectSegmentsBreadcrumbs = (
   workplace: string,
   domain: string,
@@ -22,8 +28,8 @@ export const ProjectSegmentsBreadcrumbs = (
     { label: workplace, href: "/home", active: false },
     { label: domain, href: "/home", active: false },
     {
-      label: `Projects : ${current?.name}`,
-      href: `/projects/${current?.id}`,
+      label: projectBreadcrumbLabel(current),
+      href: `/projects/${current?.id ?? ""}`,
       active: true,
     },
   ];
@@ -40,8 +46,8 @@ export const ProjectGenerateDraftBreadcrumbs = (
     { label: workplace, href: "/home", active: false },
     { label: domain, href: "/home", active: false },
     {
-      label: `Projects : ${current?.name}`,
-      href: `/projects/${current?.id}?workplace=${workplace}&domain=${domain}`,
+      label: projectBreadcrumbLabel(current),
+      href: `/projects/${current?.id ?? ""}?workplace=${workplace}&domain=${domain}`,
       active: false,
     },
     {
@@ -59,7 +65,7 @@ export const ACCELERATORS_LIFE_CYCLE: ProjectSegmentItem[] = [
     color: "#3887C7",
     accelerators: [
       {
-        label: "Test case generation - Manual Testing",
+        label: "Testcase Generation + Test Data creation",
         value: "test-case-generation-manual-testing",
         route: "generate-draft",
       },
