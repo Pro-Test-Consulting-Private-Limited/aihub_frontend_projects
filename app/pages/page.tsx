@@ -30,7 +30,7 @@ import {
   getModelUsage,
   type ModelUsage,
 } from "../services/analytics";
-import { MODEL_STATUS_UI } from "../constants/model-status";
+import { MODEL_STARTING_STATES } from "../constants/model-status";
 import { useModelStatus } from "../hooks/use-model-status";
 import { useMsal } from "@azure/msal-react";
 
@@ -118,14 +118,12 @@ export default function Home() {
 
   const backendDown =
     server !== null && (!server.Backend || !server.database);
-  const modelUi = MODEL_STATUS_UI[modelState ?? "unknown"];
-  const statusBadge = backendDown
-    ? {
-        label: "Backend unavailable",
-        dot: MODEL_STATUS_UI.failed.dot,
-        badge: MODEL_STATUS_UI.failed.badge,
-      }
-    : modelUi;
+  const aiStatus =
+    !backendDown && modelState === "running"
+      ? { label: "Active", badge: "bg-[rgba(40,167,69,0.1)] text-[#28A745]", dot: "bg-[#28A745]" }
+      : !backendDown && modelState && MODEL_STARTING_STATES.includes(modelState)
+        ? { label: "Initializing", badge: "bg-[rgba(255,193,7,0.15)] text-[#B7791F]", dot: "bg-[#B7791F]" }
+        : { label: "Inactive", badge: "bg-[rgba(220,53,69,0.1)] text-[#DC3545]", dot: "bg-[#DC3545]" };
 
   const totalRequests = sumPoints(stats?.total_invocations?.data);
   const inputTokens = sumPoints(stats?.tokens?.input);
@@ -169,23 +167,17 @@ export default function Home() {
             />
           </div>
 
-          {modelState && (
+          <div
+            className={`h-[26px] ml-[15px] flex justify-center items-center px-[15px] rounded-[26px] text-[12px] font-[500] ${aiStatus.badge}`}
+            title={`Backend: ${server?.Backend ? "up" : "down"} · Database: ${
+              server?.database ? "up" : "down"
+            } · Model: ${modelState ?? "unknown"}`}
+          >
             <div
-              className={`h-[26px] ml-[15px] inline-flex items-center gap-2 px-[15px] rounded-[26px] border text-[12px] font-[500] ${statusBadge.badge}`}
-              title={`Backend: ${server?.Backend ? "up" : "down"} · Database: ${
-                server?.database ? "up" : "down"
-              } · Model: ${modelState}`}
-            >
-              <span className={`w-[6px] h-[6px] rounded-full ${statusBadge.dot}`} />
-              {statusBadge.label}
-            </div>
-          )}
-
-          {modelState && !backendDown && modelUi.hint && (
-            <div className="ml-[10px] text-[12px] text-[#7E7E7E] dark:text-[#9ca3af]">
-              {modelUi.hint}
-            </div>
-          )}
+              className={`w-[5px] h-[5px] rounded-full mr-[8px] animate-pulse-blocking ${aiStatus.dot}`}
+            ></div>
+            AI Model {aiStatus.label}
+          </div>
         </div>
 
         <div className="font-[500] text-sm mt-[15px] mb-[5px] dark:text-[#ededed]">Domain</div>
@@ -377,14 +369,6 @@ export default function Home() {
                 >
                   {usage?.instanceType || "-"}
                 </div>
-                {modelState && (
-                  <div
-                    className={`inline-flex items-center gap-2 px-[12px] py-[6px] rounded-[7px] border text-[12px] ${modelUi.badge}`}
-                  >
-                    <span className={`w-[6px] h-[6px] rounded-full ${modelUi.dot}`} />
-                    {modelUi.label}
-                  </div>
-                )}
               </div>
             </div>
             <div className="rounded-xl px-5 py-5 min-w-[350px] mr-[15px] bg-[#fff] dark:bg-[#141414] border-[0.7px] border-[#E2ECF9] dark:border-[#2a2a2a] cursor-pointer">
