@@ -1,6 +1,10 @@
 "use client";
 
-import type { AccountInfo, IPublicClientApplication } from "@azure/msal-browser";
+import {
+  InteractionRequiredAuthError,
+  type AccountInfo,
+  type IPublicClientApplication,
+} from "@azure/msal-browser";
 import { loginRequest } from "@/app/lib/msal";
 
 function readJwtExp(token: string): number | null {
@@ -39,8 +43,11 @@ export async function getFreshIdToken(
       idToken = await acquire(true);
     }
     return idToken;
-  } catch {
-    const result = await instance.acquireTokenPopup(loginRequest);
-    return result.idToken;
+  } catch (err) {
+    // Popups fail with Edge's "Connected to Windows" account picker, so re-auth via redirect.
+    if (err instanceof InteractionRequiredAuthError) {
+      await instance.acquireTokenRedirect({ ...loginRequest, account });
+    }
+    return null;
   }
 }
