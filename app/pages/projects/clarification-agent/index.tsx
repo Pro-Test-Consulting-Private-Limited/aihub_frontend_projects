@@ -57,6 +57,67 @@ interface ClarificationResult {
   processingTimeMs?: number;
 }
 
+type ModelState =
+  | "running"
+  | "scaledToZero"
+  | "initializing"
+  | "pending"
+  | "updating"
+  | "paused"
+  | "failed"
+  | "unknown";
+
+const MODEL_STATUS_UI: Record<
+  ModelState,
+  { label: string; hint?: string; dot: string; badge: string }
+> = {
+  running: {
+    label: "Model ready",
+    dot: "bg-[#22C55E]",
+    badge: "bg-[#F0FDF4] text-[#166534] border-[#BBF7D0]",
+  },
+  scaledToZero: {
+    label: "Model asleep",
+    hint: "Your first upload wakes it up and can take about 2 minutes.",
+    dot: "bg-[#F59E0B]",
+    badge: "bg-[#FFFBEB] text-[#92400E] border-[#FDE68A]",
+  },
+  initializing: {
+    label: "Model starting",
+    hint: "Usually ready in about 2 minutes.",
+    dot: "bg-[#3B82F6] animate-pulse",
+    badge: "bg-[#EFF6FF] text-[#1E40AF] border-[#BFDBFE]",
+  },
+  pending: {
+    label: "Model starting",
+    hint: "Usually ready in about 2 minutes.",
+    dot: "bg-[#3B82F6] animate-pulse",
+    badge: "bg-[#EFF6FF] text-[#1E40AF] border-[#BFDBFE]",
+  },
+  updating: {
+    label: "Model updating",
+    dot: "bg-[#3B82F6] animate-pulse",
+    badge: "bg-[#EFF6FF] text-[#1E40AF] border-[#BFDBFE]",
+  },
+  paused: {
+    label: "Model paused",
+    hint: "Uploads will fail until the endpoint is resumed in Hugging Face.",
+    dot: "bg-[#DC3545]",
+    badge: "bg-[#FDF1F1] text-[#991B1B] border-[#FECACA]",
+  },
+  failed: {
+    label: "Model failed",
+    hint: "The Hugging Face endpoint reported an error.",
+    dot: "bg-[#DC3545]",
+    badge: "bg-[#FDF1F1] text-[#991B1B] border-[#FECACA]",
+  },
+  unknown: {
+    label: "Model status unavailable",
+    dot: "bg-[#9CA3AF]",
+    badge: "bg-[#F3F4F6] text-[#374151] border-[#E5E7EB]",
+  },
+};
+
 export default function RequirementClarificationAgent() {
   const searchParams = useSearchParams();
 
@@ -87,6 +148,54 @@ export default function RequirementClarificationAgent() {
 
   const [clarificationResult, setClarificationResult] =
     useState<ClarificationResult | null>(null);
+
+  const [modelState, setModelState] =
+    useState<ModelState | null>(null);
+
+  // ---------------------------------------------------------
+  // Model Status (reads HF endpoint state; never wakes the model)
+  // ---------------------------------------------------------
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+
+    const poll = async () => {
+      let next: ModelState = "unknown";
+
+      try {
+        const res = await fetch(
+          `${CLARIFY_API_BASE}/api/v1/clarify/model-status`,
+          { cache: "no-store" }
+        );
+        const data = await res.json();
+
+        if (data?.state && data.state in MODEL_STATUS_UI) {
+          next = data.state;
+        }
+      } catch {
+        next = "unknown";
+      }
+
+      if (cancelled) return;
+
+      setModelState(next);
+
+      const starting =
+        next === "initializing" ||
+        next === "pending" ||
+        next === "updating";
+
+      timer = setTimeout(poll, starting ? 10_000 : 30_000);
+    };
+
+    poll();
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, []);
 
   // ---------------------------------------------------------
   // Project Details
@@ -334,8 +443,27 @@ export default function RequirementClarificationAgent() {
             Page Title
         ------------------------------------------------- */}
 
-        <div className="text-base text-[#081332] mb-6">
-          Requirement Clarification Agent
+        <div className="flex flex-wrap items-center gap-3 mb-6">
+          <div className="text-base text-[#081332]">
+            Requirement Clarification Agent
+          </div>
+
+          {modelState && (
+            <div
+              className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-full border text-xs font-medium ${MODEL_STATUS_UI[modelState].badge}`}
+            >
+              <span
+                className={`w-2 h-2 rounded-full ${MODEL_STATUS_UI[modelState].dot}`}
+              />
+              {MODEL_STATUS_UI[modelState].label}
+            </div>
+          )}
+
+          {modelState && MODEL_STATUS_UI[modelState].hint && (
+            <div className="text-xs text-[#6B7280]">
+              {MODEL_STATUS_UI[modelState].hint}
+            </div>
+          )}
         </div>
 
         {/* -------------------------------------------------
