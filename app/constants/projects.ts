@@ -69,6 +69,11 @@ export const ACCELERATORS_LIFE_CYCLE: ProjectSegmentItem[] = [
         value: "test-case-generation-manual-testing",
         route: "generate-draft",
       },
+      {
+        label: "Requirement Clarification Agent",
+        value: "requirement-clarification-agent",
+        route: "clarification-agent",
+      },
     ],
   },
   {
