@@ -65,14 +65,14 @@ export const ACCELERATORS_LIFE_CYCLE: ProjectSegmentItem[] = [
     color: "#3887C7",
     accelerators: [
       {
-        label: "Testcase Generation + Test Data creation",
-        value: "test-case-generation-manual-testing",
-        route: "generate-draft",
-      },
-      {
         label: "Requirement Clarification Agent",
         value: "requirement-clarification-agent",
         route: "clarification-agent",
+      },
+      {
+        label: "Testcase Generation + Test Data creation",
+        value: "test-case-generation-manual-testing",
+        route: "generate-draft",
       },
     ],
   },

@@ -9,9 +9,6 @@ import { ChangeEvent, useEffect, useState } from "react";
 import FileIcon from "../../../../public/icons/projects/file.svg";
 import JiraIcon from "../../../../public/icons/projects/jira.svg";
 import Image from "next/image";
-import { MODEL_STATUS_UI } from "@/app/constants/model-status";
-import { useModelStatus } from "@/app/hooks/use-model-status";
-
 const CLARIFY_API_BASE =
   process.env.NEXT_PUBLIC_CLARIFY_API_BASE_URL || "http://localhost:4000";
 
@@ -89,8 +86,6 @@ export default function RequirementClarificationAgent() {
 
   const [clarificationResult, setClarificationResult] =
     useState<ClarificationResult | null>(null);
-
-  const modelState = useModelStatus();
 
   // ---------------------------------------------------------
   // Project Details
@@ -338,27 +333,8 @@ export default function RequirementClarificationAgent() {
             Page Title
         ------------------------------------------------- */}
 
-        <div className="flex flex-wrap items-center gap-3 mb-6">
-          <div className="text-base text-[#081332]">
-            Requirement Clarification Agent
-          </div>
-
-          {modelState && (
-            <div
-              className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-full border text-xs font-medium ${MODEL_STATUS_UI[modelState].badge}`}
-            >
-              <span
-                className={`w-2 h-2 rounded-full ${MODEL_STATUS_UI[modelState].dot}`}
-              />
-              {MODEL_STATUS_UI[modelState].label}
-            </div>
-          )}
-
-          {modelState && MODEL_STATUS_UI[modelState].hint && (
-            <div className="text-xs text-[#6B7280]">
-              {MODEL_STATUS_UI[modelState].hint}
-            </div>
-          )}
+        <div className="text-base text-[#081332] mb-6">
+          Requirement Clarification Agent
         </div>
 
         {/* -------------------------------------------------
