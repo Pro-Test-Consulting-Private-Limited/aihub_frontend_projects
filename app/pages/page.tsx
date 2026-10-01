@@ -26,7 +26,19 @@ import {
   PERIODOPTIONS,
   WORKPLACES,
 } from "../constants/options";
-import { getServerStatus, getBusinessMetrics } from "../services/analytics";
+import {
+  getServerStatus,
+  getBusinessMetrics,
+  getModelStatus,
+} from "../services/analytics";
+
+const MODEL_AVAILABLE_STATES = [
+  "running",
+  "scaledToZero",
+  "initializing",
+  "pending",
+  "updating",
+];
 import { useMsal } from "@azure/msal-react";
 
 export default function Home() {
@@ -41,10 +53,10 @@ export default function Home() {
   const [last, setLast] = useState<DropdownItem | null>(LASTOPTIONS[0]);
   const [stats, setStats] = useState<ANALYTICS_STATS_MODAL | null>(null);
   const [server, setServer] = useState({
-    app: false,
+    Backend: false,
     database: false,
-    model_endpoint: false,
   });
+  const [modelState, setModelState] = useState("unknown");
   const router = useRouter();
   const { accounts } = useMsal();
   const { projects } = useProjects();
@@ -68,11 +80,23 @@ export default function Home() {
       .catch((error) => console.log("AI HUB HEALTH ERROR:", error));
   }, []);
 
+  const fetchModelStatus = useCallback(async () => {
+    getModelStatus()
+      .then((response) => setModelState(response?.state || "unknown"))
+      .catch(() => setModelState("unknown"));
+  }, []);
+
   useEffect(() => {
     fetchUser();
     fetchStats();
     fetchServerStatus();
-  }, [fetchUser, fetchStats, fetchServerStatus]);
+    fetchModelStatus();
+  }, [fetchUser, fetchStats, fetchServerStatus, fetchModelStatus]);
+
+  const aiActive =
+    Boolean(server?.Backend) &&
+    Boolean(server?.database) &&
+    MODEL_AVAILABLE_STATES.includes(modelState);
 
   const visibleProjects = projects;
 
@@ -111,17 +135,20 @@ export default function Home() {
 
           <div
             className={`h-[26px] ml-[15px] flex justify-center items-center px-[15px] rounded-[26px] text-[12px] font-[500] ${
-              server?.model_endpoint
+              aiActive
                 ? "bg-[rgba(40,167,69,0.1)] text-[#28A745]"
                 : "bg-[rgba(220,53,69,0.1)] text-[#DC3545]"
             }`}
+            title={`Backend: ${server?.Backend ? "up" : "down"} · Database: ${
+              server?.database ? "up" : "down"
+            } · Model: ${modelState}`}
           >
             <div
               className={`w-[5px] h-[5px] rounded-full mr-[8px] animate-pulse-blocking ${
-                server?.model_endpoint ? "bg-[#28A745]" : "bg-[#DC3545]"
+                aiActive ? "bg-[#28A745]" : "bg-[#DC3545]"
               }`}
             ></div>
-            AI Model {server?.model_endpoint ? "Active" : "Inactive"}
+            AI Model {aiActive ? "Active" : "Inactive"}
           </div>
         </div>
 
