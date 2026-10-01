@@ -9,6 +9,8 @@ import { ChangeEvent, useEffect, useState } from "react";
 import FileIcon from "../../../../public/icons/projects/file.svg";
 import JiraIcon from "../../../../public/icons/projects/jira.svg";
 import Image from "next/image";
+import { MODEL_STATUS_UI } from "@/app/constants/model-status";
+import { useModelStatus } from "@/app/hooks/use-model-status";
 
 const CLARIFY_API_BASE =
   process.env.NEXT_PUBLIC_CLARIFY_API_BASE_URL || "http://localhost:4000";
@@ -57,67 +59,6 @@ interface ClarificationResult {
   processingTimeMs?: number;
 }
 
-type ModelState =
-  | "running"
-  | "scaledToZero"
-  | "initializing"
-  | "pending"
-  | "updating"
-  | "paused"
-  | "failed"
-  | "unknown";
-
-const MODEL_STATUS_UI: Record<
-  ModelState,
-  { label: string; hint?: string; dot: string; badge: string }
-> = {
-  running: {
-    label: "Model ready",
-    dot: "bg-[#22C55E]",
-    badge: "bg-[#F0FDF4] text-[#166534] border-[#BBF7D0]",
-  },
-  scaledToZero: {
-    label: "Model asleep",
-    hint: "Your first upload wakes it up and can take about 2 minutes.",
-    dot: "bg-[#F59E0B]",
-    badge: "bg-[#FFFBEB] text-[#92400E] border-[#FDE68A]",
-  },
-  initializing: {
-    label: "Model starting",
-    hint: "Usually ready in about 2 minutes.",
-    dot: "bg-[#3B82F6] animate-pulse",
-    badge: "bg-[#EFF6FF] text-[#1E40AF] border-[#BFDBFE]",
-  },
-  pending: {
-    label: "Model starting",
-    hint: "Usually ready in about 2 minutes.",
-    dot: "bg-[#3B82F6] animate-pulse",
-    badge: "bg-[#EFF6FF] text-[#1E40AF] border-[#BFDBFE]",
-  },
-  updating: {
-    label: "Model updating",
-    dot: "bg-[#3B82F6] animate-pulse",
-    badge: "bg-[#EFF6FF] text-[#1E40AF] border-[#BFDBFE]",
-  },
-  paused: {
-    label: "Model paused",
-    hint: "Uploads will fail until the endpoint is resumed in Hugging Face.",
-    dot: "bg-[#DC3545]",
-    badge: "bg-[#FDF1F1] text-[#991B1B] border-[#FECACA]",
-  },
-  failed: {
-    label: "Model failed",
-    hint: "The Hugging Face endpoint reported an error.",
-    dot: "bg-[#DC3545]",
-    badge: "bg-[#FDF1F1] text-[#991B1B] border-[#FECACA]",
-  },
-  unknown: {
-    label: "Model status unavailable",
-    dot: "bg-[#9CA3AF]",
-    badge: "bg-[#F3F4F6] text-[#374151] border-[#E5E7EB]",
-  },
-};
-
 export default function RequirementClarificationAgent() {
   const searchParams = useSearchParams();
 
@@ -149,53 +90,7 @@ export default function RequirementClarificationAgent() {
   const [clarificationResult, setClarificationResult] =
     useState<ClarificationResult | null>(null);
 
-  const [modelState, setModelState] =
-    useState<ModelState | null>(null);
-
-  // ---------------------------------------------------------
-  // Model Status (reads HF endpoint state; never wakes the model)
-  // ---------------------------------------------------------
-
-  useEffect(() => {
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout>;
-
-    const poll = async () => {
-      let next: ModelState = "unknown";
-
-      try {
-        const res = await fetch(
-          `${CLARIFY_API_BASE}/api/v1/clarify/model-status`,
-          { cache: "no-store" }
-        );
-        const data = await res.json();
-
-        if (data?.state && data.state in MODEL_STATUS_UI) {
-          next = data.state;
-        }
-      } catch {
-        next = "unknown";
-      }
-
-      if (cancelled) return;
-
-      setModelState(next);
-
-      const starting =
-        next === "initializing" ||
-        next === "pending" ||
-        next === "updating";
-
-      timer = setTimeout(poll, starting ? 10_000 : 30_000);
-    };
-
-    poll();
-
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, []);
+  const modelState = useModelStatus();
 
   // ---------------------------------------------------------
   // Project Details

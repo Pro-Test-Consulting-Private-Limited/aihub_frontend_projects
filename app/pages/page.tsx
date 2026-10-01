@@ -16,8 +16,6 @@ import Image from "next/image";
 import { poppins } from "../config/fonts";
 import { useProjects } from "../lib/projectsStore";
 import { useRouter } from "next/navigation";
-import { formatTime } from "../utils";
-import { ANALYTICS_STATS_MODAL } from "../interfaces/analytics";
 import AuthGuard from "../lib/authguard";
 import {
   DOMAIN,
@@ -29,17 +27,35 @@ import {
 import {
   getServerStatus,
   getBusinessMetrics,
-  getModelStatus,
+  getModelUsage,
+  type ModelUsage,
 } from "../services/analytics";
-
-const MODEL_AVAILABLE_STATES = [
-  "running",
-  "scaledToZero",
-  "initializing",
-  "pending",
-  "updating",
-];
+import { MODEL_STATUS_UI } from "../constants/model-status";
+import { useModelStatus } from "../hooks/use-model-status";
 import { useMsal } from "@azure/msal-react";
+
+const LAST_OPTION_SECONDS: Record<string, number> = {
+  "30 Minutes": 30 * 60,
+  "2 Hours": 2 * 60 * 60,
+  "12 Hours": 12 * 60 * 60,
+  day: 24 * 60 * 60,
+  week: 7 * 24 * 60 * 60,
+  month: 30 * 24 * 60 * 60,
+  year: 365 * 24 * 60 * 60,
+};
+
+type StatsPoint = { x: string; y: number };
+
+type StatsResponse = {
+  tokens?: { input?: StatsPoint[]; output?: StatsPoint[] };
+  total_invocations?: { data?: StatsPoint[] };
+};
+
+const sumPoints = (points?: StatsPoint[]) =>
+  (points || []).reduce((sum, point) => sum + (Number(point.y) || 0), 0);
+
+const formatUsd = (value: number | null | undefined) =>
+  value == null ? "-" : `$${value.toFixed(2)}`;
 
 export default function Home() {
   const [active, setActive] = useState("inference_endpoints");
@@ -51,12 +67,14 @@ export default function Home() {
   const [domain, setDomain] = useState<string>("Information Technology");
   const [period, setPeriod] = useState<DropdownItem | null>(PERIODOPTIONS[0]);
   const [last, setLast] = useState<DropdownItem | null>(LASTOPTIONS[0]);
-  const [stats, setStats] = useState<ANALYTICS_STATS_MODAL | null>(null);
-  const [server, setServer] = useState({
-    Backend: false,
-    database: false,
-  });
-  const [modelState, setModelState] = useState("unknown");
+  const [stats, setStats] = useState<StatsResponse | null>(null);
+  const [usage, setUsage] = useState<ModelUsage | null>(null);
+  const [usageError, setUsageError] = useState(false);
+  const [server, setServer] = useState<{
+    Backend: boolean;
+    database: boolean;
+  } | null>(null);
+  const modelState = useModelStatus();
   const router = useRouter();
   const { accounts } = useMsal();
   const { projects } = useProjects();
@@ -65,11 +83,24 @@ export default function Home() {
     if (accounts.length !== 0) setUser(accounts[0]);
   }, [accounts]);
 
-  const fetchStats = useCallback(async () => {
-    getBusinessMetrics(3600)
-      .then((response) => setStats(response?.data))
+  const lastValue = last?.value;
+  const periodValue = period?.value;
+
+  useEffect(() => {
+    getBusinessMetrics(LAST_OPTION_SECONDS[String(lastValue)] ?? 1800)
+      .then((response) => setStats(response?.data ?? null))
       .catch((error) => console.log(error));
-  }, []);
+  }, [lastValue]);
+
+  useEffect(() => {
+    setUsageError(false);
+    getModelUsage(periodValue === "Last Month" ? "last" : "current")
+      .then(setUsage)
+      .catch(() => {
+        setUsage(null);
+        setUsageError(true);
+      });
+  }, [periodValue]);
 
   const fetchServerStatus = useCallback(async () => {
     getServerStatus()
@@ -80,23 +111,28 @@ export default function Home() {
       .catch((error) => console.log("AI HUB HEALTH ERROR:", error));
   }, []);
 
-  const fetchModelStatus = useCallback(async () => {
-    getModelStatus()
-      .then((response) => setModelState(response?.state || "unknown"))
-      .catch(() => setModelState("unknown"));
-  }, []);
-
   useEffect(() => {
     fetchUser();
-    fetchStats();
     fetchServerStatus();
-    fetchModelStatus();
-  }, [fetchUser, fetchStats, fetchServerStatus, fetchModelStatus]);
+  }, [fetchUser, fetchServerStatus]);
 
-  const aiActive =
-    Boolean(server?.Backend) &&
-    Boolean(server?.database) &&
-    MODEL_AVAILABLE_STATES.includes(modelState);
+  const backendDown =
+    server !== null && (!server.Backend || !server.database);
+  const modelUi = MODEL_STATUS_UI[modelState ?? "unknown"];
+  const statusBadge = backendDown
+    ? {
+        label: "Backend unavailable",
+        dot: MODEL_STATUS_UI.failed.dot,
+        badge: MODEL_STATUS_UI.failed.badge,
+      }
+    : modelUi;
+
+  const totalRequests = sumPoints(stats?.total_invocations?.data);
+  const inputTokens = sumPoints(stats?.tokens?.input);
+  const outputTokens = sumPoints(stats?.tokens?.output);
+  const averageTokens = totalRequests
+    ? Math.round((inputTokens + outputTokens) / totalRequests)
+    : 0;
 
   const visibleProjects = projects;
 
@@ -133,23 +169,23 @@ export default function Home() {
             />
           </div>
 
-          <div
-            className={`h-[26px] ml-[15px] flex justify-center items-center px-[15px] rounded-[26px] text-[12px] font-[500] ${
-              aiActive
-                ? "bg-[rgba(40,167,69,0.1)] text-[#28A745]"
-                : "bg-[rgba(220,53,69,0.1)] text-[#DC3545]"
-            }`}
-            title={`Backend: ${server?.Backend ? "up" : "down"} · Database: ${
-              server?.database ? "up" : "down"
-            } · Model: ${modelState}`}
-          >
+          {modelState && (
             <div
-              className={`w-[5px] h-[5px] rounded-full mr-[8px] animate-pulse-blocking ${
-                aiActive ? "bg-[#28A745]" : "bg-[#DC3545]"
-              }`}
-            ></div>
-            AI Model {aiActive ? "Active" : "Inactive"}
-          </div>
+              className={`h-[26px] ml-[15px] inline-flex items-center gap-2 px-[15px] rounded-[26px] border text-[12px] font-[500] ${statusBadge.badge}`}
+              title={`Backend: ${server?.Backend ? "up" : "down"} · Database: ${
+                server?.database ? "up" : "down"
+              } · Model: ${modelState}`}
+            >
+              <span className={`w-[6px] h-[6px] rounded-full ${statusBadge.dot}`} />
+              {statusBadge.label}
+            </div>
+          )}
+
+          {modelState && !backendDown && modelUi.hint && (
+            <div className="ml-[10px] text-[12px] text-[#7E7E7E] dark:text-[#9ca3af]">
+              {modelUi.hint}
+            </div>
+          )}
         </div>
 
         <div className="font-[500] text-sm mt-[15px] mb-[5px] dark:text-[#ededed]">Domain</div>
@@ -339,11 +375,16 @@ export default function Home() {
                 <div
                   className={`${poppins.className} text-[#1F1F1F] dark:text-[#ededed] text-[32px]`}
                 >
-                  Nvidia L4
+                  {usage?.instanceType || "-"}
                 </div>
-                <div className="px-[15px] py-[6px] bg-[#E1F9EB] dark:bg-[rgba(39,174,96,0.15)] text-[#27AE60] rounded-[7px] text-[12px]">
-                  Active
-                </div>
+                {modelState && (
+                  <div
+                    className={`inline-flex items-center gap-2 px-[12px] py-[6px] rounded-[7px] border text-[12px] ${modelUi.badge}`}
+                  >
+                    <span className={`w-[6px] h-[6px] rounded-full ${modelUi.dot}`} />
+                    {modelUi.label}
+                  </div>
+                )}
               </div>
             </div>
             <div className="rounded-xl px-5 py-5 min-w-[350px] mr-[15px] bg-[#fff] dark:bg-[#141414] border-[0.7px] border-[#E2ECF9] dark:border-[#2a2a2a] cursor-pointer">
@@ -358,7 +399,8 @@ export default function Home() {
                 <div
                   className={`${poppins.className} text-[#1F1F1F] dark:text-[#ededed] text-[32px]`}
                 >
-                  371 <span className="font-[400] text-[18px]">minutes</span>
+                  {usage ? usage.computeMinutes : "-"}{" "}
+                  <span className="font-[400] text-[18px]">minutes</span>
                 </div>
               </div>
             </div>
@@ -374,7 +416,7 @@ export default function Home() {
                 <div
                   className={`${poppins.className} text-[#1F1F1F] dark:text-[#ededed] text-[32px]`}
                 >
-                  $0.80
+                  {formatUsd(usage?.pricePerHourUsd)}
                 </div>
               </div>
             </div>
@@ -390,11 +432,17 @@ export default function Home() {
                 <div
                   className={`${poppins.className} text-[#1F1F1F] dark:text-[#ededed] text-[32px]`}
                 >
-                  $4.95
+                  {formatUsd(usage?.costUsd)}
                 </div>
               </div>
             </div>
           </div>
+
+          {usageError && (
+            <div className="-mt-[15px] mb-[30px] text-[12px] text-[#DC3545]">
+              Could not load usage from Hugging Face.
+            </div>
+          )}
         </div>
 
         <div className="mt-[25px]">
@@ -444,41 +492,35 @@ export default function Home() {
               <div className="rounded-xl px-5 py-5 w-[32%] min-w-[350px] mr-[15px] bg-[#fff] dark:bg-[#141414] border-[0.7px] border-[#E2ECF9] dark:border-[#2a2a2a] cursor-pointer">
                 <div className="flex justify-between items-center">
                   <div className="text-[#1F1F1F] dark:text-[#ededed] font-medium text-[18px]">
-                    Active Hours
+                    Tokens Processed
                   </div>
-                  <Image src={ActiveHours} width={35} alt="active-projects" />
+                  <Image src={ActiveHours} width={35} alt="tokens-processed" />
                 </div>
 
-                <div className="flex justify-between items-center mt-4 pt-3">
+                <div className="flex justify-between items-end mt-4 pt-3">
                   <div
                     className={`${poppins.className} text-[#1F1F1F] dark:text-[#ededed] text-[32px]`}
                   >
-                    {
-                      formatTime(stats?.average_request_latency_seconds || 0)
-                        .time
-                    }{" "}
-                    <span className="font-[400] text-[18px]">
-                      {
-                        formatTime(stats?.average_request_latency_seconds || 0)
-                          .key
-                      }
-                    </span>
+                    {(inputTokens + outputTokens).toLocaleString()}
+                  </div>
+                  <div className="text-[12px] text-[#7E7E7E] dark:text-[#9ca3af] pb-[6px]">
+                    {inputTokens.toLocaleString()} in · {outputTokens.toLocaleString()} out
                   </div>
                 </div>
               </div>
               <div className="rounded-xl px-5 py-5 w-[32%] min-w-[350px] mr-[15px] bg-[#fff] dark:bg-[#141414] border-[0.7px] border-[#E2ECF9] dark:border-[#2a2a2a] cursor-pointer">
                 <div className="flex justify-between items-center">
                   <div className="text-[#1F1F1F] dark:text-[#ededed] font-medium text-[18px]">
-                    Requests / Accelerator
+                    Model Requests
                   </div>
-                  <Image src={RequestsImage} width={35} alt="active-projects" />
+                  <Image src={RequestsImage} width={35} alt="model-requests" />
                 </div>
 
                 <div className="flex justify-between items-center mt-4 pt-3">
                   <div
                     className={`${poppins.className} text-[#1F1F1F] dark:text-[#ededed] text-[32px]`}
                   >
-                    {stats?.total_requests}{" "}
+                    {totalRequests}{" "}
                     <span className="font-[400] text-[18px]">reqs</span>
                   </div>
                 </div>
@@ -499,7 +541,8 @@ export default function Home() {
                   <div
                     className={`${poppins.className} text-[#1F1F1F] dark:text-[#ededed] text-[32px]`}
                   >
-                    {Math.ceil(Number(stats?.average_token_count || 0))}
+                    {averageTokens.toLocaleString()}{" "}
+                    <span className="font-[400] text-[18px]">per request</span>
                   </div>
                 </div>
               </div>
@@ -522,7 +565,8 @@ export default function Home() {
                   <div
                     className={`${poppins.className} text-[#1F1F1F] dark:text-[#ededed] text-[32px]`}
                   >
-                    3 <span className="font-[400] text-[18px]">times</span>
+                    {totalRequests}{" "}
+                    <span className="font-[400] text-[18px]">times</span>
                   </div>
                 </div>
               </div>
