@@ -55,6 +55,8 @@ const initials = (name: string) =>
 
 /** Only the id is kept: the snapshot's viewer URL carries a one-time login. */
 const ACTIVE_SESSION_KEY = "appatlas-active-session";
+/** "vnc" once the user picked the compatible viewer (their network blocks neko's WebRTC port). */
+const VIEWER_PREF_KEY = "appatlas-viewer";
 const LIVE_STATUSES: SessionSnapshot["status"][] = ["starting", "recording", "finishing"];
 
 const AVATAR_COLORS = ["bg-[#3B82F6]", "bg-[#22C55E]", "bg-[#8664F2]", "bg-[#E1962E]"];
@@ -196,16 +198,28 @@ export default function AtlasWorkspace() {
     };
   }, [accounts.length, client]);
 
-  const runQuick = async () => {
+  const startSession = async () => {
     if (!appUrl) return;
     setStarting(true);
     try {
-      startRecording(await client.startSession({ url: appUrl, devicePreset: "desktop", networkPreset: "none" }));
+      const viewer = localStorage.getItem(VIEWER_PREF_KEY) === "vnc" ? "vnc" : "auto";
+      startRecording(await client.startSession({ url: appUrl, devicePreset: "desktop", networkPreset: "none", viewer }));
     } catch (err) {
       setNotice(err instanceof Error ? err.message : "Could not start the browser.");
     } finally {
       setStarting(false);
     }
+  };
+  const runQuick = () => void startSession();
+
+  const switchViewer = async (to: "vnc" | "auto") => {
+    if (!recording) return;
+    if (to === "vnc") localStorage.setItem(VIEWER_PREF_KEY, "vnc");
+    else localStorage.removeItem(VIEWER_PREF_KEY);
+    await client.discardSession(recording.id).catch(() => undefined);
+    localStorage.removeItem(ACTIVE_SESSION_KEY);
+    setRecording(null);
+    await startSession();
   };
 
   const onRecordingDone = useCallback((snap: SessionSnapshot) => {
@@ -396,7 +410,7 @@ export default function AtlasWorkspace() {
           {tab !== "canvas" ? (
             <EmptyState title={`${tabLabel} is coming soon`} body="This part of AppAtlas isn't available yet. Use Canvas to record and map your app." />
           ) : recording ? (
-            <RecordingView client={client} initial={recording} onFinished={onRecordingDone} onDiscarded={() => {
+            <RecordingView key={recording.id} client={client} initial={recording} onFinished={onRecordingDone} onSwitchViewer={switchViewer} onDiscarded={() => {
                 localStorage.removeItem(ACTIVE_SESSION_KEY);
                 setRecording(null);
               }}

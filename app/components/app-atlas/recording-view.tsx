@@ -17,11 +17,13 @@ export function RecordingView({
   initial,
   onFinished,
   onDiscarded,
+  onSwitchViewer,
 }: {
   client: AtlasClient;
   initial: SessionSnapshot;
   onFinished: (snap: SessionSnapshot) => void;
   onDiscarded: () => void;
+  onSwitchViewer?: (to: "vnc" | "auto") => void;
 }) {
   const [snap, setSnap] = useState(initial);
   const [now, setNow] = useState(() => Date.now());
@@ -111,6 +113,22 @@ export function RecordingView({
         </div>
       </div>
       {error && <div className="bg-[#FDF1F1] px-5 py-2 text-[12px] text-[#991B1B]">{error}</div>}
+      {onSwitchViewer && viewer?.kind === "neko" && (
+        <div className="flex items-center justify-between gap-3 bg-[#F4EFFE] px-5 py-1.5 text-[12px] text-[#5B3FD1] dark:bg-[#1e1a2e]">
+          <span>Stuck on the neko logo? Some networks block the video stream.</span>
+          <button type="button" disabled={!!busy} onClick={() => onSwitchViewer("vnc")} className="shrink-0 font-medium underline hover:no-underline">
+            Switch to the compatible viewer
+          </button>
+        </div>
+      )}
+      {onSwitchViewer && viewer?.kind === "vnc" && typeof window !== "undefined" && localStorage.getItem("appatlas-viewer") === "vnc" && (
+        <div className="flex items-center justify-end gap-3 px-5 pt-1.5 text-[11px] text-[#7E7E7E]">
+          Using the compatible viewer.
+          <button type="button" disabled={!!busy} onClick={() => onSwitchViewer("auto")} className="text-[#8664F2] underline hover:no-underline">
+            Try the smooth viewer
+          </button>
+        </div>
+      )}
 
       <div className="flex min-h-0 flex-1 gap-4 p-4">
         <div className="flex min-w-0 flex-1 items-start justify-center overflow-auto">

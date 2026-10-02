@@ -46,7 +46,7 @@ export function atlasClient({ instance, accounts }: Msal) {
   });
 
   return {
-    startSession: (body: { url: string; devicePreset: string; networkPreset: string }) =>
+    startSession: (body: { url: string; devicePreset: string; networkPreset: string; viewer?: "auto" | "vnc" }) =>
       request<SessionSnapshot>("/sessions", json("POST", body)),
     getSession: (id: string) => request<SessionSnapshot>(`/sessions/${id}`),
     finishSession: (id: string) => request<SessionSnapshot>(`/sessions/${id}/finish`, json("POST")),
