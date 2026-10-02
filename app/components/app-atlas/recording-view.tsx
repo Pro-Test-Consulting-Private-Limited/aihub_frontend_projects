@@ -7,6 +7,11 @@ import { outlineButton, primaryButton } from "./modal";
 
 const DONE: SessionSnapshot["status"][] = ["finished", "expired", "error"];
 
+/** Remote screen sizes set in the backend deploy: neko 1600x900, noVNC 1280x800. */
+const SCREEN_RATIO: Record<string, number> = { neko: 16 / 9, vnc: 16 / 10 };
+/** Atlas header + recording bar + padding above and below the viewer. */
+const VIEWER_CHROME_PX = 150;
+
 export function RecordingView({
   client,
   initial,
@@ -113,8 +118,11 @@ export function RecordingView({
             <iframe
               src={atlasUrl(viewer.url)}
               allow="autoplay; clipboard-read; clipboard-write; fullscreen"
-              className="w-full rounded-[10px] border border-[#E6E1F5] bg-black dark:border-[#2a2a2a]"
-              style={{ aspectRatio: "16 / 10" }}
+              className="rounded-[10px] border border-[#E6E1F5] bg-black dark:border-[#2a2a2a]"
+              style={{
+                aspectRatio: SCREEN_RATIO[viewer.kind] ?? 16 / 9,
+                width: `min(100%, calc((100vh - ${VIEWER_CHROME_PX}px) * ${SCREEN_RATIO[viewer.kind] ?? 16 / 9}))`,
+              }}
               title="Remote browser"
             />
           ) : (
