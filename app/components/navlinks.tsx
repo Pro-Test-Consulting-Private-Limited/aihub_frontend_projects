@@ -10,12 +10,15 @@ import { IconType } from "react-icons";
 
 interface NavProps {
   list: NavBarItem[];
+  collapsed?: boolean;
+  onExpand?: () => void;
 }
 
-const NavLinks = ({ list }: NavProps) => {
+const NavLinks = ({ list, collapsed = false, onExpand }: NavProps) => {
   const pathname = usePathname();
   const [expanded, setExpanded] = useState("");
   const router = useRouter();
+  const wideOnly = collapsed ? "hidden" : "hidden md:block";
 
   const renderImage = (
     icon: StaticImageData | IconType,
@@ -54,18 +57,22 @@ const NavLinks = ({ list }: NavProps) => {
   return (
     <>
       {list.map((link: NavBarItem) => {
-        const isExpanded = expanded === link.href;
+        const isExpanded = !collapsed && expanded === link.href;
 
         return (
           <div
             key={link.name}
+            title={collapsed ? link.name : undefined}
             onClick={() => {
               if (link.items.length === 0) {
                 if (pathname !== link.href) router.push(link.href);
                 setExpanded("");
+              } else if (collapsed) {
+                onExpand?.();
+                setExpanded(link.href);
               } else setExpanded(isExpanded ? "" : link.href);
             }}
-            className={`w-[45px] md:w-[260px] relative rounded-md font-[500] p-2 px-3 text-[15.5px] cursor-pointer ${
+            className={`w-[45px] ${collapsed ? "" : "md:w-[260px]"} relative rounded-md font-[500] p-2 px-3 text-[15.5px] cursor-pointer ${
               pathname === link.href
                 ? "text-[#8664F2] bg-[#FBF8FF] dark:bg-[#2a2440]"
                 : "text-[#333333] dark:text-[#ededed] bg-[#fff] dark:bg-transparent"
@@ -74,13 +81,13 @@ const NavLinks = ({ list }: NavProps) => {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 {renderImage(link.icon, link.href)}
-                <p className="font-[500] hidden md:block">{link.name}</p>
+                <p className={`font-[500] whitespace-nowrap ${wideOnly}`}>{link.name}</p>
               </div>
               {link.items.length > 0 && (
                 <motion.div
                   animate={{ rotate: isExpanded ? 180 : 0 }}
                   transition={{ duration: 1 }}
-                  className="absolute right-4 top-[12.5px] md:static hidden md:block"
+                  className={`absolute right-4 top-[12.5px] md:static ${wideOnly}`}
                 >
                   <Image src={ArrowIcon} alt="arrow" width={17} className="dark:invert" />
                 </motion.div>
