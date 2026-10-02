@@ -74,11 +74,15 @@ type Props = {
   edges: CanvasEdge[];
   editable: boolean;
   focusNodeId?: string | null;
+  /** Highlighted node (its side panel is open). */
+  selectedNodeId?: string | null;
+  jiraCounts?: Record<string, number>;
+  onSelectNode?: (id: string | null) => void;
 };
 
 type Preview = { url: string; title: string };
 
-function Flow({ nodes, edges, editable, focusNodeId }: Props) {
+function Flow({ nodes, edges, editable, focusNodeId, selectedNodeId, jiraCounts, onSelectNode }: Props) {
   const [filter, setFilter] = useState<LegendFilter>(null);
   const [legendOpen, setLegendOpen] = useState(false);
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -104,11 +108,12 @@ function Flow({ nodes, edges, editable, focusNodeId }: Props) {
         data: {
           screen,
           dimmed: hl ? !hl.nodeIds.has(screen.id) : false,
-          selected: focusNodeId === screen.id,
+          selected: (selectedNodeId ?? focusNodeId) === screen.id,
           onOpenShot: (url: string) => setPreview({ url, title: screen.title || screen.path }),
+          jiraCount: jiraCounts?.[screen.id],
         },
       })),
-    [nodes, positions, hl, focusNodeId],
+    [nodes, positions, hl, focusNodeId, selectedNodeId, jiraCounts],
   );
 
   const flowEdges = useMemo<Edge[]>(
@@ -160,6 +165,8 @@ function Flow({ nodes, edges, editable, focusNodeId }: Props) {
         edges={rfEdges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        onNodeClick={onSelectNode ? (_, node) => onSelectNode(node.id) : undefined}
+        onPaneClick={onSelectNode ? () => onSelectNode(null) : undefined}
         nodeTypes={nodeTypes}
         nodesDraggable={editable}
         nodesConnectable={false}
@@ -174,7 +181,7 @@ function Flow({ nodes, edges, editable, focusNodeId }: Props) {
         <Background gap={22} size={1} color="#E5E7EB" />
       </ReactFlow>
 
-      <div className="absolute right-4 bottom-4 z-10 flex flex-col items-end gap-2">
+      <div className={`absolute bottom-4 z-10 flex flex-col items-end gap-2 transition-[right] ${selectedNodeId ? "right-[376px]" : "right-4"}`}>
         {legendOpen && <Legend filter={filter} onChange={setFilter} onClose={() => setLegendOpen(false)} />}
         <div className="flex items-center gap-2">
           <div className="flex h-[32px] items-center rounded-[6px] border border-[#E6E1F5] bg-white text-[12px] text-[#1F1F1F] shadow-sm dark:border-[#2a2a2a] dark:bg-[#141414] dark:text-[#ededed]">

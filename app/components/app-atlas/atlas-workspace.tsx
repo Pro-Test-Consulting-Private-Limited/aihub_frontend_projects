@@ -21,6 +21,8 @@ import type { Canvas, CanvasSummary, SessionSnapshot } from "@/app/interfaces/ap
 import { AtlasError, atlasClient } from "@/app/services/appatlas";
 import { CanvasFlow } from "./canvas-flow";
 import { Explorer } from "./explorer";
+import { ConnectAppsModal } from "./connect-apps-modal";
+import { JiraPanel } from "./jira-panel";
 import { SaveExecutionModal } from "./save-execution-modal";
 import { RecordingView } from "./recording-view";
 
@@ -87,6 +89,19 @@ export default function AtlasWorkspace() {
   const [starting, setStarting] = useState(false);
 
   const [focusNodeId, setFocusNodeId] = useState<string | null>(null);
+  const [panelNodeId, setPanelNodeId] = useState<string | null>(null);
+  const [connectFor, setConnectFor] = useState<CanvasSummary | null>(null);
+
+  const jiraCounts = useMemo(() => {
+    if (!canvas?.jira) return undefined;
+    return Object.fromEntries(Object.entries(canvas.jira.nodes).map(([id, m]) => [id, m.length]));
+  }, [canvas?.jira]);
+
+  const onJiraConnected = (updated: Canvas) => {
+    setCanvases((prev) => prev.map((x) => (x.id === updated.id ? { ...x, jiraProjectKey: updated.jiraProjectKey } : x)));
+    if (canvas?.id === updated.id) setCanvas(updated);
+    setConnectFor(null);
+  };
 
   const loadCanvases = useCallback(async () => {
     setCanvasesLoading(true);
@@ -118,6 +133,7 @@ export default function AtlasWorkspace() {
     async (id: string | null) => {
       setSelectedId(id);
       setFocusNodeId(null);
+      setPanelNodeId(null);
       if (!id) return setCanvas(null);
       if (canvas?.id === id) return;
       setCanvas(null);
@@ -362,6 +378,7 @@ export default function AtlasWorkspace() {
             onSave={() => setSaveOpen(true)}
             onCollapse={() => setExplorerOpen(false)}
             onFocusNode={setFocusNodeId}
+            onConnect={setConnectFor}
           />
         )}
         {tab === "canvas" && !explorerOpen && (
@@ -392,11 +409,23 @@ export default function AtlasWorkspace() {
                 edges={canvas.edges}
                 editable={canvas.isMine}
                 focusNodeId={focusNodeId}
+                selectedNodeId={panelNodeId}
+                jiraCounts={jiraCounts}
+                onSelectNode={setPanelNodeId}
               />
               <div className="pointer-events-none absolute top-3 left-4 rounded-[8px] bg-white/90 px-3 py-1.5 text-[11px] text-[#5E6066] shadow-sm dark:bg-[#141414]/90 dark:text-[#9ca3af]">
                 <span className="font-medium text-[#1F1F1F] dark:text-[#ededed]">{canvas.name}</span> · {canvas.owner.name}
                 {!canvas.isMine && " · view only"}
               </div>
+              {panelNodeId && (
+                <JiraPanel
+                  key={panelNodeId}
+                  canvas={canvas}
+                  nodeId={panelNodeId}
+                  onClose={() => setPanelNodeId(null)}
+                  onConnect={canvas.isMine ? () => setConnectFor(canvas) : undefined}
+                />
+              )}
             </>
           ) : selectedId ? (
             <EmptyState title="Loading canvas…" body="" />
@@ -423,6 +452,9 @@ export default function AtlasWorkspace() {
       </div>
 
       {saveOpen && unsaved && <SaveExecutionModal onSave={save} onClose={() => setSaveOpen(false)} />}
+      {connectFor && (
+        <ConnectAppsModal client={client} canvas={connectFor} onConnected={onJiraConnected} onClose={() => setConnectFor(null)} />
+      )}
     </div>
   );
 }

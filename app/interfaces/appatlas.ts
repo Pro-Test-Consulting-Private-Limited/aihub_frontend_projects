@@ -193,6 +193,8 @@ export type JiraStatus = { connected: boolean; baseUrl?: string; email?: string;
 export type JiraProject = { key: string; name: string };
 
 export type JiraIssue = {
+  priority?: string;
+  assignee?: string;
   key: string;
   summary: string;
   /** Jira issue type name: Epic, Story, Task, Bug, Sub-task, ... */

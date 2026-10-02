@@ -5,6 +5,7 @@ import { getFreshIdToken } from "@/app/lib/auth-client";
 import type {
   Canvas,
   CanvasSummary,
+  JiraProject,
   SessionSnapshot,
 } from "@/app/interfaces/appatlas";
 
@@ -21,9 +22,10 @@ export class AtlasError extends Error {
 type Msal = { instance: IPublicClientApplication; accounts: AccountInfo[] };
 
 export function atlasClient({ instance, accounts }: Msal) {
-  const request = async <T>(path: string, init: RequestInit = {}, retried = false): Promise<T> => {
+  /** `base` "" targets this app's own /api routes (Jira, which needs the server-side cookies). */
+  const request = async <T>(path: string, init: RequestInit = {}, retried = false, base = APPATLAS_API): Promise<T> => {
     const token = await getFreshIdToken(instance, accounts, retried);
-    const res = await fetch(`${APPATLAS_API}${path}`, {
+    const res = await fetch(`${base}${path}`, {
       ...init,
       headers: {
         ...(init.body ? { "Content-Type": "application/json" } : {}),
@@ -31,7 +33,7 @@ export function atlasClient({ instance, accounts }: Msal) {
         ...init.headers,
       },
     });
-    if (res.status === 401 && !retried) return request<T>(path, init, true);
+    if (res.status === 401 && !retried) return request<T>(path, init, true, base);
     if (res.status === 204) return undefined as T;
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw new AtlasError(body.error ?? res.statusText, res.status);
@@ -56,6 +58,12 @@ export function atlasClient({ instance, accounts }: Msal) {
     renameCanvas: (id: string, body: { name?: string; description?: string }) =>
       request<Canvas>(`/canvases/${id}`, json("PATCH", body)),
     deleteCanvas: (id: string) => request<void>(`/canvases/${id}`, json("DELETE")),
+    listJiraProjects: () =>
+      request<{ projects: JiraProject[] }>("/api/app-atlas/jira/projects", {}, false, "").then((r) => r.projects),
+    connectJira: (canvasId: string, projectKey: string) =>
+      request<Canvas>(`/api/app-atlas/canvases/${canvasId}/jira`, json("POST", { projectKey }), false, ""),
+    disconnectJira: (canvasId: string) =>
+      request<Canvas>(`/api/app-atlas/canvases/${canvasId}/jira`, json("DELETE"), false, ""),
     /** EventSource can't send headers, so the token goes in the query string. */
     openEvents: async (id: string) => {
       const token = await getFreshIdToken(instance, accounts);

@@ -10,10 +10,12 @@ import {
   TbFolder,
   TbFolderFilled,
   TbLayoutGrid,
+  TbLink,
   TbLock,
   TbPlayerPlay,
   TbPlus,
 } from "react-icons/tb";
+import { SiJira } from "react-icons/si";
 import type { Canvas, CanvasSummary } from "@/app/interfaces/appatlas";
 
 const iconButton =
@@ -37,6 +39,7 @@ type Props = {
   onSave: () => void;
   onCollapse: () => void;
   onFocusNode: (id: string) => void;
+  onConnect: (c: CanvasSummary) => void;
 };
 
 export function Explorer(props: Props) {
@@ -113,6 +116,32 @@ export function Explorer(props: Props) {
                       <span>{formatCanvasDate(c.createdAt)}</span>
                       <span>{c.screens} Screens, {c.transitions} Events</span>
                     </div>
+                  )}
+                  {active && (c.isMine || c.jiraProjectKey) && (
+                    <button
+                      type="button"
+                      disabled={!c.isMine}
+                      title={c.isMine ? (c.jiraProjectKey ? "Manage connected apps" : "Connect apps to this canvas") : "Connected apps"}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        props.onConnect(c);
+                      }}
+                      className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-[8px] border border-[#C9B8F7] bg-[#F4EFFE] py-2 text-[12.5px] font-medium text-[#8664F2] hover:bg-[#EDE4FD] disabled:cursor-default disabled:hover:bg-[#F4EFFE] dark:border-[#3a3060] dark:bg-[#1e1a2e]"
+                    >
+                      {c.jiraProjectKey ? (
+                        <>
+                          <span className="flex h-[20px] w-[20px] items-center justify-center rounded-[5px] bg-white shadow-sm">
+                            <SiJira size={12} color="#2684FF" />
+                          </span>
+                          <span>Jira · {c.jiraProjectKey}</span>
+                        </>
+                      ) : (
+                        <>
+                          <TbLink size={15} />
+                          Connect
+                        </>
+                      )}
+                    </button>
                   )}
                   {menuFor === c.id && (
                     <div
