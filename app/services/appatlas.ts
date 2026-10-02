@@ -46,6 +46,7 @@ export function atlasClient({ instance, accounts }: Msal) {
   return {
     startSession: (body: { url: string; devicePreset: string; networkPreset: string }) =>
       request<SessionSnapshot>("/sessions", json("POST", body)),
+    getSession: (id: string) => request<SessionSnapshot>(`/sessions/${id}`),
     finishSession: (id: string) => request<SessionSnapshot>(`/sessions/${id}/finish`, json("POST")),
     discardSession: (id: string) => request<void>(`/sessions/${id}`, json("DELETE")),
     listCanvases: () => request<CanvasSummary[]>("/canvases"),

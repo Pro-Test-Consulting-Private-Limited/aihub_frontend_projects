@@ -52,6 +52,10 @@ const initials = (name: string) =>
     .map((p) => p[0]!.toUpperCase())
     .join("");
 
+/** Only the id is kept: the snapshot's viewer URL carries a one-time login. */
+const ACTIVE_SESSION_KEY = "appatlas-active-session";
+const LIVE_STATUSES: SessionSnapshot["status"][] = ["starting", "recording", "finishing"];
+
 const AVATAR_COLORS = ["bg-[#3B82F6]", "bg-[#22C55E]", "bg-[#8664F2]", "bg-[#E1962E]"];
 
 export default function AtlasWorkspace() {
@@ -144,10 +148,40 @@ export default function AtlasWorkspace() {
   }, [visible, selectedId]);
 
   const startRecording = (snap: SessionSnapshot) => {
+    localStorage.setItem(ACTIVE_SESSION_KEY, snap.id);
     setUnsaved(null);
     setRecording(snap);
     setTab("canvas");
   };
+
+  // A reload mid-recording reattaches to the running session, or offers to save it if it already stopped.
+  useEffect(() => {
+    if (!accounts.length) return;
+    const id = localStorage.getItem(ACTIVE_SESSION_KEY);
+    if (!id) return;
+    let cancelled = false;
+    client
+      .getSession(id)
+      .then((snap) => {
+        if (cancelled) return;
+        if (LIVE_STATUSES.includes(snap.status)) {
+          setRecording(snap);
+          setTab("canvas");
+        } else {
+          localStorage.removeItem(ACTIVE_SESSION_KEY);
+          if (snap.status !== "error" && snap.nodes.length) {
+            setUnsaved(snap);
+            setNotice("Your last recording stopped while you were away. Save it below or start a new one.");
+          }
+        }
+      })
+      .catch(() => {
+        if (!cancelled) localStorage.removeItem(ACTIVE_SESSION_KEY);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accounts.length, client]);
 
   const runQuick = async () => {
     if (!appUrl) return;
@@ -162,6 +196,7 @@ export default function AtlasWorkspace() {
   };
 
   const onRecordingDone = useCallback((snap: SessionSnapshot) => {
+    localStorage.removeItem(ACTIVE_SESSION_KEY);
     setRecording(null);
     if (snap.status === "error") {
       setNotice(snap.error ? `Recording failed: ${snap.error}` : "Recording failed.");
@@ -343,7 +378,11 @@ export default function AtlasWorkspace() {
           {tab !== "canvas" ? (
             <EmptyState title={`${tabLabel} is coming soon`} body="This part of AppAtlas isn't available yet. Use Canvas to record and map your app." />
           ) : recording ? (
-            <RecordingView client={client} initial={recording} onFinished={onRecordingDone} onDiscarded={() => setRecording(null)} />
+            <RecordingView client={client} initial={recording} onFinished={onRecordingDone} onDiscarded={() => {
+                localStorage.removeItem(ACTIVE_SESSION_KEY);
+                setRecording(null);
+              }}
+            />
           ) : canvas ? (
             <>
               <CanvasFlow

@@ -51,6 +51,12 @@ export function RecordingView({
     };
   }, [client, initial.id]);
 
+  useEffect(() => {
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, []);
+
   const finish = async () => {
     setBusy("finish");
     setError(null);
