@@ -260,7 +260,7 @@ export default function Home() {
                   ? "bg-[#FBF8FF] dark:bg-[#2a2440]"
                   : "bg-white dark:bg-transparent hover:bg-[#FAFAFA] dark:hover:bg-[#1a1a1a]"
               }`}
-              onClick={() => setActiveWorkplaceTab("app-atlas")}
+              onClick={() => router.push("/app-atlas")}
             >
               <span
                 className={`text-[14px] font-[500] ${

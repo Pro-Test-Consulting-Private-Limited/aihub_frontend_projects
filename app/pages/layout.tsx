@@ -12,11 +12,11 @@ const SIDENAV_COLLAPSED_KEY = "sidenav-collapsed";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const [collapsed, setCollapsed] = useState(false);
+  const [savedCollapsed, setSavedCollapsed] = useState(false);
   const [animate, setAnimate] = useState(false);
 
   useEffect(() => {
-    setCollapsed(localStorage.getItem(SIDENAV_COLLAPSED_KEY) === "true");
+    setSavedCollapsed(localStorage.getItem(SIDENAV_COLLAPSED_KEY) === "true");
     // Enable transitions only after the saved state is applied, so reloads don't animate.
     const frame = requestAnimationFrame(() => setAnimate(true));
     return () => cancelAnimationFrame(frame);
@@ -24,8 +24,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   const transition = animate ? "ease-in-out duration-500" : "duration-0";
 
+  // App Atlas is a full-screen workspace: icon rail only, unless expanded for this visit.
+  const isAtlas = pathname?.startsWith("/app-atlas") ?? false;
+  const [atlasExpanded, setAtlasExpanded] = useState(false);
+  useEffect(() => setAtlasExpanded(false), [isAtlas]);
+  const collapsed = isAtlas ? !atlasExpanded : savedCollapsed;
+
   const toggleCollapsed = (value: boolean) => {
-    setCollapsed(value);
+    if (isAtlas) return setAtlasExpanded(!value);
+    setSavedCollapsed(value);
     localStorage.setItem(SIDENAV_COLLAPSED_KEY, String(value));
   };
 
@@ -60,9 +67,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               : "w-[calc(100%-75px)] md:w-[calc(100%-300px)] ml-[75px] md:ml-[300px]"
           }`}
         >
-          <TopNav />
+          {isAtlas ? (
+            <div className="h-full overflow-hidden">{children}</div>
+          ) : (
+            <TopNav />
+          )}
 
-          {!pathname?.includes("metrics") ? (
+          {isAtlas ? null : !pathname?.includes("metrics") ? (
             <AnimatePresence mode="wait" initial={false}>
               <motion.div
                 key={pathname}

@@ -49,6 +49,10 @@ const nextConfig = {
         destination: "/pages/resources",
       },
       {
+        source: "/app-atlas",
+        destination: "/pages/app-atlas",
+      },
+      {
         source: "/integrations",
         destination: "/pages/integrations",
       },
