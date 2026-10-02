@@ -260,7 +260,7 @@ export default function Home() {
                   ? "bg-[#FBF8FF] dark:bg-[#2a2440]"
                   : "bg-white dark:bg-transparent hover:bg-[#FAFAFA] dark:hover:bg-[#1a1a1a]"
               }`}
-              onClick={() => router.push("/app-atlas")}
+              onClick={() => setActiveWorkplaceTab("app-atlas")}
             >
               <span
                 className={`text-[14px] font-[500] ${
@@ -308,7 +308,9 @@ export default function Home() {
                 className="flex justify-between items-center h-[49px] my-[5px] cursor-pointer px-[15px]"
                 onClick={() => {
                   router.push(
-                    `/projects/${project.id}/?workplace=${workplace?.value}&domain=${domain}`,
+                    activeWorkplaceTab === "app-atlas"
+                      ? `/app-atlas?projectId=${project.id}`
+                      : `/projects/${project.id}/?workplace=${workplace?.value}&domain=${domain}`,
                   );
                 }}
               >

@@ -65,10 +65,10 @@ export default function AtlasWorkspace() {
   const searchParams = useSearchParams();
   const { projects, loading: projectsLoading } = useProjects();
 
-  const appProjects = useMemo(() => projects.filter((p) => p.applicationUrl?.trim()), [projects]);
   const projectId = searchParams.get("projectId");
-  const project = appProjects.find((p) => p.id === projectId) ?? appProjects[0] ?? null;
-  const appUrl = project?.applicationUrl.trim() ?? "";
+  const project =
+    projects.find((p) => p.id === projectId) ?? projects.find((p) => p.applicationUrl?.trim()) ?? projects[0] ?? null;
+  const appUrl = project?.applicationUrl?.trim() ?? "";
   const host = hostOf(appUrl);
 
   const [tab, setTab] = useState<TabId>("canvas");
@@ -262,19 +262,28 @@ export default function AtlasWorkspace() {
             <button
               type="button"
               onClick={() => setProjectMenu((o) => !o)}
-              className="flex h-[34px] max-w-[300px] items-center gap-2 rounded-[8px] border border-[#E5E7EB] bg-[#F5F6F6] px-3 text-[13px] text-[#1F1F1F] dark:border-[#2a2a2a] dark:bg-[#141414] dark:text-[#ededed]"
+              className="flex h-[34px] max-w-[340px] items-center gap-2 rounded-[8px] border border-[#E5E7EB] bg-[#F5F6F6] px-3 text-[13px] text-[#1F1F1F] dark:border-[#2a2a2a] dark:bg-[#141414] dark:text-[#ededed]"
               title={appUrl || "No application URL"}
             >
               <TbWorld size={15} className="shrink-0 text-[#5E6066]" />
-              <span className="truncate">{host || (projectsLoading ? "Loading…" : "No app configured")}</span>
+              <span className="truncate">
+                {project ? (
+                  <>
+                    <span className="font-medium">{project.name}</span>
+                    {host && <span className="text-[#7E7E7E]"> · {host}</span>}
+                  </>
+                ) : projectsLoading ? (
+                  "Loading…"
+                ) : (
+                  "No projects yet"
+                )}
+              </span>
               <TbChevronDown size={14} className="shrink-0 text-[#5E6066]" />
             </button>
             {projectMenu && (
               <div className="absolute top-10 left-0 z-40 w-[320px] rounded-[10px] border border-[#E6E1F5] bg-white py-1 shadow-lg dark:border-[#2a2a2a] dark:bg-[#141414]">
-                {appProjects.length === 0 && (
-                  <div className="px-3 py-2 text-[12px] text-[#7E7E7E]">No project has an Application URL yet.</div>
-                )}
-                {appProjects.map((p) => (
+                {projects.length === 0 && <div className="px-3 py-2 text-[12px] text-[#7E7E7E]">No projects yet.</div>}
+                {projects.map((p) => (
                   <button
                     key={p.id}
                     type="button"
@@ -285,7 +294,7 @@ export default function AtlasWorkspace() {
                     className={`block w-full px-3 py-2 text-left hover:bg-[#F9FAFC] dark:hover:bg-[#1a1a1a] ${p.id === project?.id ? "bg-[#F2EBFB] dark:bg-[#2a2440]" : ""}`}
                   >
                     <div className="truncate text-[12.5px] font-medium text-[#1F1F1F] dark:text-[#ededed]">{p.name}</div>
-                    <div className="truncate text-[11px] text-[#7E7E7E]">{p.applicationUrl}</div>
+                    <div className="truncate text-[11px] text-[#7E7E7E]">{p.applicationUrl?.trim() || "No Application URL"}</div>
                   </button>
                 ))}
                 <button
@@ -412,9 +421,15 @@ export default function AtlasWorkspace() {
               body={
                 appUrl
                   ? "Click + in the Explorer or Run AppAtlas to open your app in a remote browser and map every screen you visit."
-                  : "Add an Application URL to a project in Projects, then pick it from the URL bar."
+                  : project
+                    ? `"${project.name}" has no Application URL yet. Add one in the project setup, then come back here.`
+                    : "Create a project with an Application URL, then open it here."
               }
-              action={appUrl ? { label: starting ? "Starting…" : "Run AppAtlas", onClick: runQuick, disabled: !canStart } : { label: "Go to Projects", onClick: () => router.push("/projects") }}
+              action={
+                appUrl
+                  ? { label: starting ? "Starting…" : "Run AppAtlas", onClick: runQuick, disabled: !canStart }
+                  : { label: project ? "Open project setup" : "Go to Projects", onClick: () => router.push(project ? `/projects/${project.id}` : "/projects") }
+              }
             />
           )}
         </div>
