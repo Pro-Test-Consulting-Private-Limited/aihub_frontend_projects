@@ -7,7 +7,6 @@ import {
   TbChartLine,
   TbChevronDown,
   TbChevronRight,
-  TbDevices,
   TbHistory,
   TbLayoutGrid,
   TbNetwork,
@@ -23,7 +22,6 @@ import { AtlasError, atlasClient } from "@/app/services/appatlas";
 import { CanvasFlow } from "./canvas-flow";
 import { Explorer } from "./explorer";
 import { DetailsDrawer, type DrawerView } from "./details-drawer";
-import { NewRecordingModal } from "./new-recording-modal";
 import { SaveExecutionModal } from "./save-execution-modal";
 import { RecordingView } from "./recording-view";
 
@@ -80,7 +78,6 @@ export default function AtlasWorkspace() {
   const [canvas, setCanvas] = useState<Canvas | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const [newOpen, setNewOpen] = useState(false);
   const [recording, setRecording] = useState<SessionSnapshot | null>(null);
   const [unsaved, setUnsaved] = useState<SessionSnapshot | null>(null);
   const [saveOpen, setSaveOpen] = useState(false);
@@ -147,7 +144,6 @@ export default function AtlasWorkspace() {
   }, [visible, selectedId]);
 
   const startRecording = (snap: SessionSnapshot) => {
-    setNewOpen(false);
     setUnsaved(null);
     setRecording(snap);
     setTab("canvas");
@@ -287,10 +283,6 @@ export default function AtlasWorkspace() {
         </div>
         <div className="flex shrink-0 items-center gap-4 text-[13px] text-[#1F1F1F] dark:text-[#ededed]">
           <div className="h-[24px] w-px bg-[#E5E7EB] dark:bg-[#2a2a2a]" />
-          <button type="button" className="flex items-center gap-1.5 hover:text-[#8664F2] disabled:opacity-40" onClick={() => setNewOpen(true)} disabled={!canStart} title="Record on a device or network preset">
-            <TbDevices size={15} />
-            Devices
-          </button>
           <button
             type="button"
             className={`flex items-center gap-1.5 hover:text-[#8664F2] ${mineOnly ? "text-[#8664F2]" : ""}`}
@@ -329,7 +321,7 @@ export default function AtlasWorkspace() {
             onSelect={(id) => selectCanvas(id === selectedId ? null : id)}
             onRename={rename}
             onDelete={remove}
-            onNew={() => setNewOpen(true)}
+            onNew={runQuick}
             onRun={runQuick}
             onSave={() => setSaveOpen(true)}
             onCollapse={() => setExplorerOpen(false)}
@@ -380,7 +372,7 @@ export default function AtlasWorkspace() {
               title="No app crawled yet"
               body={
                 appUrl
-                  ? "Click + in the Explorer to configure your recording, or hit Run AppAtlas to discover and map every screen automatically."
+                  ? "Click + in the Explorer or Run AppAtlas to open your app in a remote browser and map every screen you visit."
                   : "Add an Application URL to a project in Projects, then pick it from the URL bar."
               }
               action={appUrl ? { label: starting ? "Starting…" : "Run AppAtlas", onClick: runQuick, disabled: !canStart } : { label: "Go to Projects", onClick: () => router.push("/projects") }}
@@ -389,7 +381,6 @@ export default function AtlasWorkspace() {
         </div>
       </div>
 
-      {newOpen && <NewRecordingModal client={client} url={appUrl} onStarted={startRecording} onClose={() => setNewOpen(false)} />}
       {saveOpen && unsaved && <SaveExecutionModal onSave={save} onClose={() => setSaveOpen(false)} />}
     </div>
   );

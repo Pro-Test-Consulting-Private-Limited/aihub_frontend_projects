@@ -51,7 +51,7 @@ export function Explorer(props: Props) {
       <div className="flex items-center justify-between border-b border-[#EEE] px-4 py-3 dark:border-[#1a1a1a]">
         <div className="text-[15px] font-medium text-[#1F1F1F] dark:text-[#ededed]">Explorer</div>
         <div className="flex items-center gap-1">
-          <button type="button" className={iconButton} title="New canvas" onClick={props.onNew} disabled={!props.canStart}>
+          <button type="button" className={iconButton} title="New canvas: start recording" onClick={props.onNew} disabled={!props.canStart}>
             <TbPlus size={16} />
           </button>
           <button type="button" className={iconButton} title={props.canSave ? "Save execution" : "Nothing to save"} onClick={props.onSave} disabled={!props.canSave}>

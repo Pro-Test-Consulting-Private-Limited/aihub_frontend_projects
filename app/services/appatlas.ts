@@ -3,7 +3,6 @@
 import type { IPublicClientApplication, AccountInfo } from "@azure/msal-browser";
 import { getFreshIdToken } from "@/app/lib/auth-client";
 import type {
-  AtlasConfig,
   Canvas,
   CanvasSummary,
   SessionSnapshot,
@@ -45,7 +44,6 @@ export function atlasClient({ instance, accounts }: Msal) {
   });
 
   return {
-    getConfig: () => request<AtlasConfig>("/config"),
     startSession: (body: { url: string; devicePreset: string; networkPreset: string }) =>
       request<SessionSnapshot>("/sessions", json("POST", body)),
     finishSession: (id: string) => request<SessionSnapshot>(`/sessions/${id}/finish`, json("POST")),
