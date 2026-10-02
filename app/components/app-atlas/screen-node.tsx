@@ -8,6 +8,7 @@ export type ScreenNodeData = {
   screen: CanvasNode;
   dimmed: boolean;
   selected: boolean;
+  onOpenShot: (url: string) => void;
 };
 
 export type AtlasScreenNode = Node<ScreenNodeData, "screen">;
@@ -18,7 +19,7 @@ export const NODE_HEIGHT = 250;
 const MAX_CHIPS = 5;
 
 export function ScreenNode({ data }: NodeProps<AtlasScreenNode>) {
-  const { screen, dimmed, selected } = data;
+  const { screen, dimmed, selected, onOpenShot } = data;
   const chips = screen.pageObjects.slice(0, MAX_CHIPS);
   const more = screen.pageObjects.length - chips.length;
 
@@ -45,7 +46,9 @@ export function ScreenNode({ data }: NodeProps<AtlasScreenNode>) {
             src={screen.screenshotUrl}
             alt={screen.title}
             loading="lazy"
-            className="h-full w-full object-cover object-top"
+            title="View screenshot"
+            onClick={() => onOpenShot(screen.screenshotUrl!)}
+            className="nodrag h-full w-full cursor-zoom-in object-cover object-top"
           />
         )}
       </div>

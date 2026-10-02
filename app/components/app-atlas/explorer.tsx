@@ -15,7 +15,6 @@ import {
   TbPlus,
 } from "react-icons/tb";
 import type { Canvas, CanvasSummary } from "@/app/interfaces/appatlas";
-import type { DrawerView } from "./details-drawer";
 
 const iconButton =
   "flex h-[26px] w-[26px] items-center justify-center rounded-[6px] text-[#5E6066] hover:bg-[#F2EBFB] hover:text-[#8664F2] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[#5E6066] dark:text-[#9ca3af] dark:hover:bg-[#2a2440]";
@@ -37,7 +36,7 @@ type Props = {
   onRun: () => void;
   onSave: () => void;
   onCollapse: () => void;
-  onOpenDrawer: (view: DrawerView) => void;
+  onFocusNode: (id: string) => void;
 };
 
 export function Explorer(props: Props) {
@@ -154,14 +153,8 @@ export function Explorer(props: Props) {
                     <div className="pl-[52px] text-[#5E6066] dark:text-[#9ca3af]">
                       {!loaded && <div className="py-1">Loading…</div>}
                       {loaded?.nodes.map((n) => (
-                        <TreeLeaf key={n.id} label={n.title || n.path} title={n.path} onClick={() => props.onOpenDrawer({ kind: "node", id: n.id })} />
+                        <TreeLeaf key={n.id} label={n.title || n.path} title={n.path} onClick={() => props.onFocusNode(n.id)} />
                       ))}
-                      {loaded && (
-                        <>
-                          <TreeLeaf label="Page Objects" onClick={() => props.onOpenDrawer({ kind: "pageObjects" })} />
-                          <TreeLeaf label="Test Data" onClick={() => props.onOpenDrawer({ kind: "testData" })} />
-                        </>
-                      )}
                     </div>
                   )}
                 </div>

@@ -64,17 +64,8 @@ function highlighted(nodes: CanvasNode[], edges: CanvasEdge[], filter: LegendFil
   if (!filter) return null;
   const nodeIds = new Set<string>();
   const edgeIds = new Set<string>();
-  if (filter.kind === "edge") {
-    for (const e of edges) {
-      if (e.lineStyle !== filter.lineStyle) continue;
-      edgeIds.add(e.id);
-      nodeIds.add(e.source);
-      nodeIds.add(e.target);
-    }
-  } else {
-    for (const n of nodes) if ((n.pageObjectCounts?.[filter.type] ?? 0) > 0) nodeIds.add(n.id);
-    for (const e of edges) if (nodeIds.has(e.source) && nodeIds.has(e.target)) edgeIds.add(e.id);
-  }
+  for (const n of nodes) if ((n.pageObjectCounts?.[filter.type] ?? 0) > 0) nodeIds.add(n.id);
+  for (const e of edges) if (nodeIds.has(e.source) && nodeIds.has(e.target)) edgeIds.add(e.id);
   return { nodeIds, edgeIds };
 }
 
@@ -82,14 +73,22 @@ type Props = {
   nodes: CanvasNode[];
   edges: CanvasEdge[];
   editable: boolean;
-  selectedNodeId?: string | null;
   focusNodeId?: string | null;
-  onSelectNode?: (id: string | null) => void;
 };
 
-function Flow({ nodes, edges, editable, selectedNodeId, focusNodeId, onSelectNode }: Props) {
+type Preview = { url: string; title: string };
+
+function Flow({ nodes, edges, editable, focusNodeId }: Props) {
   const [filter, setFilter] = useState<LegendFilter>(null);
   const [legendOpen, setLegendOpen] = useState(false);
+  const [preview, setPreview] = useState<Preview | null>(null);
+
+  useEffect(() => {
+    if (!preview) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setPreview(null);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [preview]);
   const { zoomIn, zoomOut, fitView } = useReactFlow();
   const { zoom } = useViewport();
 
@@ -105,10 +104,11 @@ function Flow({ nodes, edges, editable, selectedNodeId, focusNodeId, onSelectNod
         data: {
           screen,
           dimmed: hl ? !hl.nodeIds.has(screen.id) : false,
-          selected: selectedNodeId === screen.id,
+          selected: focusNodeId === screen.id,
+          onOpenShot: (url: string) => setPreview({ url, title: screen.title || screen.path }),
         },
       })),
-    [nodes, positions, hl, selectedNodeId],
+    [nodes, positions, hl, focusNodeId],
   );
 
   const flowEdges = useMemo<Edge[]>(
@@ -165,8 +165,6 @@ function Flow({ nodes, edges, editable, selectedNodeId, focusNodeId, onSelectNod
         nodesConnectable={false}
         edgesFocusable={false}
         elementsSelectable={false}
-        onNodeClick={(_, n) => onSelectNode?.(n.id)}
-        onPaneClick={() => onSelectNode?.(null)}
         fitView
         fitViewOptions={{ padding: 0.2, maxZoom: 1 }}
         minZoom={0.2}
@@ -204,6 +202,21 @@ function Flow({ nodes, edges, editable, selectedNodeId, focusNodeId, onSelectNod
           </button>
         </div>
       </div>
+
+      {preview && (
+        <div
+          className="absolute inset-0 z-30 flex items-center justify-center bg-black/55 p-8 backdrop-blur-[1px]"
+          onClick={() => setPreview(null)}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={preview.url}
+            alt={preview.title}
+            onClick={(e) => e.stopPropagation()}
+            className="max-h-full max-w-full rounded-[10px] border border-white/20 bg-white object-contain shadow-2xl"
+          />
+        </div>
+      )}
     </div>
   );
 }

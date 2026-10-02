@@ -13,12 +13,7 @@ export const PAGE_OBJECT_STYLES: Record<PageObjectType, { label: string; dot: st
   other: { label: "Other", dot: "bg-[#9CA3AF]", chip: "border-[#E5E7EB] bg-[#F3F4F6] text-[#374151]" },
 };
 
-export type LegendFilter =
-  | { kind: "edge"; lineStyle: "solid" | "dotted" }
-  | { kind: "pageObject"; type: PageObjectType }
-  | null;
-
-const sameFilter = (a: LegendFilter, b: LegendFilter) => JSON.stringify(a) === JSON.stringify(b);
+export type LegendFilter = { type: PageObjectType } | null;
 
 export function Legend({
   filter,
@@ -29,30 +24,24 @@ export function Legend({
   onChange: (f: LegendFilter) => void;
   onClose: () => void;
 }) {
-  const item = (f: NonNullable<LegendFilter>, swatch: React.ReactNode, label: string) => {
-    const active = sameFilter(filter, f);
+  const item = (type: PageObjectType) => {
+    const active = filter?.type === type;
     return (
       <button
         type="button"
-        key={label}
-        onClick={() => onChange(active ? null : f)}
+        key={type}
+        onClick={() => onChange(active ? null : { type })}
         className={`flex w-full items-center gap-2.5 rounded-[6px] px-2 py-1.5 text-left text-[12px] transition-colors ${
           active
             ? "bg-[#F2EBFB] text-[#8664F2] dark:bg-[#2a2440]"
             : "text-[#333] hover:bg-[#F9FAFC] dark:text-[#ededed] dark:hover:bg-[#1a1a1a]"
         }`}
       >
-        {swatch}
-        {label}
+        <span className={`h-[8px] w-[8px] shrink-0 rounded-full ${PAGE_OBJECT_STYLES[type].dot}`} />
+        {PAGE_OBJECT_STYLES[type].label}
       </button>
     );
   };
-
-  const line = (color: string, dashed: boolean) => (
-    <svg width="26" height="6" className="shrink-0">
-      <line x1="0" y1="3" x2="26" y2="3" stroke={color} strokeWidth="2" strokeDasharray={dashed ? "4 3" : undefined} />
-    </svg>
-  );
 
   return (
     <div className="w-[220px] rounded-[10px] border border-[#E6E1F5] bg-white p-3 shadow-lg dark:border-[#2a2a2a] dark:bg-[#141414]">
@@ -62,16 +51,8 @@ export function Legend({
           ✕
         </button>
       </div>
-      {item({ kind: "edge", lineStyle: "solid" }, line(BUTTON_EDGE_COLOR, false), "Button navigation")}
-      {item({ kind: "edge", lineStyle: "dotted" }, line(LINK_EDGE_COLOR, true), "Link navigation")}
-      <div className="mt-2 mb-1 px-2 text-[10px] font-medium uppercase text-[#9ca3af]">Page objects</div>
-      {(Object.keys(PAGE_OBJECT_STYLES) as PageObjectType[]).map((type) =>
-        item(
-          { kind: "pageObject", type },
-          <span className={`ml-[9px] mr-[9px] h-[8px] w-[8px] shrink-0 rounded-full ${PAGE_OBJECT_STYLES[type].dot}`} />,
-          PAGE_OBJECT_STYLES[type].label,
-        ),
-      )}
+      <div className="mb-1 px-2 text-[10px] font-medium uppercase text-[#9ca3af]">Page objects</div>
+      {(Object.keys(PAGE_OBJECT_STYLES) as PageObjectType[]).map(item)}
       {filter && (
         <button
           type="button"

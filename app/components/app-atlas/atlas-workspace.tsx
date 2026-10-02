@@ -21,7 +21,6 @@ import type { Canvas, CanvasSummary, SessionSnapshot } from "@/app/interfaces/ap
 import { AtlasError, atlasClient } from "@/app/services/appatlas";
 import { CanvasFlow } from "./canvas-flow";
 import { Explorer } from "./explorer";
-import { DetailsDrawer, type DrawerView } from "./details-drawer";
 import { SaveExecutionModal } from "./save-execution-modal";
 import { RecordingView } from "./recording-view";
 
@@ -87,7 +86,6 @@ export default function AtlasWorkspace() {
   const [saveOpen, setSaveOpen] = useState(false);
   const [starting, setStarting] = useState(false);
 
-  const [drawer, setDrawer] = useState<DrawerView | null>(null);
   const [focusNodeId, setFocusNodeId] = useState<string | null>(null);
 
   const loadCanvases = useCallback(async () => {
@@ -119,7 +117,6 @@ export default function AtlasWorkspace() {
   const selectCanvas = useCallback(
     async (id: string | null) => {
       setSelectedId(id);
-      setDrawer(null);
       setFocusNodeId(null);
       if (!id) return setCanvas(null);
       if (canvas?.id === id) return;
@@ -246,11 +243,6 @@ export default function AtlasWorkspace() {
     }
   };
 
-  const openDrawer = (view: DrawerView) => {
-    setDrawer(view);
-    if (view.kind === "node") setFocusNodeId(view.id);
-  };
-
   const canStart = !!appUrl && !recording && !starting;
   const tabLabel = TABS.find((t) => t.id === tab)!.label;
 
@@ -369,7 +361,7 @@ export default function AtlasWorkspace() {
             onRun={runQuick}
             onSave={() => setSaveOpen(true)}
             onCollapse={() => setExplorerOpen(false)}
-            onOpenDrawer={openDrawer}
+            onFocusNode={setFocusNodeId}
           />
         )}
         {tab === "canvas" && !explorerOpen && (
@@ -399,17 +391,12 @@ export default function AtlasWorkspace() {
                 nodes={canvas.nodes}
                 edges={canvas.edges}
                 editable={canvas.isMine}
-                selectedNodeId={drawer?.kind === "node" ? drawer.id : null}
                 focusNodeId={focusNodeId}
-                onSelectNode={(id) => (id ? openDrawer({ kind: "node", id }) : setDrawer(null))}
               />
               <div className="pointer-events-none absolute top-3 left-4 rounded-[8px] bg-white/90 px-3 py-1.5 text-[11px] text-[#5E6066] shadow-sm dark:bg-[#141414]/90 dark:text-[#9ca3af]">
                 <span className="font-medium text-[#1F1F1F] dark:text-[#ededed]">{canvas.name}</span> · {canvas.owner.name}
                 {!canvas.isMine && " · view only"}
               </div>
-              {drawer && (
-                <DetailsDrawer canvas={canvas} view={drawer} onClose={() => setDrawer(null)} onSelectNode={(id) => openDrawer({ kind: "node", id })} />
-              )}
             </>
           ) : selectedId ? (
             <EmptyState title="Loading canvas…" body="" />
