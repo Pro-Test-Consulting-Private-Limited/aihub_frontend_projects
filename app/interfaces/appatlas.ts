@@ -256,6 +256,8 @@ export type JiraNodeMatch = {
   signals: { keyword: number; semantic: number | null; structure: number; flow: number };
   evidence: string[];
   criteria: CriterionCheck[];
+  /** How it got here: scoring (absent), a button/link naming the ticket ("entry"), or a person ("manual"). */
+  via?: "entry" | "manual";
 };
 
 export type JiraMapping = {
@@ -266,8 +268,10 @@ export type JiraMapping = {
   /** Which matchers contributed, e.g. ["bm25", "embedding:Xenova/bge-small-en-v1.5", "structure", "flow"] */
   matchers: string[];
   issues: JiraIssue[];
-  /** nodeId -> best matching tickets (sorted, at most 3). */
+  /** nodeId -> tickets shown on the screen: the matcher's picks, or the manual list where there is one. */
   nodes: Record<string, JiraNodeMatch[]>;
+  /** nodeId -> manual mapping that overrides the matcher for that screen. */
+  manual?: Record<string, { issueKeys: string[]; by: string; at: number }>;
   /** issueKey -> nodeIds whose best/possible matches include it. Epics roll up from their children. */
   coverage: Record<string, string[]>;
 };

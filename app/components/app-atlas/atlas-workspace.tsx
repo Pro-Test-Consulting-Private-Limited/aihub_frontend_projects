@@ -123,6 +123,12 @@ export default function AtlasWorkspace() {
     onJiraConnected(await client.connectJira(canvas.id, canvas.jira.projectKey, true));
   };
 
+  const setNodeTickets = async (nodeId: string, issueKeys: string[] | null) => {
+    if (!canvas) return;
+    const updated = await client.setNodeTickets(canvas.id, nodeId, issueKeys);
+    setCanvas((prev) => (prev?.id === updated.id ? updated : prev));
+  };
+
   const onJiraConnected = (updated: Canvas) => {
     setCanvases((prev) => prev.map((x) => (x.id === updated.id ? { ...x, jiraProjectKey: updated.jiraProjectKey } : x)));
     if (canvas?.id === updated.id) setCanvas(updated);
@@ -489,6 +495,7 @@ export default function AtlasWorkspace() {
                   onConnect={canvas.isMine ? () => setConnectFor(canvas) : undefined}
                   onRetryClarification={canvas.isMine ? retryClarification : undefined}
                   onRefresh={canvas.isMine ? refreshJira : undefined}
+                  onSetTickets={canvas.isMine ? (keys) => setNodeTickets(panelNodeId, keys) : undefined}
                 />
               )}
             </>

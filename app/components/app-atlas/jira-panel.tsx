@@ -9,6 +9,7 @@ import {
   TbExternalLink,
   TbLink,
   TbLoader2,
+  TbPencil,
   TbRefresh,
   TbSquareCheckFilled,
   TbUser,
@@ -59,6 +60,7 @@ export function JiraPanel({
   onConnect,
   onRetryClarification,
   onRefresh,
+  onSetTickets,
 }: {
   canvas: Canvas;
   nodeId: string;
@@ -68,10 +70,14 @@ export function JiraPanel({
   onRetryClarification?: RetryClarification;
   /** Owner only: re-map every screen and regenerate every ticket's questions. */
   onRefresh?: () => Promise<void>;
+  /** Owner only: set this screen's tickets by hand, or `null` to go back to the automatic mapping. */
+  onSetTickets?: (issueKeys: string[] | null) => Promise<void>;
 }) {
   const node = canvas.nodes.find((n) => n.id === nodeId);
   const mapping = canvas.jira;
+  const manual = mapping?.manual?.[nodeId];
   const [filter, setFilter] = useState<Bucket | null>(null);
+  const [editing, setEditing] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState("");
 
@@ -175,8 +181,29 @@ export function JiraPanel({
               </button>
             )}
           </div>
+        ) : editing && onSetTickets ? (
+          <MappingEditor
+            issues={mapping.issues}
+            initial={(mapping.nodes[nodeId] ?? []).map((m) => m.key)}
+            isManual={Boolean(manual)}
+            onSave={async (keys) => {
+              await onSetTickets(keys);
+              setEditing(false);
+            }}
+            onCancel={() => setEditing(false)}
+          />
         ) : (
           <>
+            {(manual || onSetTickets) && (
+              <div className="mb-2 flex items-center justify-between text-[11px] text-[#7E7E7E]">
+                <span>{manual ? `Mapped manually${manual.by ? ` by ${manual.by}` : ""}` : "Mapped automatically"}</span>
+                {onSetTickets && (
+                  <button type="button" onClick={() => setEditing(true)} className="flex items-center gap-1 font-medium text-[#8664F2] hover:underline">
+                    <TbPencil size={12} /> Edit mapping
+                  </button>
+                )}
+              </div>
+            )}
             <div className="mb-3 grid grid-cols-4 gap-2">
               {BUCKETS.map((b) => (
                 <button
@@ -209,6 +236,112 @@ export function JiraPanel({
               />
             ))}
           </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MappingEditor({
+  issues,
+  initial,
+  isManual,
+  onSave,
+  onCancel,
+}: {
+  issues: JiraIssue[];
+  initial: string[];
+  isManual: boolean;
+  onSave: (keys: string[] | null) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [picked, setPicked] = useState(() => new Set(initial));
+  const [query, setQuery] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const q = query.trim().toLowerCase();
+  const list = issues
+    .filter((i) => !q || `${i.key} ${i.summary}`.toLowerCase().includes(q))
+    .sort(
+      (a, b) =>
+        Number(picked.has(b.key)) - Number(picked.has(a.key)) ||
+        Number(bucketOf(a) === "Epic") - Number(bucketOf(b) === "Epic") ||
+        a.key.localeCompare(b.key, undefined, { numeric: true }),
+    );
+
+  const toggle = (key: string) =>
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
+  const save = async (keys: string[] | null) => {
+    setBusy(true);
+    setError("");
+    try {
+      await onSave(keys);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save the mapping");
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div>
+      <div className="mb-2 text-[12px] text-[#5E6066] dark:text-[#9ca3af]">
+        Pick the tickets this screen covers. Manual mappings stay when you Refresh; new tickets get clarification questions.
+      </div>
+      <input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search tickets…"
+        className="mb-2 w-full rounded-[8px] border border-[#E5E7EB] px-2.5 py-1.5 text-[12.5px] outline-none focus:border-[#8664F2] dark:border-[#2a2a2a] dark:bg-transparent"
+      />
+      <div className="max-h-[420px] overflow-y-auto rounded-[8px] border border-[#EEE] dark:border-[#2a2a2a]">
+        {list.map((i) => {
+          const bucket = BUCKETS.find((b) => b.id === bucketOf(i))!;
+          return (
+            <label
+              key={i.key}
+              className="flex cursor-pointer items-start gap-2 border-b border-[#F3F4F6] px-2.5 py-1.5 text-[12px] last:border-0 hover:bg-[#FAF8FF] dark:border-[#1a1a1a] dark:hover:bg-[#1a1a1a]"
+            >
+              <input type="checkbox" checked={picked.has(i.key)} onChange={() => toggle(i.key)} className="mt-0.5 accent-[#8664F2]" />
+              <span className={`mt-0.5 flex h-[15px] w-[15px] shrink-0 items-center justify-center rounded-[3px] ${bucket.tint}`}>{bucket.icon}</span>
+              <span className="min-w-0">
+                <span className="font-semibold text-[#2563EB]">{i.key}</span>{" "}
+                <span className="text-[#1F1F1F] dark:text-[#ededed]">{i.summary}</span>
+              </span>
+            </label>
+          );
+        })}
+        {list.length === 0 && <div className="px-3 py-4 text-center text-[12px] text-[#7E7E7E]">No tickets match.</div>}
+      </div>
+      {error && <div className="mt-2 text-[11px] text-[#B91C1C]">{error}</div>}
+      <div className="mt-3 flex items-center gap-2">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => save([...picked])}
+          className="flex items-center gap-1 rounded-[6px] bg-[#8664F2] px-3 py-1.5 text-[12px] font-medium text-white hover:bg-[#7550E8] disabled:opacity-60"
+        >
+          {busy && <TbLoader2 size={12} className="animate-spin" />} Save ({picked.size})
+        </button>
+        <button type="button" disabled={busy} onClick={onCancel} className="rounded-[6px] px-3 py-1.5 text-[12px] text-[#5E6066] hover:bg-[#F3F4F6] dark:hover:bg-[#1a1a1a]">
+          Cancel
+        </button>
+        {isManual && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => save(null)}
+            title="Forget the manual list and use the automatic mapping for this screen again"
+            className="ml-auto text-[11.5px] font-medium text-[#8664F2] hover:underline disabled:opacity-60"
+          >
+            Reset to automatic
+          </button>
         )}
       </div>
     </div>
