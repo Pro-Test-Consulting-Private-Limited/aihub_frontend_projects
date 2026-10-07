@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  AuthError,
+  BrowserAuthError,
   InteractionRequiredAuthError,
   type AccountInfo,
   type IPublicClientApplication,
@@ -44,10 +46,14 @@ export async function getFreshIdToken(
     }
     return idToken;
   } catch (err) {
-    // Popups fail with Edge's "Connected to Windows" account picker, so re-auth via redirect.
-    if (err instanceof InteractionRequiredAuthError) {
-      await instance.acquireTokenRedirect({ ...loginRequest, account });
-    }
+    const code = err instanceof AuthError ? err.errorCode : "";
+    console.warn("Silent Microsoft token refresh failed:", code || err);
+    // Popups fail with Edge's "Connected to Windows" account picker, so re-auth via redirect. Browser errors
+    // (e.g. the hidden-iframe renewal timing out when third-party cookies are blocked) also need a redirect,
+    // otherwise every API call goes out without a token.
+    const needsRedirect =
+      err instanceof InteractionRequiredAuthError || (err instanceof BrowserAuthError && code !== "interaction_in_progress");
+    if (needsRedirect) await instance.acquireTokenRedirect({ ...loginRequest, account });
     return null;
   }
 }
