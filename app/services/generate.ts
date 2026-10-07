@@ -95,6 +95,7 @@ export const generateActionDrivenSaveSession = async (
     method: "post",
     url: BASE_URL + "sessions/" + id + "/save",
     data: payload,
+    idToken: true,
   });
 
 export const getExecutions = async (page: number, limit: number) =>
@@ -107,6 +108,7 @@ export const generateActionDrivenRerunSession = async (id: string) =>
   request({
     method: "post",
     url: BASE_URL + "sessions/executions/" + id + "/run",
+    idToken: true,
   });
 
 export const generateActionDrivenManualTestCases = async (id: string) =>
