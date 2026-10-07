@@ -14,7 +14,6 @@ import {
   TbLock,
   TbPlayerPlay,
   TbPlus,
-  TbRefresh,
 } from "react-icons/tb";
 import { SiJira } from "react-icons/si";
 import type { Canvas, CanvasSummary } from "@/app/interfaces/appatlas";
@@ -41,8 +40,6 @@ type Props = {
   onCollapse: () => void;
   onFocusNode: (id: string) => void;
   onConnect: (c: CanvasSummary) => void;
-  /** Re-maps the selected canvas and regenerates every ticket's clarification questions. */
-  onRefreshJira?: () => Promise<void>;
 };
 
 export function Explorer(props: Props) {
@@ -50,8 +47,6 @@ export function Explorer(props: Props) {
   const [canvasesOpen, setCanvasesOpen] = useState(true);
   const [detailsOpen, setDetailsOpen] = useState(true);
   const [menuFor, setMenuFor] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
-  const [refreshError, setRefreshError] = useState("");
 
   return (
     <div className="flex h-full w-[270px] shrink-0 flex-col border-r border-[#EEE] bg-white dark:border-[#1a1a1a] dark:bg-[#0a0a0a]">
@@ -148,32 +143,8 @@ export function Explorer(props: Props) {
                         </>
                       )}
                     </button>
-                    {c.isMine && c.jiraProjectKey && props.onRefreshJira && (
-                      <button
-                        type="button"
-                        disabled={refreshing}
-                        title="Refresh Jira: fetch the tickets again, re-map every screen and regenerate all clarification questions"
-                        aria-label="Refresh Jira"
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          setRefreshing(true);
-                          setRefreshError("");
-                          try {
-                            await props.onRefreshJira!();
-                          } catch (err) {
-                            setRefreshError(err instanceof Error ? err.message : "Refresh failed");
-                          } finally {
-                            setRefreshing(false);
-                          }
-                        }}
-                        className="flex w-[38px] shrink-0 items-center justify-center rounded-[8px] border border-[#C9B8F7] bg-[#F4EFFE] text-[#8664F2] hover:bg-[#EDE4FD] disabled:opacity-60 dark:border-[#3a3060] dark:bg-[#1e1a2e]"
-                      >
-                        <TbRefresh size={15} className={refreshing ? "animate-spin" : ""} />
-                      </button>
-                    )}
                     </div>
                   )}
-                  {active && refreshError && <div className="mt-1 text-[10.5px] text-[#B91C1C]">{refreshError}</div>}
                   {menuFor === c.id && (
                     <div
                       className="absolute top-8 right-2 z-30 w-[120px] rounded-[8px] border border-[#E6E1F5] bg-white py-1 shadow-lg dark:border-[#2a2a2a] dark:bg-[#141414]"

@@ -112,17 +112,6 @@ export default function AtlasWorkspace() {
     return () => clearInterval(timer);
   }, [canvasId, clarifying, client, mergeClarifications]);
 
-  const retryClarification = async (issueKey: string, force: boolean) => {
-    if (!canvasId) return;
-    const r = await client.retryClarifications(canvasId, { issueKey, force });
-    mergeClarifications(canvasId, r.items);
-  };
-
-  const refreshJira = async () => {
-    if (!canvas?.jira) return;
-    onJiraConnected(await client.connectJira(canvas.id, canvas.jira.projectKey, true));
-  };
-
   const onJiraConnected = (updated: Canvas) => {
     setCanvases((prev) => prev.map((x) => (x.id === updated.id ? { ...x, jiraProjectKey: updated.jiraProjectKey } : x)));
     if (canvas?.id === updated.id) setCanvas(updated);
@@ -442,7 +431,6 @@ export default function AtlasWorkspace() {
             onCollapse={() => setExplorerOpen(false)}
             onFocusNode={setFocusNodeId}
               onConnect={setConnectFor}
-              onRefreshJira={refreshJira}
           />
         )}
         {tab === "canvas" && !explorerOpen && (
@@ -487,8 +475,6 @@ export default function AtlasWorkspace() {
                   nodeId={panelNodeId}
                   onClose={() => setPanelNodeId(null)}
                   onConnect={canvas.isMine ? () => setConnectFor(canvas) : undefined}
-                  onRetryClarification={canvas.isMine ? retryClarification : undefined}
-                  onRefresh={canvas.isMine ? refreshJira : undefined}
                 />
               )}
             </>

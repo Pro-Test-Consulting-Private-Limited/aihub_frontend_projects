@@ -9,7 +9,6 @@ import {
   TbExternalLink,
   TbLink,
   TbLoader2,
-  TbRefresh,
   TbSquareCheckFilled,
   TbUser,
   TbX,
@@ -50,43 +49,21 @@ const initials = (name?: string) =>
     .join("");
 
 type Ticket = { issue: JiraIssue; match?: JiraNodeMatch; epic?: JiraIssue };
-type RetryClarification = (issueKey: string, force: boolean) => Promise<void>;
 
 export function JiraPanel({
   canvas,
   nodeId,
   onClose,
   onConnect,
-  onRetryClarification,
-  onRefresh,
 }: {
   canvas: Canvas;
   nodeId: string;
   onClose: () => void;
   onConnect?: () => void;
-  /** Owner only; hides the retry / regenerate buttons when absent. */
-  onRetryClarification?: RetryClarification;
-  /** Owner only: re-map every screen and regenerate every ticket's questions. */
-  onRefresh?: () => Promise<void>;
 }) {
   const node = canvas.nodes.find((n) => n.id === nodeId);
   const mapping = canvas.jira;
   const [filter, setFilter] = useState<Bucket | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
-  const [refreshError, setRefreshError] = useState("");
-
-  const refresh = async () => {
-    if (!onRefresh) return;
-    setRefreshing(true);
-    setRefreshError("");
-    try {
-      await onRefresh();
-    } catch (e) {
-      setRefreshError(e instanceof Error ? e.message : "Refresh failed");
-    } finally {
-      setRefreshing(false);
-    }
-  };
   const clarifications = useMemo(
     () => new Map((canvas.clarifications ?? []).map((c) => [c.issueKey, c])),
     [canvas.clarifications],
@@ -148,19 +125,7 @@ export function JiraPanel({
         <div className="mb-3 flex items-center gap-2 text-[15px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">
           <SiJira size={16} color="#2684FF" /> Jira Tickets
           {mapping && <span className="text-[11px] font-normal text-[#7E7E7E]">· {mapping.projectKey}</span>}
-          {mapping && onRefresh && (
-            <button
-              type="button"
-              onClick={refresh}
-              disabled={refreshing}
-              title="Fetch the Jira tickets again, re-map every screen and regenerate all clarification questions"
-              className="ml-auto flex items-center gap-1 rounded-[6px] border border-[#C9B8F7] px-2 py-0.5 text-[11px] font-medium text-[#8664F2] hover:bg-[#F4EFFE] disabled:opacity-60"
-            >
-              <TbRefresh size={12} className={refreshing ? "animate-spin" : ""} /> {refreshing ? "Refreshing…" : "Refresh"}
-            </button>
-          )}
         </div>
-        {refreshError && <div className="-mt-2 mb-2 text-[11px] text-[#B91C1C]">{refreshError}</div>}
 
         {!mapping ? (
           <div className="mt-8 text-center text-[13px] text-[#5E6066] dark:text-[#9ca3af]">
@@ -205,7 +170,6 @@ export function JiraPanel({
                 key={t.issue.key}
                 ticket={t}
                 clarification={t.match ? clarifications.get(t.issue.key) : undefined}
-                onRetry={onRetryClarification}
               />
             ))}
           </>
@@ -215,15 +179,7 @@ export function JiraPanel({
   );
 }
 
-function TicketCard({
-  ticket,
-  clarification,
-  onRetry,
-}: {
-  ticket: Ticket;
-  clarification?: CanvasClarification;
-  onRetry?: RetryClarification;
-}) {
+function TicketCard({ ticket, clarification }: { ticket: Ticket; clarification?: CanvasClarification }) {
   const { issue, epic } = ticket;
 
   return (
@@ -256,47 +212,19 @@ function TicketCard({
         {issue.priority && <span className={`font-semibold uppercase ${PRIORITY_STYLE(issue.priority)}`}>{issue.priority}</span>}
       </div>
 
-      {clarification && <Clarifications item={clarification} onRetry={onRetry} />}
+      {clarification && <Clarifications item={clarification} />}
     </div>
   );
 }
 
-function Clarifications({ item, onRetry }: { item: CanvasClarification; onRetry?: RetryClarification }) {
-  const [busy, setBusy] = useState(false);
-  const [retryError, setRetryError] = useState("");
+function Clarifications({ item }: { item: CanvasClarification }) {
   const pending = item.status === "queued" || item.status === "running";
-
-  const retry = async (force: boolean) => {
-    if (!onRetry) return;
-    setBusy(true);
-    setRetryError("");
-    try {
-      await onRetry(item.issueKey, force);
-    } catch (e) {
-      setRetryError(e instanceof Error ? e.message : "Retry failed");
-    } finally {
-      setBusy(false);
-    }
-  };
 
   return (
     <div className="mt-3">
-      <div className="mb-1.5 flex items-center justify-between text-[10.5px] font-semibold tracking-wide text-[#5E6066] uppercase dark:text-[#9ca3af]">
-        <span>
-          Requirement clarification
-          {item.status === "ready" && <span className="ml-1 text-[#E1962E]">{item.questions.length}</span>}
-        </span>
-        {onRetry && !pending && (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => retry(item.status !== "failed")}
-            title={item.status === "failed" ? "Try again" : "Generate the questions again"}
-            className="flex items-center gap-1 font-medium normal-case tracking-normal text-[#8664F2] hover:underline disabled:opacity-50"
-          >
-            <TbRefresh size={12} className={busy ? "animate-spin" : ""} /> {item.status === "failed" ? "Retry" : "Regenerate"}
-          </button>
-        )}
+      <div className="mb-1.5 text-[10.5px] font-semibold tracking-wide text-[#5E6066] uppercase dark:text-[#9ca3af]">
+        Requirement clarification
+        {item.status === "ready" && <span className="ml-1 text-[#E1962E]">{item.questions.length}</span>}
       </div>
 
       {pending && (
@@ -330,8 +258,6 @@ function Clarifications({ item, onRetry }: { item: CanvasClarification; onRetry?
           ))}
         </ol>
       )}
-
-      {retryError && <div className="mt-1 text-[10.5px] text-[#B91C1C]">{retryError}</div>}
     </div>
   );
 }
