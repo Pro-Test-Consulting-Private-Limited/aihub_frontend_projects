@@ -14,7 +14,7 @@ import {
   TbUser,
   TbX,
 } from "react-icons/tb";
-import type { Canvas, CanvasClarification, CriterionCheck, JiraIssue, JiraNodeMatch } from "@/app/interfaces/appatlas";
+import type { Canvas, CanvasClarification, JiraIssue, JiraNodeMatch } from "@/app/interfaces/appatlas";
 
 type Bucket = "Epic" | "Story" | "Bug" | "Task";
 
@@ -200,12 +200,7 @@ function TicketCard({
   clarification?: CanvasClarification;
   onRetry?: RetryClarification;
 }) {
-  const { issue, match, epic } = ticket;
-  const [why, setWhy] = useState(false);
-  const criteria: CriterionCheck[] = match?.criteria.length
-    ? match.criteria
-    : issue.acceptanceCriteria.map((text) => ({ text, observed: false }));
-  const observed = criteria.filter((c) => c.observed).length;
+  const { issue, epic } = ticket;
 
   return (
     <div className="mb-3 rounded-[12px] border border-[#E6E1F5] p-3 shadow-sm dark:border-[#2a2a2a]">
@@ -238,42 +233,6 @@ function TicketCard({
       </div>
 
       {clarification && <Clarifications item={clarification} onRetry={onRetry} />}
-
-      {criteria.length > 0 && (
-        <div className="mt-3">
-          <div className="mb-1.5 text-[10.5px] font-semibold tracking-wide text-[#5E6066] uppercase dark:text-[#9ca3af]">
-            Acceptance criteria <span className="text-[#E1962E]">{observed}/{criteria.length} seen</span>
-          </div>
-          <ol className="space-y-1">
-            {criteria.map((c, i) => (
-              <li
-                key={i}
-                title={c.observed ? (c.via ? `Seen in the recording: ${c.via}` : "Seen in the recording") : "Not seen in the recording"}
-                className={`rounded-[6px] px-2 py-1 text-[11.5px] ${
-                  c.observed ? "bg-[#ECFDF3] text-[#166534] dark:bg-[#0f2a1a] dark:text-[#86efac]" : "bg-[#F9FAFB] text-[#4B5563] dark:bg-[#1a1a1a] dark:text-[#9ca3af]"
-                }`}
-              >
-                {i + 1}. {c.text}
-              </li>
-            ))}
-          </ol>
-        </div>
-      )}
-
-      {match && (
-        <div className="mt-2.5 border-t border-[#F1F1F1] pt-2 text-[10.5px] dark:border-[#1f1f1f]">
-          <button type="button" onClick={() => setWhy((w) => !w)} className="text-[#8664F2] hover:underline">
-            {match.level === "high" ? "Strong match" : "Possible match"} · {Math.round(match.confidence * 100)}% {why ? "▴" : "▾"}
-          </button>
-          {why && (
-            <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[#5E6066] dark:text-[#9ca3af]">
-              {match.evidence.map((e, i) => (
-                <li key={i}>{e}</li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
     </div>
   );
 }
