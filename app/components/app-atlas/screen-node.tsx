@@ -2,6 +2,7 @@
 
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import type { CanvasNode, PageObjectType } from "@/app/interfaces/appatlas";
+import { atlasUrl } from "@/app/services/appatlas";
 import { PAGE_OBJECT_STYLES } from "./legend";
 
 export type ScreenNodeData = {
@@ -45,13 +46,13 @@ export function ScreenNode({ data }: NodeProps<AtlasScreenNode>) {
         {screen.screenshotUrl && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={screen.screenshotUrl}
+            src={atlasUrl(screen.screenshotUrl)}
             alt={screen.title}
             loading="lazy"
             title="View screenshot"
             onClick={(e) => {
               e.stopPropagation();
-              onOpenShot(screen.screenshotUrl!);
+              onOpenShot(atlasUrl(screen.screenshotUrl!));
             }}
             className="nodrag h-full w-full cursor-zoom-in object-cover object-top"
           />

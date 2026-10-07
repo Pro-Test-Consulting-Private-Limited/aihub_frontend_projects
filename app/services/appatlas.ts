@@ -2,6 +2,7 @@
 
 import type { IPublicClientApplication, AccountInfo } from "@azure/msal-browser";
 import { getFreshIdToken } from "@/app/lib/auth-client";
+import { siteOrigin } from "@/app/config/urls";
 import type {
   Canvas,
   CanvasClarifications,
@@ -11,9 +12,12 @@ import type {
   SessionSnapshot,
 } from "@/app/interfaces/appatlas";
 
-export const APPATLAS_API = (
+const BUILD_APPATLAS_API = (
   process.env.NEXT_PUBLIC_APPATLAS_API || "https://ai-hub.protestcorp.com/atlas-api"
 ).replace(/\/$/, "");
+const PROD_APPATLAS_API = "https://ai-hub.protestcorp.com/atlas-api";
+
+export const APPATLAS_API = siteOrigin() ? `${siteOrigin()}/atlas-api` : BUILD_APPATLAS_API;
 
 export class AtlasError extends Error {
   constructor(message: string, public status: number) {
@@ -86,5 +90,11 @@ export function atlasClient({ instance, accounts }: Msal) {
 
 export type AtlasClient = ReturnType<typeof atlasClient>;
 
-/** Viewer URLs may be relative to the API. */
-export const atlasUrl = (url: string) => (/^https?:/.test(url) ? url : `${APPATLAS_API}${url}`);
+/** Viewer and screenshot URLs may be relative to the API, or absolute on the backend's public (prod) host. */
+export const atlasUrl = (url: string) => {
+  if (!/^https?:/.test(url)) return `${APPATLAS_API}${url}`;
+  for (const base of [PROD_APPATLAS_API, BUILD_APPATLAS_API]) {
+    if (url.startsWith(`${base}/`)) return `${APPATLAS_API}${url.slice(base.length)}`;
+  }
+  return url;
+};

@@ -9,8 +9,7 @@ import { ChangeEvent, useEffect, useState } from "react";
 import FileIcon from "../../../../public/icons/projects/file.svg";
 import JiraIcon from "../../../../public/icons/projects/jira.svg";
 import Image from "next/image";
-const CLARIFY_API_BASE =
-  process.env.NEXT_PUBLIC_CLARIFY_API_BASE_URL || "http://localhost:4000";
+import { CLARIFY_API_BASE } from "@/app/config/urls";
 
 type ClarifyPhase =
   | "idle"
