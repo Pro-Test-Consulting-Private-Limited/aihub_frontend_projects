@@ -5,6 +5,7 @@ import { getFreshIdToken } from "@/app/lib/auth-client";
 import type {
   Canvas,
   CanvasClarifications,
+  PresenceUser,
   CanvasSummary,
   JiraProject,
   SessionSnapshot,
@@ -66,6 +67,9 @@ export function atlasClient({ instance, accounts }: Msal) {
       request<Canvas>(`/api/app-atlas/canvases/${canvasId}/jira`, json("POST", { projectKey, regenerate }), false, ""),
     disconnectJira: (canvasId: string) =>
       request<Canvas>(`/api/app-atlas/canvases/${canvasId}/jira`, json("DELETE"), false, ""),
+    /** Heartbeat: marks the caller present in `room` and returns everyone there. */
+    presence: (room: string, leaving = false) =>
+      request<{ users: PresenceUser[] }>("/presence", json("POST", { room, leaving })),
     getClarifications: (canvasId: string) => request<CanvasClarifications>(`/canvases/${canvasId}/clarifications`),
     /** Owner only. No issueKey = every failed ticket; `force` regenerates a ticket that already has questions. */
     retryClarifications: (canvasId: string, body: { issueKey?: string; force?: boolean } = {}) =>
