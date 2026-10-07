@@ -1,7 +1,6 @@
 "use client";
 
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
-import { SiJira } from "react-icons/si";
 import type { CanvasNode, PageObjectType } from "@/app/interfaces/appatlas";
 import { PAGE_OBJECT_STYLES } from "./legend";
 
@@ -10,8 +9,6 @@ export type ScreenNodeData = {
   dimmed: boolean;
   selected: boolean;
   onOpenShot: (url: string) => void;
-  jiraCount?: number;
-  questionCount?: number;
 };
 
 export type AtlasScreenNode = Node<ScreenNodeData, "screen">;
@@ -22,7 +19,7 @@ export const NODE_HEIGHT = 250;
 const MAX_CHIPS = 5;
 
 export function ScreenNode({ data }: NodeProps<AtlasScreenNode>) {
-  const { screen, dimmed, selected, onOpenShot, jiraCount, questionCount } = data;
+  const { screen, dimmed, selected, onOpenShot } = data;
   const chips = screen.pageObjects.slice(0, MAX_CHIPS);
   const more = screen.pageObjects.length - chips.length;
 
@@ -39,22 +36,6 @@ export function ScreenNode({ data }: NodeProps<AtlasScreenNode>) {
           {screen.path}
         </div>
         <div className="ml-2 flex shrink-0 items-center gap-1">
-          {!!jiraCount && (
-            <span
-              title={`${jiraCount} Jira ticket${jiraCount === 1 ? "" : "s"}, click to view`}
-              className="flex items-center gap-0.5 rounded-[4px] bg-[#E8F0FE] px-1.5 py-0.5 text-[9px] font-medium text-[#2684FF]"
-            >
-              <SiJira size={8} /> {jiraCount}
-            </span>
-          )}
-          {!!questionCount && (
-            <span
-              title={`${questionCount} open requirement question${questionCount === 1 ? "" : "s"}`}
-              className="rounded-[4px] bg-[#FEF3C7] px-1.5 py-0.5 text-[9px] font-medium text-[#B45309]"
-            >
-              ? {questionCount}
-            </span>
-          )}
           <span className="rounded-[4px] bg-[#F3F4F6] dark:bg-[#2a2a2a] px-1.5 py-0.5 text-[9px] text-[#5E6066] dark:text-[#9ca3af]">
             States · {screen.stateCount}
           </span>

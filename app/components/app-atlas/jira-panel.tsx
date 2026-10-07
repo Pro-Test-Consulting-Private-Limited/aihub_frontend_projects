@@ -49,12 +49,6 @@ const initials = (name?: string) =>
     .map((p) => p[0]!.toUpperCase())
     .join("");
 
-const QUESTION_PRIORITY_STYLE: Record<string, string> = {
-  critical: "bg-[#FEE2E2] text-[#B91C1C]",
-  important: "bg-[#FEF3C7] text-[#B45309]",
-  optional: "bg-[#F3F4F6] text-[#4B5563]",
-};
-
 type Ticket = { issue: JiraIssue; match?: JiraNodeMatch; epic?: JiraIssue };
 type RetryClarification = (issueKey: string, force: boolean) => Promise<void>;
 
@@ -328,16 +322,6 @@ function Clarifications({ item, onRetry }: { item: CanvasClarification; onRetry?
         <ol className="space-y-1.5">
           {item.questions.map((q, i) => (
             <li key={q.id} className="rounded-[6px] bg-[#F9FAFB] px-2 py-1.5 text-[11.5px] dark:bg-[#1a1a1a]">
-              <div className="mb-0.5 flex flex-wrap items-center gap-1">
-                <span
-                  className={`rounded-[4px] px-1.5 py-px text-[9.5px] font-semibold ${
-                    QUESTION_PRIORITY_STYLE[q.priority.toLowerCase()] ?? QUESTION_PRIORITY_STYLE.optional
-                  }`}
-                >
-                  {q.priority}
-                </span>
-                {q.category && <span className="truncate text-[9.5px] text-[#7E7E7E]">{q.category}</span>}
-              </div>
               <div className="text-[#1F1F1F] dark:text-[#ededed]">
                 {i + 1}. {q.question}
               </div>
