@@ -29,7 +29,7 @@ async function forward(req: NextRequest, id: string, method: "POST" | "DELETE", 
 /** Connects a canvas to a Jira project and maps its screens to that project's tickets. */
 export async function POST(req: NextRequest, context: Context) {
   const { id } = await context.params;
-  const { projectKey } = (await req.json().catch(() => ({}))) as { projectKey?: string };
+  const { projectKey, regenerate } = (await req.json().catch(() => ({}))) as { projectKey?: string; regenerate?: boolean };
   if (!projectKey) return NextResponse.json({ error: "projectKey is required" }, { status: 400 });
 
   let resolved;
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest, context: Context) {
   if (!resolved) return NextResponse.json({ error: "Jira is not connected. Connect it in Integrations." }, { status: 409 });
 
   try {
-    const res = await forward(req, id, "POST", { projectKey, jira: resolved.credentials });
+    const res = await forward(req, id, "POST", { projectKey, regenerate: regenerate === true, jira: resolved.credentials });
     return persistRotatedToken(res, resolved);
   } catch {
     return NextResponse.json({ error: "Could not reach App Atlas" }, { status: 502 });

@@ -61,8 +61,9 @@ export function atlasClient({ instance, accounts }: Msal) {
     deleteCanvas: (id: string) => request<void>(`/canvases/${id}`, json("DELETE")),
     listJiraProjects: () =>
       request<{ projects: JiraProject[] }>("/api/app-atlas/jira/projects", {}, false, "").then((r) => r.projects),
-    connectJira: (canvasId: string, projectKey: string) =>
-      request<Canvas>(`/api/app-atlas/canvases/${canvasId}/jira`, json("POST", { projectKey }), false, ""),
+    /** `regenerate` re-asks the clarification agent for every ticket instead of keeping unchanged ones. */
+    connectJira: (canvasId: string, projectKey: string, regenerate = false) =>
+      request<Canvas>(`/api/app-atlas/canvases/${canvasId}/jira`, json("POST", { projectKey, regenerate }), false, ""),
     disconnectJira: (canvasId: string) =>
       request<Canvas>(`/api/app-atlas/canvases/${canvasId}/jira`, json("DELETE"), false, ""),
     getClarifications: (canvasId: string) => request<CanvasClarifications>(`/canvases/${canvasId}/clarifications`),

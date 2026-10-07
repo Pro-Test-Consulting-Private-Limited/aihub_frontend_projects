@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { SiJira } from "react-icons/si";
 import {
-  TbBolt,
   TbBookmarkFilled,
   TbCircleFilled,
   TbExternalLink,
@@ -16,17 +15,18 @@ import {
 } from "react-icons/tb";
 import type { Canvas, CanvasClarification, JiraIssue, JiraNodeMatch } from "@/app/interfaces/appatlas";
 
-type Bucket = "Epic" | "Story" | "Bug" | "Task";
+type Bucket = "Story" | "Bug" | "Task";
 
 const BUCKETS: { id: Bucket; icon: React.ReactNode; tint: string }[] = [
-  { id: "Epic", icon: <TbBolt size={14} />, tint: "bg-[#7C3AED] text-white" },
   { id: "Story", icon: <TbBookmarkFilled size={13} />, tint: "bg-[#16A34A] text-white" },
   { id: "Bug", icon: <TbCircleFilled size={11} />, tint: "bg-[#DC2626] text-white" },
   { id: "Task", icon: <TbSquareCheckFilled size={14} />, tint: "bg-[#2563EB] text-white" },
 ];
 
+/** Epics are too broad for one screen; the panel and node badges leave them out. */
+export const isEpic = (issue: JiraIssue) => issue.level >= 1 || /epic/i.test(issue.type);
+
 const bucketOf = (issue: JiraIssue): Bucket => {
-  if (issue.level >= 1 || /epic/i.test(issue.type)) return "Epic";
   if (/bug/i.test(issue.type)) return "Bug";
   if (/story/i.test(issue.type)) return "Story";
   return "Task";
@@ -55,7 +55,7 @@ const QUESTION_PRIORITY_STYLE: Record<string, string> = {
   optional: "bg-[#F3F4F6] text-[#4B5563]",
 };
 
-type Ticket = { issue: JiraIssue; match?: JiraNodeMatch; epic?: JiraIssue };
+type Ticket = { issue: JiraIssue; match: JiraNodeMatch };
 type RetryClarification = (issueKey: string, force: boolean) => Promise<void>;
 
 export function JiraPanel({
@@ -64,6 +64,7 @@ export function JiraPanel({
   onClose,
   onConnect,
   onRetryClarification,
+  onRefresh,
 }: {
   canvas: Canvas;
   nodeId: string;
@@ -71,10 +72,27 @@ export function JiraPanel({
   onConnect?: () => void;
   /** Owner only; hides the retry / regenerate buttons when absent. */
   onRetryClarification?: RetryClarification;
+  /** Owner only: re-map every screen and regenerate every ticket's questions. */
+  onRefresh?: () => Promise<void>;
 }) {
   const node = canvas.nodes.find((n) => n.id === nodeId);
   const mapping = canvas.jira;
   const [filter, setFilter] = useState<Bucket | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState("");
+
+  const refresh = async () => {
+    if (!onRefresh) return;
+    setRefreshing(true);
+    setRefreshError("");
+    try {
+      await onRefresh();
+    } catch (e) {
+      setRefreshError(e instanceof Error ? e.message : "Refresh failed");
+    } finally {
+      setRefreshing(false);
+    }
+  };
   const clarifications = useMemo(
     () => new Map((canvas.clarifications ?? []).map((c) => [c.issueKey, c])),
     [canvas.clarifications],
@@ -83,35 +101,19 @@ export function JiraPanel({
   const tickets = useMemo<Ticket[]>(() => {
     if (!mapping) return [];
     const byKey = new Map(mapping.issues.map((i) => [i.key, i]));
-    const epicOf = (issue: JiraIssue) => {
-      let key = issue.parentKey;
-      for (let hops = 0; key && hops < 4; hops++) {
-        const parent = byKey.get(key);
-        if (!parent) return undefined;
-        if (bucketOf(parent) === "Epic") return parent;
-        key = parent.parentKey;
-      }
-      return undefined;
-    };
     const list: Ticket[] = [];
     const seen = new Set<string>();
     for (const match of mapping.nodes[nodeId] ?? []) {
       const issue = byKey.get(match.key);
-      if (!issue || seen.has(issue.key)) continue;
+      if (!issue || isEpic(issue) || seen.has(issue.key)) continue;
       seen.add(issue.key);
-      list.push({ issue, match, epic: epicOf(issue) });
-    }
-    for (const t of [...list]) {
-      if (t.epic && !seen.has(t.epic.key)) {
-        seen.add(t.epic.key);
-        list.push({ issue: t.epic });
-      }
+      list.push({ issue, match });
     }
     return list;
   }, [mapping, nodeId]);
 
   const counts = useMemo(() => {
-    const c: Record<Bucket, number> = { Epic: 0, Story: 0, Bug: 0, Task: 0 };
+    const c: Record<Bucket, number> = { Story: 0, Bug: 0, Task: 0 };
     for (const t of tickets) c[bucketOf(t.issue)] += 1;
     return c;
   }, [tickets]);
@@ -136,11 +138,23 @@ export function JiraPanel({
         <div className="mb-3 flex items-center gap-2 text-[15px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">
           <SiJira size={16} color="#2684FF" /> Jira Tickets
           {mapping && <span className="text-[11px] font-normal text-[#7E7E7E]">· {mapping.projectKey}</span>}
+          {mapping && onRefresh && (
+            <button
+              type="button"
+              onClick={refresh}
+              disabled={refreshing}
+              title="Fetch the Jira tickets again, re-map every screen and regenerate all clarification questions"
+              className="ml-auto flex items-center gap-1 rounded-[6px] border border-[#C9B8F7] px-2 py-0.5 text-[11px] font-medium text-[#8664F2] hover:bg-[#F4EFFE] disabled:opacity-60"
+            >
+              <TbRefresh size={12} className={refreshing ? "animate-spin" : ""} /> {refreshing ? "Refreshing…" : "Refresh"}
+            </button>
+          )}
         </div>
+        {refreshError && <div className="-mt-2 mb-2 text-[11px] text-[#B91C1C]">{refreshError}</div>}
 
         {!mapping ? (
           <div className="mt-8 text-center text-[13px] text-[#5E6066] dark:text-[#9ca3af]">
-            <p>Connect this canvas to Jira to see which epics, stories, tasks and bugs this screen covers.</p>
+            <p>Connect this canvas to Jira to see which stories, tasks and bugs this screen covers.</p>
             {onConnect && (
               <button
                 type="button"
@@ -153,7 +167,7 @@ export function JiraPanel({
           </div>
         ) : (
           <>
-            <div className="mb-3 grid grid-cols-4 gap-2">
+            <div className="mb-3 grid grid-cols-3 gap-2">
               {BUCKETS.map((b) => (
                 <button
                   key={b.id}
@@ -180,7 +194,7 @@ export function JiraPanel({
               <TicketCard
                 key={t.issue.key}
                 ticket={t}
-                clarification={t.match ? clarifications.get(t.issue.key) : undefined}
+                clarification={clarifications.get(t.issue.key)}
                 onRetry={onRetryClarification}
               />
             ))}
@@ -200,7 +214,7 @@ function TicketCard({
   clarification?: CanvasClarification;
   onRetry?: RetryClarification;
 }) {
-  const { issue, epic } = ticket;
+  const { issue } = ticket;
 
   return (
     <div className="mb-3 rounded-[12px] border border-[#E6E1F5] p-3 shadow-sm dark:border-[#2a2a2a]">
@@ -219,16 +233,9 @@ function TicketCard({
       </div>
       <div className="mt-1.5 text-[13.5px] font-semibold leading-snug text-[#1F1F1F] dark:text-[#ededed]">{issue.summary}</div>
       <div className="mt-2 flex items-center justify-between text-[11px] text-[#5E6066] dark:text-[#9ca3af]">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="flex items-center gap-1" title={issue.assignee ?? "Unassigned"}>
-            <TbUser size={12} /> {issue.assignee ? initials(issue.assignee) : "—"}
-          </span>
-          {epic && (
-            <span className="truncate" title={epic.summary}>
-              <TbBolt size={11} className="inline text-[#7C3AED]" /> {epic.key}
-            </span>
-          )}
-        </div>
+        <span className="flex items-center gap-1" title={issue.assignee ?? "Unassigned"}>
+          <TbUser size={12} /> {issue.assignee ? initials(issue.assignee) : "—"}
+        </span>
         {issue.priority && <span className={`font-semibold uppercase ${PRIORITY_STYLE(issue.priority)}`}>{issue.priority}</span>}
       </div>
 

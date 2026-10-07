@@ -22,7 +22,7 @@ import { AtlasError, atlasClient } from "@/app/services/appatlas";
 import { CanvasFlow } from "./canvas-flow";
 import { Explorer } from "./explorer";
 import { ConnectAppsModal } from "./connect-apps-modal";
-import { JiraPanel } from "./jira-panel";
+import { JiraPanel, isEpic } from "./jira-panel";
 import { SaveExecutionModal } from "./save-execution-modal";
 import { RecordingView } from "./recording-view";
 
@@ -96,7 +96,10 @@ export default function AtlasWorkspace() {
 
   const jiraCounts = useMemo(() => {
     if (!canvas?.jira) return undefined;
-    return Object.fromEntries(Object.entries(canvas.jira.nodes).map(([id, m]) => [id, m.length]));
+    const epics = new Set(canvas.jira.issues.filter(isEpic).map((i) => i.key));
+    return Object.fromEntries(
+      Object.entries(canvas.jira.nodes).map(([id, m]) => [id, m.filter((x) => !epics.has(x.key)).length]),
+    );
   }, [canvas?.jira]);
 
   /** Clarification questions per screen, for the badge on each canvas node. */
@@ -131,6 +134,11 @@ export default function AtlasWorkspace() {
     if (!canvasId) return;
     const r = await client.retryClarifications(canvasId, { issueKey, force });
     mergeClarifications(canvasId, r.items);
+  };
+
+  const refreshJira = async () => {
+    if (!canvas?.jira) return;
+    onJiraConnected(await client.connectJira(canvas.id, canvas.jira.projectKey, true));
   };
 
   const onJiraConnected = (updated: Canvas) => {
@@ -474,6 +482,7 @@ export default function AtlasWorkspace() {
                   onClose={() => setPanelNodeId(null)}
                   onConnect={canvas.isMine ? () => setConnectFor(canvas) : undefined}
                   onRetryClarification={canvas.isMine ? retryClarification : undefined}
+                  onRefresh={canvas.isMine ? refreshJira : undefined}
                 />
               )}
             </>
