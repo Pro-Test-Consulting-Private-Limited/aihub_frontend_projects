@@ -15,6 +15,8 @@ async function forward(req: NextRequest, id: string, method: "POST" | "DELETE", 
     method,
     headers: {
       Authorization: req.headers.get("authorization") ?? "",
+      // App Atlas picks the clarification agent of the environment (prod / sit / dev) the user is on.
+      ...(req.headers.get("origin") ? { Origin: req.headers.get("origin")! } : {}),
       ...(body ? { "Content-Type": "application/json" } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,

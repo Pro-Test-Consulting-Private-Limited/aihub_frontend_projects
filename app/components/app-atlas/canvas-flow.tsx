@@ -77,12 +77,13 @@ type Props = {
   /** Highlighted node (its side panel is open). */
   selectedNodeId?: string | null;
   jiraCounts?: Record<string, number>;
+  questionCounts?: Record<string, number>;
   onSelectNode?: (id: string | null) => void;
 };
 
 type Preview = { url: string; title: string };
 
-function Flow({ nodes, edges, editable, focusNodeId, selectedNodeId, jiraCounts, onSelectNode }: Props) {
+function Flow({ nodes, edges, editable, focusNodeId, selectedNodeId, jiraCounts, questionCounts, onSelectNode }: Props) {
   const [filter, setFilter] = useState<LegendFilter>(null);
   const [legendOpen, setLegendOpen] = useState(false);
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -111,9 +112,10 @@ function Flow({ nodes, edges, editable, focusNodeId, selectedNodeId, jiraCounts,
           selected: (selectedNodeId ?? focusNodeId) === screen.id,
           onOpenShot: (url: string) => setPreview({ url, title: screen.title || screen.path }),
           jiraCount: jiraCounts?.[screen.id],
+          questionCount: questionCounts?.[screen.id],
         },
       })),
-    [nodes, positions, hl, focusNodeId, selectedNodeId, jiraCounts],
+    [nodes, positions, hl, focusNodeId, selectedNodeId, jiraCounts, questionCounts],
   );
 
   const flowEdges = useMemo<Edge[]>(

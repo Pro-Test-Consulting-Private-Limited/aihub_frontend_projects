@@ -186,7 +186,38 @@ export type Canvas = CanvasSummary & {
   edges: CanvasEdge[];
   testData: CanvasTestData[];
   jira: JiraMapping | null;
+  /** One entry per Jira ticket mapped to a screen; filled in the background after connecting Jira. */
+  clarifications?: CanvasClarification[];
 };
+
+export type ClarificationQuestion = {
+  id: string;
+  /** Risk area, e.g. "Business Rules and Validations", "Error Handling". */
+  category: string;
+  /** "Critical" | "Important" | "Optional" */
+  priority: string;
+  question: string;
+  reason: string;
+  confidence: number | null;
+};
+
+/** Requirement clarification questions for one Jira ticket mapped to canvas screens. */
+export type CanvasClarification = {
+  issueKey: string;
+  summary: string;
+  nodeIds: string[];
+  status: "queued" | "running" | "ready" | "failed";
+  note: string | null;
+  error: string | null;
+  questions: ClarificationQuestion[];
+  confidence: number | null;
+  model: string | null;
+  attempts: number;
+  generatedAt: number | null;
+  updatedAt: number;
+};
+
+export type CanvasClarifications = { canvasId: string; pending: number; items: CanvasClarification[] };
 
 export type JiraStatus = { connected: boolean; baseUrl?: string; email?: string; user?: string };
 

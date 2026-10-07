@@ -99,6 +99,40 @@ export default function AtlasWorkspace() {
     return Object.fromEntries(Object.entries(canvas.jira.nodes).map(([id, m]) => [id, m.length]));
   }, [canvas?.jira]);
 
+  /** Clarification questions per screen, for the badge on each canvas node. */
+  const questionCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const c of canvas?.clarifications ?? []) {
+      if (c.status !== "ready") continue;
+      for (const id of c.nodeIds) counts[id] = (counts[id] ?? 0) + c.questions.length;
+    }
+    return counts;
+  }, [canvas?.clarifications]);
+
+  const clarifying = canvas?.clarifications?.some((c) => c.status === "queued" || c.status === "running") ?? false;
+  const canvasId = canvas?.id;
+
+  const mergeClarifications = useCallback((id: string, items: Canvas["clarifications"]) => {
+    setCanvas((prev) => (prev && prev.id === id ? { ...prev, clarifications: items } : prev));
+  }, []);
+
+  useEffect(() => {
+    if (!canvasId || !clarifying) return;
+    const timer = setInterval(() => {
+      client
+        .getClarifications(canvasId)
+        .then((r) => mergeClarifications(canvasId, r.items))
+        .catch(() => {});
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [canvasId, clarifying, client, mergeClarifications]);
+
+  const retryClarification = async (issueKey: string, force: boolean) => {
+    if (!canvasId) return;
+    const r = await client.retryClarifications(canvasId, { issueKey, force });
+    mergeClarifications(canvasId, r.items);
+  };
+
   const onJiraConnected = (updated: Canvas) => {
     setCanvases((prev) => prev.map((x) => (x.id === updated.id ? { ...x, jiraProjectKey: updated.jiraProjectKey } : x)));
     if (canvas?.id === updated.id) setCanvas(updated);
@@ -425,6 +459,7 @@ export default function AtlasWorkspace() {
                 focusNodeId={focusNodeId}
                 selectedNodeId={panelNodeId}
                 jiraCounts={jiraCounts}
+                questionCounts={questionCounts}
                 onSelectNode={setPanelNodeId}
               />
               <div className="pointer-events-none absolute top-3 left-4 rounded-[8px] bg-white/90 px-3 py-1.5 text-[11px] text-[#5E6066] shadow-sm dark:bg-[#141414]/90 dark:text-[#9ca3af]">
@@ -438,6 +473,7 @@ export default function AtlasWorkspace() {
                   nodeId={panelNodeId}
                   onClose={() => setPanelNodeId(null)}
                   onConnect={canvas.isMine ? () => setConnectFor(canvas) : undefined}
+                  onRetryClarification={canvas.isMine ? retryClarification : undefined}
                 />
               )}
             </>

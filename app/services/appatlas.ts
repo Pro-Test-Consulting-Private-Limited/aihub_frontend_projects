@@ -4,6 +4,7 @@ import type { IPublicClientApplication, AccountInfo } from "@azure/msal-browser"
 import { getFreshIdToken } from "@/app/lib/auth-client";
 import type {
   Canvas,
+  CanvasClarifications,
   CanvasSummary,
   JiraProject,
   SessionSnapshot,
@@ -64,6 +65,10 @@ export function atlasClient({ instance, accounts }: Msal) {
       request<Canvas>(`/api/app-atlas/canvases/${canvasId}/jira`, json("POST", { projectKey }), false, ""),
     disconnectJira: (canvasId: string) =>
       request<Canvas>(`/api/app-atlas/canvases/${canvasId}/jira`, json("DELETE"), false, ""),
+    getClarifications: (canvasId: string) => request<CanvasClarifications>(`/canvases/${canvasId}/clarifications`),
+    /** Owner only. No issueKey = every failed ticket; `force` regenerates a ticket that already has questions. */
+    retryClarifications: (canvasId: string, body: { issueKey?: string; force?: boolean } = {}) =>
+      request<CanvasClarifications>(`/canvases/${canvasId}/clarifications/retry`, json("POST", body)),
     /** EventSource can't send headers, so the token goes in the query string. */
     openEvents: async (id: string) => {
       const token = await getFreshIdToken(instance, accounts);

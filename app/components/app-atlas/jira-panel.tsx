@@ -2,8 +2,19 @@
 
 import { useMemo, useState } from "react";
 import { SiJira } from "react-icons/si";
-import { TbBolt, TbBookmarkFilled, TbCircleFilled, TbExternalLink, TbLink, TbSquareCheckFilled, TbUser, TbX } from "react-icons/tb";
-import type { Canvas, CriterionCheck, JiraIssue, JiraNodeMatch } from "@/app/interfaces/appatlas";
+import {
+  TbBolt,
+  TbBookmarkFilled,
+  TbCircleFilled,
+  TbExternalLink,
+  TbLink,
+  TbLoader2,
+  TbRefresh,
+  TbSquareCheckFilled,
+  TbUser,
+  TbX,
+} from "react-icons/tb";
+import type { Canvas, CanvasClarification, CriterionCheck, JiraIssue, JiraNodeMatch } from "@/app/interfaces/appatlas";
 
 type Bucket = "Epic" | "Story" | "Bug" | "Task";
 
@@ -38,22 +49,36 @@ const initials = (name?: string) =>
     .map((p) => p[0]!.toUpperCase())
     .join("");
 
+const QUESTION_PRIORITY_STYLE: Record<string, string> = {
+  critical: "bg-[#FEE2E2] text-[#B91C1C]",
+  important: "bg-[#FEF3C7] text-[#B45309]",
+  optional: "bg-[#F3F4F6] text-[#4B5563]",
+};
+
 type Ticket = { issue: JiraIssue; match?: JiraNodeMatch; epic?: JiraIssue };
+type RetryClarification = (issueKey: string, force: boolean) => Promise<void>;
 
 export function JiraPanel({
   canvas,
   nodeId,
   onClose,
   onConnect,
+  onRetryClarification,
 }: {
   canvas: Canvas;
   nodeId: string;
   onClose: () => void;
   onConnect?: () => void;
+  /** Owner only; hides the retry / regenerate buttons when absent. */
+  onRetryClarification?: RetryClarification;
 }) {
   const node = canvas.nodes.find((n) => n.id === nodeId);
   const mapping = canvas.jira;
   const [filter, setFilter] = useState<Bucket | null>(null);
+  const clarifications = useMemo(
+    () => new Map((canvas.clarifications ?? []).map((c) => [c.issueKey, c])),
+    [canvas.clarifications],
+  );
 
   const tickets = useMemo<Ticket[]>(() => {
     if (!mapping) return [];
@@ -152,7 +177,12 @@ export function JiraPanel({
               </div>
             )}
             {shown.map((t) => (
-              <TicketCard key={t.issue.key} ticket={t} />
+              <TicketCard
+                key={t.issue.key}
+                ticket={t}
+                clarification={t.match ? clarifications.get(t.issue.key) : undefined}
+                onRetry={onRetryClarification}
+              />
             ))}
           </>
         )}
@@ -161,7 +191,15 @@ export function JiraPanel({
   );
 }
 
-function TicketCard({ ticket }: { ticket: Ticket }) {
+function TicketCard({
+  ticket,
+  clarification,
+  onRetry,
+}: {
+  ticket: Ticket;
+  clarification?: CanvasClarification;
+  onRetry?: RetryClarification;
+}) {
   const { issue, match, epic } = ticket;
   const [why, setWhy] = useState(false);
   const criteria: CriterionCheck[] = match?.criteria.length
@@ -199,10 +237,12 @@ function TicketCard({ ticket }: { ticket: Ticket }) {
         {issue.priority && <span className={`font-semibold uppercase ${PRIORITY_STYLE(issue.priority)}`}>{issue.priority}</span>}
       </div>
 
+      {clarification && <Clarifications item={clarification} onRetry={onRetry} />}
+
       {criteria.length > 0 && (
         <div className="mt-3">
           <div className="mb-1.5 text-[10.5px] font-semibold tracking-wide text-[#5E6066] uppercase dark:text-[#9ca3af]">
-            Requirement clarification <span className="text-[#E1962E]">{observed}/{criteria.length}</span>
+            Acceptance criteria <span className="text-[#E1962E]">{observed}/{criteria.length} seen</span>
           </div>
           <ol className="space-y-1">
             {criteria.map((c, i) => (
@@ -234,6 +274,91 @@ function TicketCard({ ticket }: { ticket: Ticket }) {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function Clarifications({ item, onRetry }: { item: CanvasClarification; onRetry?: RetryClarification }) {
+  const [busy, setBusy] = useState(false);
+  const [retryError, setRetryError] = useState("");
+  const pending = item.status === "queued" || item.status === "running";
+
+  const retry = async (force: boolean) => {
+    if (!onRetry) return;
+    setBusy(true);
+    setRetryError("");
+    try {
+      await onRetry(item.issueKey, force);
+    } catch (e) {
+      setRetryError(e instanceof Error ? e.message : "Retry failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mt-3">
+      <div className="mb-1.5 flex items-center justify-between text-[10.5px] font-semibold tracking-wide text-[#5E6066] uppercase dark:text-[#9ca3af]">
+        <span>
+          Requirement clarification
+          {item.status === "ready" && <span className="ml-1 text-[#E1962E]">{item.questions.length}</span>}
+        </span>
+        {onRetry && !pending && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => retry(item.status !== "failed")}
+            title={item.status === "failed" ? "Try again" : "Generate the questions again"}
+            className="flex items-center gap-1 font-medium normal-case tracking-normal text-[#8664F2] hover:underline disabled:opacity-50"
+          >
+            <TbRefresh size={12} className={busy ? "animate-spin" : ""} /> {item.status === "failed" ? "Retry" : "Regenerate"}
+          </button>
+        )}
+      </div>
+
+      {pending && (
+        <div className="flex items-center gap-2 rounded-[6px] bg-[#F4EFFE] px-2 py-1.5 text-[11.5px] text-[#5B3FD1] dark:bg-[#1c1530] dark:text-[#c4b5fd]">
+          <TbLoader2 size={13} className="shrink-0 animate-spin" />
+          {item.note || (item.status === "queued" ? "Waiting to generate questions…" : "Generating questions…")}
+        </div>
+      )}
+
+      {item.status === "failed" && (
+        <div className="rounded-[6px] bg-[#FEF2F2] px-2 py-1.5 text-[11.5px] text-[#B91C1C] dark:bg-[#2a1215] dark:text-[#fca5a5]">
+          Could not generate questions{item.error ? `: ${item.error}` : "."}
+        </div>
+      )}
+
+      {item.status === "ready" && item.questions.length === 0 && (
+        <div className="rounded-[6px] bg-[#ECFDF3] px-2 py-1.5 text-[11.5px] text-[#166534] dark:bg-[#0f2a1a] dark:text-[#86efac]">
+          No open questions, the ticket reads as complete.
+        </div>
+      )}
+
+      {item.status === "ready" && item.questions.length > 0 && (
+        <ol className="space-y-1.5">
+          {item.questions.map((q, i) => (
+            <li key={q.id} className="rounded-[6px] bg-[#F9FAFB] px-2 py-1.5 text-[11.5px] dark:bg-[#1a1a1a]">
+              <div className="mb-0.5 flex flex-wrap items-center gap-1">
+                <span
+                  className={`rounded-[4px] px-1.5 py-px text-[9.5px] font-semibold ${
+                    QUESTION_PRIORITY_STYLE[q.priority.toLowerCase()] ?? QUESTION_PRIORITY_STYLE.optional
+                  }`}
+                >
+                  {q.priority}
+                </span>
+                {q.category && <span className="truncate text-[9.5px] text-[#7E7E7E]">{q.category}</span>}
+              </div>
+              <div className="text-[#1F1F1F] dark:text-[#ededed]">
+                {i + 1}. {q.question}
+              </div>
+              {q.reason && <div className="mt-0.5 text-[10.5px] text-[#6B7280] dark:text-[#9ca3af]">{q.reason}</div>}
+            </li>
+          ))}
+        </ol>
+      )}
+
+      {retryError && <div className="mt-1 text-[10.5px] text-[#B91C1C]">{retryError}</div>}
     </div>
   );
 }
