@@ -69,9 +69,6 @@ export function atlasClient({ instance, accounts }: Msal) {
     /** `regenerate` re-asks the clarification agent for every ticket instead of keeping unchanged ones. */
     connectJira: (canvasId: string, projectKey: string, regenerate = false) =>
       request<Canvas>(`/api/app-atlas/canvases/${canvasId}/jira`, json("POST", { projectKey, regenerate }), false, ""),
-    /** Owner only. `issueKeys: null` hands the screen back to the automatic mapping. */
-    setNodeTickets: (canvasId: string, nodeId: string, issueKeys: string[] | null) =>
-      request<Canvas>(`/canvases/${canvasId}/jira/nodes/${encodeURIComponent(nodeId)}`, json("PUT", { issueKeys })),
     disconnectJira: (canvasId: string) =>
       request<Canvas>(`/api/app-atlas/canvases/${canvasId}/jira`, json("DELETE"), false, ""),
     /** Heartbeat: marks the caller present in `room` and returns everyone there. */
