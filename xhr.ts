@@ -1,5 +1,6 @@
 ﻿import axios from "axios";
 import { loginRequest, msalInstance } from "./app/lib/msal";
+import { getFreshIdToken } from "./app/lib/auth-client";
 
 const api = axios.create();
 
@@ -35,9 +36,13 @@ async function getAccessToken() {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export default async function request(httpOptions: any) {
   const skipAuth = httpOptions.skipAuth === true;
+  const sendIdToken = httpOptions.idToken === true;
   delete httpOptions.skipAuth;
+  delete httpOptions.idToken;
 
   const token = skipAuth ? null : await getAccessToken();
+  // Services that verify the user (e.g. the Playwright recorder) take the Entra ID token, whose audience is our app.
+  const idToken = sendIdToken ? await getFreshIdToken(msalInstance, msalInstance.getAllAccounts()) : null;
   const isFormData =
     typeof FormData !== "undefined" && httpOptions.data instanceof FormData;
 
@@ -53,6 +58,7 @@ export default async function request(httpOptions: any) {
         }),
     Accept: httpOptions.responseType === "blob" ? "*/*" : "application/json",
     // Authorization: token ? `Bearer ${token}` : "",
+    ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
     ...httpOptions.headers,
   };
 
