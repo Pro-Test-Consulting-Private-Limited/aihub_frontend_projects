@@ -22,7 +22,7 @@ import { AtlasError, atlasClient } from "@/app/services/appatlas";
 import { CanvasFlow } from "./canvas-flow";
 import { Explorer } from "./explorer";
 import { ConnectAppsModal } from "./connect-apps-modal";
-import { JiraPanel, isEpic } from "./jira-panel";
+import { JiraPanel } from "./jira-panel";
 import { SaveExecutionModal } from "./save-execution-modal";
 import { RecordingView } from "./recording-view";
 
@@ -96,10 +96,7 @@ export default function AtlasWorkspace() {
 
   const jiraCounts = useMemo(() => {
     if (!canvas?.jira) return undefined;
-    const epics = new Set(canvas.jira.issues.filter(isEpic).map((i) => i.key));
-    return Object.fromEntries(
-      Object.entries(canvas.jira.nodes).map(([id, m]) => [id, m.filter((x) => !epics.has(x.key)).length]),
-    );
+    return Object.fromEntries(Object.entries(canvas.jira.nodes).map(([id, m]) => [id, m.length]));
   }, [canvas?.jira]);
 
   /** Clarification questions per screen, for the badge on each canvas node. */
@@ -434,7 +431,8 @@ export default function AtlasWorkspace() {
             onSave={() => setSaveOpen(true)}
             onCollapse={() => setExplorerOpen(false)}
             onFocusNode={setFocusNodeId}
-            onConnect={setConnectFor}
+              onConnect={setConnectFor}
+              onRefreshJira={refreshJira}
           />
         )}
         {tab === "canvas" && !explorerOpen && (

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { SiJira } from "react-icons/si";
 import {
+  TbBolt,
   TbBookmarkFilled,
   TbCircleFilled,
   TbExternalLink,
@@ -15,18 +16,17 @@ import {
 } from "react-icons/tb";
 import type { Canvas, CanvasClarification, JiraIssue, JiraNodeMatch } from "@/app/interfaces/appatlas";
 
-type Bucket = "Story" | "Bug" | "Task";
+type Bucket = "Epic" | "Story" | "Bug" | "Task";
 
 const BUCKETS: { id: Bucket; icon: React.ReactNode; tint: string }[] = [
+  { id: "Epic", icon: <TbBolt size={14} />, tint: "bg-[#7C3AED] text-white" },
   { id: "Story", icon: <TbBookmarkFilled size={13} />, tint: "bg-[#16A34A] text-white" },
   { id: "Bug", icon: <TbCircleFilled size={11} />, tint: "bg-[#DC2626] text-white" },
   { id: "Task", icon: <TbSquareCheckFilled size={14} />, tint: "bg-[#2563EB] text-white" },
 ];
 
-/** Epics are too broad for one screen; the panel and node badges leave them out. */
-export const isEpic = (issue: JiraIssue) => issue.level >= 1 || /epic/i.test(issue.type);
-
 const bucketOf = (issue: JiraIssue): Bucket => {
+  if (issue.level >= 1 || /epic/i.test(issue.type)) return "Epic";
   if (/bug/i.test(issue.type)) return "Bug";
   if (/story/i.test(issue.type)) return "Story";
   return "Task";
@@ -55,7 +55,7 @@ const QUESTION_PRIORITY_STYLE: Record<string, string> = {
   optional: "bg-[#F3F4F6] text-[#4B5563]",
 };
 
-type Ticket = { issue: JiraIssue; match: JiraNodeMatch };
+type Ticket = { issue: JiraIssue; match?: JiraNodeMatch; epic?: JiraIssue };
 type RetryClarification = (issueKey: string, force: boolean) => Promise<void>;
 
 export function JiraPanel({
@@ -101,19 +101,35 @@ export function JiraPanel({
   const tickets = useMemo<Ticket[]>(() => {
     if (!mapping) return [];
     const byKey = new Map(mapping.issues.map((i) => [i.key, i]));
+    const epicOf = (issue: JiraIssue) => {
+      let key = issue.parentKey;
+      for (let hops = 0; key && hops < 4; hops++) {
+        const parent = byKey.get(key);
+        if (!parent) return undefined;
+        if (bucketOf(parent) === "Epic") return parent;
+        key = parent.parentKey;
+      }
+      return undefined;
+    };
     const list: Ticket[] = [];
     const seen = new Set<string>();
     for (const match of mapping.nodes[nodeId] ?? []) {
       const issue = byKey.get(match.key);
-      if (!issue || isEpic(issue) || seen.has(issue.key)) continue;
+      if (!issue || seen.has(issue.key)) continue;
       seen.add(issue.key);
-      list.push({ issue, match });
+      list.push({ issue, match, epic: epicOf(issue) });
+    }
+    for (const t of [...list]) {
+      if (t.epic && !seen.has(t.epic.key)) {
+        seen.add(t.epic.key);
+        list.push({ issue: t.epic });
+      }
     }
     return list;
   }, [mapping, nodeId]);
 
   const counts = useMemo(() => {
-    const c: Record<Bucket, number> = { Story: 0, Bug: 0, Task: 0 };
+    const c: Record<Bucket, number> = { Epic: 0, Story: 0, Bug: 0, Task: 0 };
     for (const t of tickets) c[bucketOf(t.issue)] += 1;
     return c;
   }, [tickets]);
@@ -154,7 +170,7 @@ export function JiraPanel({
 
         {!mapping ? (
           <div className="mt-8 text-center text-[13px] text-[#5E6066] dark:text-[#9ca3af]">
-            <p>Connect this canvas to Jira to see which stories, tasks and bugs this screen covers.</p>
+            <p>Connect this canvas to Jira to see which epics, stories, tasks and bugs this screen covers.</p>
             {onConnect && (
               <button
                 type="button"
@@ -167,7 +183,7 @@ export function JiraPanel({
           </div>
         ) : (
           <>
-            <div className="mb-3 grid grid-cols-3 gap-2">
+            <div className="mb-3 grid grid-cols-4 gap-2">
               {BUCKETS.map((b) => (
                 <button
                   key={b.id}
@@ -194,7 +210,7 @@ export function JiraPanel({
               <TicketCard
                 key={t.issue.key}
                 ticket={t}
-                clarification={clarifications.get(t.issue.key)}
+                clarification={t.match ? clarifications.get(t.issue.key) : undefined}
                 onRetry={onRetryClarification}
               />
             ))}
@@ -214,7 +230,7 @@ function TicketCard({
   clarification?: CanvasClarification;
   onRetry?: RetryClarification;
 }) {
-  const { issue } = ticket;
+  const { issue, epic } = ticket;
 
   return (
     <div className="mb-3 rounded-[12px] border border-[#E6E1F5] p-3 shadow-sm dark:border-[#2a2a2a]">
@@ -233,9 +249,16 @@ function TicketCard({
       </div>
       <div className="mt-1.5 text-[13.5px] font-semibold leading-snug text-[#1F1F1F] dark:text-[#ededed]">{issue.summary}</div>
       <div className="mt-2 flex items-center justify-between text-[11px] text-[#5E6066] dark:text-[#9ca3af]">
-        <span className="flex items-center gap-1" title={issue.assignee ?? "Unassigned"}>
-          <TbUser size={12} /> {issue.assignee ? initials(issue.assignee) : "—"}
-        </span>
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="flex items-center gap-1" title={issue.assignee ?? "Unassigned"}>
+            <TbUser size={12} /> {issue.assignee ? initials(issue.assignee) : "—"}
+          </span>
+          {epic && (
+            <span className="truncate" title={epic.summary}>
+              <TbBolt size={11} className="inline text-[#7C3AED]" /> {epic.key}
+            </span>
+          )}
+        </div>
         {issue.priority && <span className={`font-semibold uppercase ${PRIORITY_STYLE(issue.priority)}`}>{issue.priority}</span>}
       </div>
 
