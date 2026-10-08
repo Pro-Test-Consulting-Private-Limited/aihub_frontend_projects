@@ -284,7 +284,7 @@ function Clarifications({
         </ol>
       )}
 
-      {item.questions.length > 0 && <TicketNotes item={item} editable={editable} onSaveNote={onSaveNote} />}
+      {(item.questions.length > 0 || item.notesOpen) && <TicketNotes item={item} editable={editable} onSaveNote={onSaveNote} />}
     </div>
   );
 }

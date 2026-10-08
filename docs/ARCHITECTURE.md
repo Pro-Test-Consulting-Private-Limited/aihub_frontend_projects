@@ -268,7 +268,9 @@ sequenceDiagram
    `GET /canvases/:id/clarifications` every 5 s and merges the result into the open canvas. Each ticket card shows a
    spinner, an error, "No open questions", or the numbered questions with reasons. A ticket that has questions
    also has a Notes box: the canvas owner edits it (saved on blur, this canvas only, never sent to Jira); everyone
-   else sees it read-only. `PUT /canvases/:id/notes/:issueKey` `{ text }`.
+   else sees it read-only. `PUT /canvases/:id/notes/:issueKey` `{ text }`. A ticket that finished with no
+   questions gets the box only when `notesOpen` is true (a switch on the logs dashboard). Refresh the canvas
+   after changing a notes switch.
 
 Manual mapping edits, Jira refresh and question retry/regenerate were removed from this app in the latest commits;
 they are managed from the operations (logs) dashboard in appatlas-backend. `retryClarifications` and the `regenerate`
