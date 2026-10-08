@@ -217,6 +217,8 @@ export type CanvasClarification = {
   updatedAt: number;
   /** Owner's notes on this canvas for this ticket. Null until something is saved. Never sent to Jira. */
   notes: TicketNote | null;
+  /** Notes box is shown. Also true for a finished ticket with no questions when that logs switch is on. */
+  notesOpen?: boolean;
 };
 
 export type TicketNote = {
