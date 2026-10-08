@@ -10,6 +10,7 @@ import type {
   CanvasSummary,
   JiraProject,
   SessionSnapshot,
+  TicketNote,
 } from "@/app/interfaces/appatlas";
 
 const BUILD_APPATLAS_API = (
@@ -78,6 +79,9 @@ export function atlasClient({ instance, accounts }: Msal) {
     /** Owner only. No issueKey = every failed ticket; `force` regenerates a ticket that already has questions. */
     retryClarifications: (canvasId: string, body: { issueKey?: string; force?: boolean } = {}) =>
       request<CanvasClarifications>(`/canvases/${canvasId}/clarifications/retry`, json("POST", body)),
+    /** Owner only; stored per canvas and ticket in App Atlas, never sent to Jira. */
+    saveTicketNote: (canvasId: string, issueKey: string, text: string) =>
+      request<TicketNote>(`/canvases/${canvasId}/notes/${encodeURIComponent(issueKey)}`, json("PUT", { text })),
     /** EventSource can't send headers, so the token goes in the query string. */
     openEvents: async (id: string) => {
       const token = await getFreshIdToken(instance, accounts);
