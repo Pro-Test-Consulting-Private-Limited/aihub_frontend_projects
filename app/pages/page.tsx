@@ -308,7 +308,9 @@ export default function Home() {
                 className="flex justify-between items-center h-[49px] my-[5px] cursor-pointer px-[15px]"
                 onClick={() => {
                   router.push(
-                    `/projects/${project.id}/?workplace=${workplace?.value}&domain=${domain}`,
+                    activeWorkplaceTab === "app-atlas"
+                      ? `/app-atlas?projectId=${project.id}`
+                      : `/projects/${project.id}/?workplace=${workplace?.value}&domain=${domain}`,
                   );
                 }}
               >

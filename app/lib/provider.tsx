@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { MsalProvider } from "@azure/msal-react";
 import { msalInstance } from "./msal";
+import SitePresence from "./site-presence";
 
 export default function AuthProvider({
   children,
@@ -30,7 +31,10 @@ export default function AuthProvider({
   }, []);
 
   return ready ? (
-    <MsalProvider instance={msalInstance}>{children}</MsalProvider>
+    <MsalProvider instance={msalInstance}>
+      <SitePresence />
+      {children}
+    </MsalProvider>
   ) : null;
 }
 

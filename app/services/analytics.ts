@@ -1,5 +1,5 @@
 ﻿import request from "@/xhr";
-import { BASE_URL } from "../config/urls";
+import { BASE_URL, CLARIFY_API_BASE } from "../config/urls";
 
 export const getBusinessMetrics = async (seconds: number) =>
   request({
@@ -25,9 +25,6 @@ export const getServerStatus = async () =>
     url: BASE_URL + "health",
     skipAuth: true,
   });
-
-const CLARIFY_API_BASE =
-  process.env.NEXT_PUBLIC_CLARIFY_API_BASE_URL || "http://localhost:4000";
 
 /** Hugging Face endpoint state, read without sending a request to the model. */
 export const getModelStatus = async (): Promise<{ state: string }> => {
