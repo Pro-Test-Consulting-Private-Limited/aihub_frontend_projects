@@ -215,6 +215,14 @@ export type CanvasClarification = {
   attempts: number;
   generatedAt: number | null;
   updatedAt: number;
+  /** Owner's notes on this canvas for this ticket. Null until something is saved. Never sent to Jira. */
+  notes: TicketNote | null;
+};
+
+export type TicketNote = {
+  text: string;
+  updatedAt: number;
+  copiedFrom: { canvasId: string; name: string | null } | null;
 };
 
 export type CanvasClarifications = { canvasId: string; pending: number; items: CanvasClarification[] };

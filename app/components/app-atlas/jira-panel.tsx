@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { SiJira } from "react-icons/si";
 import {
   TbBolt,
@@ -13,7 +13,7 @@ import {
   TbUser,
   TbX,
 } from "react-icons/tb";
-import type { Canvas, CanvasClarification, JiraIssue, JiraNodeMatch } from "@/app/interfaces/appatlas";
+import type { Canvas, CanvasClarification, JiraIssue, JiraNodeMatch, TicketNote } from "@/app/interfaces/appatlas";
 
 type Bucket = "Epic" | "Story" | "Bug" | "Task";
 
@@ -53,13 +53,18 @@ type Ticket = { issue: JiraIssue; match?: JiraNodeMatch; epic?: JiraIssue };
 export function JiraPanel({
   canvas,
   nodeId,
+  editable,
   onClose,
   onConnect,
+  onSaveNote,
 }: {
   canvas: Canvas;
   nodeId: string;
+  /** Only the canvas owner can write notes. */
+  editable: boolean;
   onClose: () => void;
   onConnect?: () => void;
+  onSaveNote: (issueKey: string, text: string) => Promise<TicketNote>;
 }) {
   const node = canvas.nodes.find((n) => n.id === nodeId);
   const mapping = canvas.jira;
@@ -170,6 +175,8 @@ export function JiraPanel({
                 key={t.issue.key}
                 ticket={t}
                 clarification={t.match ? clarifications.get(t.issue.key) : undefined}
+                editable={editable}
+                onSaveNote={onSaveNote}
               />
             ))}
           </>
@@ -179,7 +186,17 @@ export function JiraPanel({
   );
 }
 
-function TicketCard({ ticket, clarification }: { ticket: Ticket; clarification?: CanvasClarification }) {
+function TicketCard({
+  ticket,
+  clarification,
+  editable,
+  onSaveNote,
+}: {
+  ticket: Ticket;
+  clarification?: CanvasClarification;
+  editable: boolean;
+  onSaveNote: (issueKey: string, text: string) => Promise<TicketNote>;
+}) {
   const { issue, epic } = ticket;
 
   return (
@@ -212,12 +229,20 @@ function TicketCard({ ticket, clarification }: { ticket: Ticket; clarification?:
         {issue.priority && <span className={`font-semibold uppercase ${PRIORITY_STYLE(issue.priority)}`}>{issue.priority}</span>}
       </div>
 
-      {clarification && <Clarifications item={clarification} />}
+      {clarification && <Clarifications item={clarification} editable={editable} onSaveNote={onSaveNote} />}
     </div>
   );
 }
 
-function Clarifications({ item }: { item: CanvasClarification }) {
+function Clarifications({
+  item,
+  editable,
+  onSaveNote,
+}: {
+  item: CanvasClarification;
+  editable: boolean;
+  onSaveNote: (issueKey: string, text: string) => Promise<TicketNote>;
+}) {
   const pending = item.status === "queued" || item.status === "running";
 
   return (
@@ -257,6 +282,77 @@ function Clarifications({ item }: { item: CanvasClarification }) {
             </li>
           ))}
         </ol>
+      )}
+
+      {item.questions.length > 0 && <TicketNotes item={item} editable={editable} onSaveNote={onSaveNote} />}
+    </div>
+  );
+}
+
+function TicketNotes({
+  item,
+  editable,
+  onSaveNote,
+}: {
+  item: CanvasClarification;
+  editable: boolean;
+  onSaveNote: (issueKey: string, text: string) => Promise<TicketNote>;
+}) {
+  const saved = item.notes?.text ?? "";
+  const [text, setText] = useState(saved);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const textRef = useRef(text);
+  const prevSaved = useRef(saved);
+  textRef.current = text;
+
+  useEffect(() => {
+    if (textRef.current === prevSaved.current) setText(saved);
+    prevSaved.current = saved;
+  }, [saved]);
+
+  const save = async () => {
+    const next = text.trim();
+    if (!editable || next === saved) {
+      if (next !== text) setText(next);
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      await onSaveNote(item.issueKey, next);
+      setText(next);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save the note.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const from = item.notes?.copiedFrom?.name;
+
+  return (
+    <div className="mt-2">
+      <div className="mb-1 text-[10.5px] font-semibold tracking-wide text-[#5E6066] uppercase dark:text-[#9ca3af]">Notes</div>
+      {editable ? (
+        <textarea
+          value={text}
+          maxLength={4000}
+          rows={3}
+          placeholder="Notes for this ticket, on this canvas only"
+          onChange={(e) => setText(e.target.value)}
+          onBlur={() => void save()}
+          className="w-full resize-y rounded-[6px] border border-[#E5E7EB] bg-[#F9FAFB] px-2 py-1.5 text-[11.5px] text-[#1F1F1F] outline-none focus:border-[#8664F2] dark:border-[#2a2a2a] dark:bg-[#1a1a1a] dark:text-[#ededed]"
+        />
+      ) : (
+        <div className="rounded-[6px] bg-[#F9FAFB] px-2 py-1.5 text-[11.5px] whitespace-pre-wrap text-[#1F1F1F] dark:bg-[#1a1a1a] dark:text-[#ededed]">
+          {saved || "No notes."}
+        </div>
+      )}
+      {(busy || error || from) && (
+        <div className="mt-0.5 text-[10.5px] text-[#6B7280] dark:text-[#9ca3af]">
+          {busy ? "Saving…" : error ? <span className="text-[#B91C1C]">{error}</span> : `From “${from}”`}
+        </div>
       )}
     </div>
   );

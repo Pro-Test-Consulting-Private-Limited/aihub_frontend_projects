@@ -266,7 +266,9 @@ sequenceDiagram
 5. **Clarification questions:** after mapping, App Atlas generates requirement-clarification questions per ticket in
    the background. While any item is `queued` or `running`, the workspace polls
    `GET /canvases/:id/clarifications` every 5 s and merges the result into the open canvas. Each ticket card shows a
-   spinner, an error, "No open questions", or the numbered questions with reasons.
+   spinner, an error, "No open questions", or the numbered questions with reasons. A ticket that has questions
+   also has a Notes box: the canvas owner edits it (saved on blur, this canvas only, never sent to Jira); everyone
+   else sees it read-only. `PUT /canvases/:id/notes/:issueKey` `{ text }`.
 
 Manual mapping edits, Jira refresh and question retry/regenerate were removed from this app in the latest commits;
 they are managed from the operations (logs) dashboard in appatlas-backend. `retryClarifications` and the `regenerate`

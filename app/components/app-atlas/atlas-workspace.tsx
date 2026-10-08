@@ -473,8 +473,21 @@ export default function AtlasWorkspace() {
                   key={panelNodeId}
                   canvas={canvas}
                   nodeId={panelNodeId}
+                  editable={canvas.isMine}
                   onClose={() => setPanelNodeId(null)}
                   onConnect={canvas.isMine ? () => setConnectFor(canvas) : undefined}
+                  onSaveNote={async (issueKey, text) => {
+                    const note = await client.saveTicketNote(canvas.id, issueKey, text);
+                    setCanvas((prev) =>
+                      prev && prev.id === canvas.id
+                        ? {
+                            ...prev,
+                            clarifications: (prev.clarifications ?? []).map((c) => (c.issueKey === issueKey ? { ...c, notes: note } : c)),
+                          }
+                        : prev,
+                    );
+                    return note;
+                  }}
                 />
               )}
             </>
