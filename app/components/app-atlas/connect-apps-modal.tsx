@@ -2,22 +2,30 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { TbArrowLeft, TbChevronRight, TbLoader2 } from "react-icons/tb";
-import { SiJira, SiLinear } from "react-icons/si";
-import { FaMicrosoft, FaSlack } from "react-icons/fa";
+import { TbArrowLeft, TbChevronRight, TbLink, TbLoader2 } from "react-icons/tb";
+import { SiJira, SiLinear, SiSwagger } from "react-icons/si";
+import { FaBook, FaCode, FaMicrosoft, FaSlack } from "react-icons/fa";
 import type { Canvas, CanvasSummary, JiraProject } from "@/app/interfaces/appatlas";
 import type { AtlasClient } from "@/app/services/appatlas";
 import { useIntegrationStatus } from "@/app/hooks/use-integration-status";
 import { Modal, fieldInput, fieldLabel, outlineButton, primaryButton } from "./modal";
 
-type AppId = "jira" | "linear" | "teams" | "slack";
+type AppId = "jira" | "linear" | "swagger" | "redocly" | "stoplight" | "teams" | "slack";
 
 const CATEGORIES: { title: string; apps: { id: AppId; name: string; icon: React.ReactNode }[] }[] = [
   {
     title: "Agile Project Management & Issue Tracking",
     apps: [
       { id: "jira", name: "Jira", icon: <SiJira size={26} color="#2684FF" /> },
-      { id: "linear", name: "Linear", icon: <SiLinear size={24} color="#222" /> },
+      { id: "linear", name: "Linear", icon: <SiLinear size={24} color="#5E6AD2" /> },
+    ],
+  },
+  {
+    title: "API Design & Documentation",
+    apps: [
+      { id: "swagger", name: "Swagger / OpenAPI", icon: <SiSwagger size={26} color="#85EA2D" /> },
+      { id: "redocly", name: "Redoc / Redocly", icon: <FaBook size={22} color="#263238" /> },
+      { id: "stoplight", name: "Stoplight", icon: <FaCode size={22} color="#0B5FFF" /> },
     ],
   },
   {
@@ -28,6 +36,8 @@ const CATEGORIES: { title: string; apps: { id: AppId; name: string; icon: React.
     ],
   },
 ];
+
+const CAN_MAP: AppId[] = ["jira"];
 
 export function ConnectAppsModal({
   client,
@@ -41,14 +51,27 @@ export function ConnectAppsModal({
   onClose: () => void;
 }) {
   const router = useRouter();
-  const { jira, loading: statusLoading } = useIntegrationStatus();
-  const integrated: Record<AppId, boolean> = { jira: jira.connected, linear: false, teams: false, slack: false };
+  const { jira, swagger, loading: statusLoading } = useIntegrationStatus();
+  const integrated: Record<AppId, boolean> = {
+    jira: jira.connected,
+    swagger: swagger.connected,
+    linear: false,
+    redocly: false,
+    stoplight: false,
+    teams: false,
+    slack: false,
+  };
   const [step, setStep] = useState<"apps" | "jira">("apps");
+  const [picked, setPicked] = useState<AppId | null>(canvas.jiraProjectKey ? "jira" : null);
+
+  const confirmPick = () => {
+    if (picked === "jira") setStep("jira");
+  };
 
   return (
     <Modal title={step === "apps" ? "Select an app to connect with this canvas" : "Connect Jira"} onClose={onClose} width={480}>
       {step === "apps" ? (
-        <div className="mt-4 space-y-4">
+        <div className="mt-4 space-y-3">
           {CATEGORIES.map((cat) => (
             <div key={cat.title} className="rounded-[12px] border border-[#ECECEC] bg-[#FAFAFA] p-4 dark:border-[#2a2a2a] dark:bg-[#101010]">
               <button
@@ -64,22 +87,25 @@ export function ConnectAppsModal({
                 {cat.apps.map((app) => {
                   const ok = integrated[app.id];
                   const connected = app.id === "jira" && !!canvas.jiraProjectKey;
+                  const selected = picked === app.id;
                   return (
                     <button
                       key={app.id}
                       type="button"
                       disabled={!ok}
-                      onClick={() => app.id === "jira" && setStep("jira")}
+                      onClick={() => setPicked(app.id)}
                       title={
                         ok
                           ? connected
                             ? `${app.name}: connected to ${canvas.jiraProjectKey}`
-                            : `Connect ${app.name}`
+                            : `Select ${app.name}`
                           : `${app.name} isn't integrated yet. Integrate it on the Integrations page first.`
                       }
                       className={`relative flex h-[56px] w-[56px] items-center justify-center rounded-[10px] bg-white shadow-sm transition dark:bg-[#1a1a1a] ${
                         ok
-                          ? "border-2 border-[#22C55E] hover:scale-105"
+                          ? selected
+                            ? "border-2 border-[#22C55E] ring-2 ring-[#22C55E]/30"
+                            : "border-2 border-[#22C55E] hover:scale-105"
                           : "cursor-not-allowed border border-[#E5E7EB] opacity-45 grayscale dark:border-[#2a2a2a]"
                       }`}
                     >
@@ -94,8 +120,24 @@ export function ConnectAppsModal({
           <p className="text-[11.5px] text-[#7E7E7E]">
             {statusLoading
               ? "Checking your integrations…"
-              : "Apps with a green border are integrated in AI Hub and can be connected. Integrate the others from the Integrations page."}
+              : "Apps with a green border are integrated in AI Hub. Select one, then Connect. Integrate the others from the Integrations page."}
           </p>
+          {picked && !CAN_MAP.includes(picked) && (
+            <p className="text-[11.5px] text-[#92400E]">
+              {picked === "swagger"
+                ? "Swagger is integrated, but screens aren't mapped to API specs yet. Choose Jira to map this canvas."
+                : "This app can be selected once it's integrated, but canvas mapping is only available for Jira right now."}
+            </p>
+          )}
+          <button
+            type="button"
+            disabled={!picked || !CAN_MAP.includes(picked)}
+            onClick={confirmPick}
+            className="mt-1 flex w-full items-center justify-center gap-2 rounded-[10px] border border-[#E6E1F5] bg-white py-2.5 text-[14px] font-medium text-[#8664F2] disabled:cursor-not-allowed disabled:text-[#C4B5E8] dark:border-[#2a2a2a] dark:bg-[#141414]"
+          >
+            <TbLink size={16} />
+            Connect
+          </button>
         </div>
       ) : (
         <JiraStep client={client} canvas={canvas} siteName={jira.siteName} onBack={() => setStep("apps")} onConnected={onConnected} />
