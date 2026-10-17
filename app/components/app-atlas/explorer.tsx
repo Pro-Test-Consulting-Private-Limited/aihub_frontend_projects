@@ -13,10 +13,12 @@ import {
   TbLink,
   TbLock,
   TbPlayerPlay,
+  TbNetwork,
   TbPlus,
 } from "react-icons/tb";
-import { SiJira } from "react-icons/si";
+import { SiJira, SiSwagger } from "react-icons/si";
 import type { Canvas, CanvasSummary } from "@/app/interfaces/appatlas";
+import type { CanvasSwagger } from "@/app/lib/canvas-swagger";
 
 const iconButton =
   "flex h-[26px] w-[26px] items-center justify-center rounded-[6px] text-[#5E6066] hover:bg-[#F2EBFB] hover:text-[#8664F2] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[#5E6066] dark:text-[#9ca3af] dark:hover:bg-[#2a2440]";
@@ -40,6 +42,12 @@ type Props = {
   onCollapse: () => void;
   onFocusNode: (id: string) => void;
   onConnect: (c: CanvasSummary) => void;
+  /** Swagger spec connected to the selected canvas. Independent of Jira. */
+  swagger: CanvasSwagger | null;
+  view: "screens" | "api";
+  /** e.g. "6 Modules, 25 End-Points" */
+  apiSummary: string;
+  onView: (view: "screens" | "api") => void;
 };
 
 export function Explorer(props: Props) {
@@ -111,38 +119,60 @@ export function Explorer(props: Props) {
                       <TbLock size={12} className="shrink-0 text-[#c0c0c0]" title="View only: recorded by someone else" />
                     )}
                   </div>
-                  {active && (
+                  {active && props.swagger && (
+                    <div className="mt-1.5 space-y-0.5 pl-[14px]">
+                      <ViewRow
+                        active={props.view === "screens"}
+                        icon={<TbLayoutGrid size={13} />}
+                        label={formatCanvasDate(c.createdAt)}
+                        meta={`${c.screens} Screens, ${c.transitions} Events`}
+                        onClick={() => props.onView("screens")}
+                      />
+                      <ViewRow
+                        active={props.view === "api"}
+                        icon={<TbNetwork size={13} className="text-[#8664F2]" />}
+                        label="API Testing"
+                        meta={props.apiSummary}
+                        onClick={() => props.onView("api")}
+                      />
+                    </div>
+                  )}
+                  {active && !props.swagger && (
                     <div className="mt-1.5 flex justify-between pl-[34px] text-[10.5px] text-[#5E6066] dark:text-[#9ca3af]">
                       <span>{formatCanvasDate(c.createdAt)}</span>
                       <span>{c.screens} Screens, {c.transitions} Events</span>
                     </div>
                   )}
-                  {active && (c.isMine || c.jiraProjectKey) && (
-                    <div className="mt-2.5 flex gap-1.5">
-                    <button
-                      type="button"
-                      disabled={!c.isMine}
-                      title={c.isMine ? (c.jiraProjectKey ? "Manage connected apps" : "Connect apps to this canvas") : "Connected apps"}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        props.onConnect(c);
-                      }}
-                      className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-[8px] border border-[#C9B8F7] bg-[#F4EFFE] py-2 text-[12.5px] font-medium text-[#8664F2] hover:bg-[#EDE4FD] disabled:cursor-default disabled:hover:bg-[#F4EFFE] dark:border-[#3a3060] dark:bg-[#1e1a2e]"
-                    >
-                      {c.jiraProjectKey ? (
-                        <>
-                          <span className="flex h-[20px] w-[20px] items-center justify-center rounded-[5px] bg-white shadow-sm">
-                            <SiJira size={12} color="#2684FF" />
-                          </span>
-                          <span>Jira · {c.jiraProjectKey}</span>
-                        </>
-                      ) : (
-                        <>
-                          <TbLink size={15} />
-                          Connect
-                        </>
+                  {active && (c.isMine || c.jiraProjectKey || props.swagger) && (
+                    <div className="mt-2.5 flex flex-col gap-1.5">
+                      {c.jiraProjectKey && (
+                        <ConnectedAppButton
+                          canvas={c}
+                          label={`Jira · ${c.jiraProjectKey}`}
+                          icon={<SiJira size={12} color="#2684FF" />}
+                          title="Manage connected apps"
+                          onConnect={props.onConnect}
+                        />
                       )}
-                    </button>
+                      {props.swagger && (
+                        <ConnectedAppButton
+                          canvas={c}
+                          label="Swagger"
+                          icon={<SiSwagger size={12} color="#85EA2D" />}
+                          title={props.swagger.title ? `Swagger: ${props.swagger.title}` : "Manage connected apps"}
+                          onConnect={props.onConnect}
+                        />
+                      )}
+                      {!c.jiraProjectKey && !props.swagger && (
+                        <ConnectedAppButton
+                          canvas={c}
+                          label="Connect"
+                          icon={<TbLink size={15} />}
+                          bare
+                          title="Connect apps to this canvas"
+                          onConnect={props.onConnect}
+                        />
+                      )}
                     </div>
                   )}
                   {menuFor === c.id && (
@@ -213,5 +243,61 @@ function TreeLeaf({ label, title, onClick }: { label: string; title?: string; on
     <div onClick={onClick} title={title} className="cursor-pointer truncate py-1 hover:text-[#8664F2]">
       {label}
     </div>
+  );
+}
+
+function ViewRow({ active, icon, label, meta, onClick }: { active: boolean; icon: React.ReactNode; label: string; meta: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      className={`flex w-full items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[12px] text-[#1F1F1F] dark:text-[#ededed] ${
+        active ? "bg-[#F6E3BE] dark:bg-[#3a3050]" : "hover:bg-[#FBEFD9] dark:hover:bg-[#1a1a1a]"
+      }`}
+    >
+      <span className="shrink-0 text-[#5E6066] dark:text-[#9ca3af]">{icon}</span>
+      <span className="min-w-0 truncate font-medium">{label}</span>
+      <span className="ml-auto shrink-0 text-[10px] text-[#5E6066] dark:text-[#9ca3af]">{meta}</span>
+    </button>
+  );
+}
+
+/** One button per app connected to the canvas (Jira and Swagger are independent); owner-only, opens the connect modal. */
+function ConnectedAppButton({
+  canvas,
+  label,
+  icon,
+  title,
+  bare,
+  onConnect,
+}: {
+  canvas: CanvasSummary;
+  label: string;
+  icon: React.ReactNode;
+  title: string;
+  bare?: boolean;
+  onConnect: (c: CanvasSummary) => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={!canvas.isMine}
+      title={canvas.isMine ? title : "Connected apps"}
+      onClick={(e) => {
+        e.stopPropagation();
+        onConnect(canvas);
+      }}
+      className="flex min-w-0 items-center justify-center gap-2 rounded-[8px] border border-[#C9B8F7] bg-[#F4EFFE] py-2 text-[12.5px] font-medium text-[#8664F2] hover:bg-[#EDE4FD] disabled:cursor-default disabled:hover:bg-[#F4EFFE] dark:border-[#3a3060] dark:bg-[#1e1a2e]"
+    >
+      {bare ? (
+        icon
+      ) : (
+        <span className="flex h-[20px] w-[20px] items-center justify-center rounded-[5px] bg-white shadow-sm">{icon}</span>
+      )}
+      <span>{label}</span>
+    </button>
   );
 }
