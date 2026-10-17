@@ -12,6 +12,12 @@ export const BASE_URL_VERSION = process.env.NEXT_PUBLIC_API_BASE_URL_VERSION!;
 export const CLARIFY_API_BASE =
   siteOrigin() || process.env.NEXT_PUBLIC_CLARIFY_API_BASE_URL || "http://localhost:4000";
 
+/**
+ * API Test Scenario Agent (Swagger spec quality check on the App Atlas canvas). A separate service: it is NOT replaced
+ * by the site origin, so it follows NEXT_PUBLIC_API_AGENT_BASE_URL everywhere. Local by default.
+ */
+export const API_AGENT_BASE = (process.env.NEXT_PUBLIC_API_AGENT_BASE_URL || "http://localhost:4000").replace(/\/$/, "");
+
 export const ACTION_DRIVEN_TEST_CASE_GENERATOR_SITE = `${
   siteOrigin() || "https://ai-hub.protestcorp.com"
 }/vnc_lite.html`;

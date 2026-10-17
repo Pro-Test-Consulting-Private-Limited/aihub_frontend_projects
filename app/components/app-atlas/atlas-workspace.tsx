@@ -25,6 +25,9 @@ import { ConnectAppsModal } from "./connect-apps-modal";
 import { JiraPanel } from "./jira-panel";
 import { SaveExecutionModal } from "./save-execution-modal";
 import { RecordingView } from "./recording-view";
+import { ApiTestingView } from "./api-testing-view";
+import { useApiSpec, useApiSpecView } from "@/app/hooks/use-api-spec";
+import { clearCanvasSwagger, getCanvasSwagger, type CanvasSwagger } from "@/app/lib/canvas-swagger";
 
 const TABS = [
   { id: "canvas", label: "Canvas", icon: TbLayoutGrid },
@@ -93,6 +96,25 @@ export default function AtlasWorkspace() {
   const [focusNodeId, setFocusNodeId] = useState<string | null>(null);
   const [panelNodeId, setPanelNodeId] = useState<string | null>(null);
   const [connectFor, setConnectFor] = useState<CanvasSummary | null>(null);
+
+  // Swagger is connected per canvas and is independent of Jira (canvas.jiraProjectKey).
+  const [swagger, setSwagger] = useState<CanvasSwagger | null>(null);
+  const [view, setView] = useState<"screens" | "api">("screens");
+  const apiSpec = useApiSpec(swagger?.specUrl ?? null);
+  const apiSpecView = useApiSpecView(apiSpec);
+
+  useEffect(() => {
+    setSwagger(selectedId ? getCanvasSwagger(selectedId) : null);
+    setView("screens");
+  }, [selectedId]);
+
+  const onSwaggerChange = (conn: CanvasSwagger | null) => {
+    if (connectFor?.id === selectedId) {
+      setSwagger(conn);
+      setView(conn ? "api" : "screens");
+    }
+    setConnectFor(null);
+  };
 
   const clarifying = canvas?.clarifications?.some((c) => c.status === "queued" || c.status === "running") ?? false;
   const canvasId = canvas?.id;
@@ -291,6 +313,7 @@ export default function AtlasWorkspace() {
     if (!window.confirm(`Delete "${c.name}"? Its screenshots are deleted too. This can't be undone.`)) return;
     try {
       await client.deleteCanvas(c.id);
+      clearCanvasSwagger(c.id);
       setCanvases((prev) => prev.filter((x) => x.id !== c.id));
       if (selectedId === c.id) {
         setSelectedId(null);
@@ -303,6 +326,12 @@ export default function AtlasWorkspace() {
 
   const canStart = !!appUrl && !recording && !starting;
   const tabLabel = TABS.find((t) => t.id === tab)!.label;
+  const apiSummary =
+    apiSpec.status === "ready" && apiSpec.data
+      ? `${apiSpecView.modules.length} Modules, ${apiSpec.data.endpoints.length} End-Points`
+      : apiSpec.status === "error"
+        ? "Unavailable"
+        : "Loading…";
 
   return (
     <div className="flex h-full flex-col bg-[#F7F7FA] dark:bg-[#0a0a0a]">
@@ -431,6 +460,10 @@ export default function AtlasWorkspace() {
             onCollapse={() => setExplorerOpen(false)}
             onFocusNode={setFocusNodeId}
               onConnect={setConnectFor}
+            swagger={swagger}
+            view={view}
+            apiSummary={apiSummary}
+            onView={setView}
           />
         )}
         {tab === "canvas" && !explorerOpen && (
@@ -453,6 +486,8 @@ export default function AtlasWorkspace() {
                 setRecording(null);
               }}
             />
+          ) : canvas && view === "api" && swagger ? (
+            <ApiTestingView spec={apiSpec} onReload={apiSpec.reload} />
           ) : canvas ? (
             <>
               <CanvasFlow
@@ -517,7 +552,14 @@ export default function AtlasWorkspace() {
 
       {saveOpen && unsaved && <SaveExecutionModal onSave={save} onClose={() => setSaveOpen(false)} />}
       {connectFor && (
-        <ConnectAppsModal client={client} canvas={connectFor} onConnected={onJiraConnected} onClose={() => setConnectFor(null)} />
+        <ConnectAppsModal
+          client={client}
+          canvas={connectFor}
+          swagger={getCanvasSwagger(connectFor.id)}
+          onSwaggerChange={onSwaggerChange}
+          onConnected={onJiraConnected}
+          onClose={() => setConnectFor(null)}
+        />
       )}
     </div>
   );
