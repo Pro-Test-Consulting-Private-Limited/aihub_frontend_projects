@@ -487,7 +487,7 @@ export default function AtlasWorkspace() {
               }}
             />
           ) : canvas && view === "api" && swagger ? (
-            <ApiTestingView spec={apiSpec} onReload={apiSpec.reload} />
+            <ApiTestingView spec={apiSpec} onReload={apiSpec.reload} specUrl={swagger.specUrl} />
           ) : canvas ? (
             <>
               <CanvasFlow
