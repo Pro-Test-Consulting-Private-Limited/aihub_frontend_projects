@@ -1,5 +1,5 @@
 import { API_AGENT_BASE } from "@/app/config/urls";
-import type { EndpointsResponse, LintReport } from "@/app/interfaces/api-testing";
+import type { EndpointDetail, EndpointsResponse, LintReport } from "@/app/interfaces/api-testing";
 
 export class ApiAgentError extends Error {
   constructor(
@@ -35,4 +35,6 @@ async function post<T>(path: string, body: unknown, signal?: AbortSignal): Promi
 export const apiAgent = {
   endpoints: (swaggerUrl: string, signal?: AbortSignal) => post<EndpointsResponse>("/api/endpoints", { swaggerUrl }, signal),
   lint: (swaggerUrl: string, signal?: AbortSignal) => post<LintReport>("/api/specs/lint", { swaggerUrl }, signal),
+  detail: (swaggerUrl: string, path: string, method: string, signal?: AbortSignal) =>
+    post<EndpointDetail>("/api/endpoints/detail", { swaggerUrl, path, method }, signal),
 };

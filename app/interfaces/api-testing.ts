@@ -52,3 +52,21 @@ export type GateRow = {
   /** Error-level findings; they are what blocks an endpoint. */
   reasons: LintFinding[];
 };
+
+export type EndpointParam = { name: string; in: string; required: boolean; type: string; description: string; example?: unknown };
+
+/** One endpoint in full, from POST /api/endpoints/detail. */
+export type EndpointDetail = {
+  method: string;
+  path: string;
+  fullUrl: string | null;
+  tag: string;
+  summary: string;
+  description: string;
+  deprecated: boolean;
+  secured: boolean;
+  headers: { name: string; value: string; required: boolean }[];
+  params: EndpointParam[];
+  body: { contentType: string; required: boolean; example: unknown } | null;
+  responses: { code: string; description: string; contentType: string | null; example: unknown }[];
+};
