@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMsal } from "@azure/msal-react";
 import {
@@ -12,7 +12,7 @@ import {
   TbReportSearch,
   TbShieldCheck,
   TbWorld,
-  TbListCheck,
+  TbNetwork,
 } from "react-icons/tb";
 import { useProjects } from "@/app/lib/projectsStore";
 import type { Canvas, CanvasSummary, PresenceUser, SessionSnapshot } from "@/app/interfaces/appatlas";
@@ -26,17 +26,21 @@ import { RecordingView } from "./recording-view";
 import { ApiTestingView } from "./api-testing-view";
 import { CoverageOverview } from "./coverage-overview";
 import { SecurityOverview } from "./security-overview";
+import { ReportsView } from "./reports-view";
 import { useApiSpec, useApiSpecView } from "@/app/hooks/use-api-spec";
 import { clearCanvasSwagger, getCanvasSwagger, type CanvasSwagger } from "@/app/lib/canvas-swagger";
 
+// "api" is not a page of its own: it opens the API Testing row of the selected canvas (Canvas tab, API view).
 const TABS = [
   { id: "canvas", label: "Canvas", icon: TbLayoutGrid },
-  { id: "sit", label: "SIT", icon: TbListCheck },
+  { id: "api", label: "API Testing", icon: TbNetwork },
   { id: "coverage", label: "Coverage", icon: TbChartLine },
   { id: "security", label: "Security", icon: TbShieldCheck },
+  { id: "reports", label: "Reports", icon: TbReportSearch },
 ] as const;
 
-type TabId = (typeof TABS)[number]["id"];
+type NavId = (typeof TABS)[number]["id"];
+type TabId = Exclude<NavId, "api">;
 
 const hostOf = (url: string) => {
   try {
@@ -101,9 +105,14 @@ export default function AtlasWorkspace() {
   const apiSpec = useApiSpec(swagger?.specUrl ?? null);
   const apiSpecView = useApiSpecView(apiSpec);
 
+  // Set when the nav bar's API Testing is clicked while a canvas is being opened: land on that canvas's API view.
+  const wantApi = useRef(false);
+
   useEffect(() => {
-    setSwagger(selectedId ? getCanvasSwagger(selectedId) : null);
-    setView("screens");
+    const conn = selectedId ? getCanvasSwagger(selectedId) : null;
+    setSwagger(conn);
+    setView(wantApi.current && conn ? "api" : "screens");
+    wantApi.current = false;
   }, [selectedId]);
 
   const onSwaggerChange = (conn: CanvasSwagger | null) => {
@@ -323,7 +332,27 @@ export default function AtlasWorkspace() {
   };
 
   const canStart = !!appUrl && !recording && !starting;
-  const tabLabel = TABS.find((t) => t.id === tab)!.label;
+
+  /** Nav bar API Testing: the same view as the API Testing row under the canvas in the Explorer. */
+  const openApiTesting = () => {
+    setTab("canvas");
+    if (recording) return;
+    if (selectedId && swagger) return setView("api");
+    const withSpec = visible.find((c) => getCanvasSwagger(c.id));
+    if (!withSpec) {
+      setNotice("No canvas has a Swagger spec connected yet. Select a canvas and connect Swagger to use API Testing.");
+      return;
+    }
+    if (withSpec.id === selectedId) return setView("api");
+    wantApi.current = true;
+    void selectCanvas(withSpec.id);
+  };
+  const onNav = (id: NavId) => {
+    if (id === "api") return openApiTesting();
+    if (id === "canvas") setView("screens");
+    setTab(id);
+  };
+  const navActive = (id: NavId) => (id === "api" ? tab === "canvas" && view === "api" && !!swagger : id === "canvas" ? tab === "canvas" && !(view === "api" && swagger) : tab === id);
   const apiSummary =
     apiSpec.status === "ready" && apiSpec.data
       ? `${apiSpecView.modules.length} Modules, ${apiSpec.data.endpoints.length} End-Points`
@@ -389,9 +418,9 @@ export default function AtlasWorkspace() {
               <button
                 key={id}
                 type="button"
-                onClick={() => setTab(id)}
+                onClick={() => onNav(id)}
                 className={`flex h-[32px] items-center gap-1.5 rounded-[8px] px-3 text-[13px] ${
-                  tab === id
+                  navActive(id)
                     ? "bg-[#F2EBFB] text-[#8664F2] dark:bg-[#2a2440]"
                     : "text-[#1F1F1F] hover:text-[#8664F2] dark:text-[#ededed]"
                 }`}
@@ -482,8 +511,8 @@ export default function AtlasWorkspace() {
             <SecurityOverview targetUrl={appUrl} projectName={project?.name} />
           ) : tab === "coverage" ? (
             <CoverageOverview />
-          ) : tab !== "canvas" ? (
-            <EmptyState title={`${tabLabel} is coming soon`} body="This part of AppAtlas isn't available yet. Use Canvas to record and map your app." />
+          ) : tab === "reports" ? (
+            <ReportsView projectName={project?.name} />
           ) : recording ? (
             <RecordingView key={recording.id} client={client} initial={recording} onFinished={onRecordingDone} onSwitchViewer={switchViewer} onDiscarded={() => {
                 localStorage.removeItem(ACTIVE_SESSION_KEY);

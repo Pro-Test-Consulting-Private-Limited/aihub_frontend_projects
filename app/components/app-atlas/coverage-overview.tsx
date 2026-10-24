@@ -1,24 +1,47 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
-import { TbChevronDown, TbChevronRight } from "react-icons/tb";
-import { COVERAGE_PAGES, type PageGroup } from "@/app/lib/coverage-pages";
+import { Fragment, useMemo } from "react";
+import { COVERAGE_EPICS, type CoverageTicket } from "@/app/lib/coverage-tickets";
 
-const GROUPS: PageGroup[] = ["Public", "Customer", "Admin"];
 // Same bands as the legend: well covered 80-100, partial 40-79, low under 40.
 const band = (c: number) => (c >= 80 ? { name: "good", dot: "bg-[#22C55E]", bar: "bg-[#22C55E]", text: "text-[#16A34A]" } : c >= 40 ? { name: "partial", dot: "bg-[#EAB308]", bar: "bg-[#EAB308]", text: "text-[#CA8A04]" } : { name: "low", dot: "bg-[#EF4444]", bar: "bg-[#EF4444]", text: "text-[#DC2626]" });
 const qualityTone = (q: number) => (q >= 80 ? "text-[#16A34A]" : q >= 60 ? "text-[#CA8A04]" : "text-[#DC2626]");
+const avg = (xs: number[]) => Math.round(xs.reduce((n, x) => n + x, 0) / xs.length);
 
 const th = "px-4 py-3 text-left text-[11px] font-semibold tracking-[0.08em] text-[#5E6066] uppercase dark:text-[#9ca3af]";
 
+function Row({ t }: { t: CoverageTicket }) {
+  const b = band(t.coverage);
+  return (
+    <tr className="border-b border-[#EEE] hover:bg-[#F8F9FB] dark:border-[#1a1a1a] dark:hover:bg-[#101010]">
+      <td className="px-4 py-3 pl-8">
+        <div className="flex items-center gap-2 font-medium text-[#1F1F1F] dark:text-[#ededed]">
+          <i className={`h-2.5 w-2.5 shrink-0 rounded-full ${b.dot}`} />
+          <span className="shrink-0 text-[12px] font-semibold text-[#2563EB]">{t.key}</span>
+          <span className="truncate">{t.name}</span>
+        </div>
+      </td>
+      <td className="px-4 py-3 text-[#1F1F1F] dark:text-[#ededed]">{t.tests}</td>
+      <td className="px-4 py-3 font-semibold text-[#1F1F1F] dark:text-[#ededed]">{t.passed}</td>
+      <td className={`px-4 py-3 font-semibold ${t.tests - t.passed ? "text-[#DC2626]" : "text-[#7E7E7E]"}`}>{t.tests - t.passed}</td>
+      <td className="px-4 py-3">
+        <div className="w-[130px]">
+          <div className="h-[6px] overflow-hidden rounded-full bg-[#E5E7EB] dark:bg-[#2a2a2a]"><div className={`h-full ${b.bar}`} style={{ width: `${t.coverage}%` }} /></div>
+          <div className="mt-1 text-[10.5px] text-[#7E7E7E]">{t.coverage}%</div>
+        </div>
+      </td>
+      <td className={`px-4 py-3 font-semibold ${qualityTone(t.quality)}`}>{t.quality}/100</td>
+    </tr>
+  );
+}
+
 /**
- * Coverage per screen of the app under test: the screens and elements come from the Digital Wallet spec; the test figures are
- * sample data until pages are tested. Rows open to show the elements the spec lists on that page.
+ * Coverage per Jira epic and ticket of the Digital Wallet project (hardcoded). Figures are sample data until tests are run.
+ * Each epic row is a roll-up of its tickets.
  */
 export function CoverageOverview() {
-  const [open, setOpen] = useState<string | null>(null);
-  const overall = useMemo(() => Math.round(COVERAGE_PAGES.reduce((n, p) => n + p.coverage, 0) / COVERAGE_PAGES.length), []);
-  const objects = COVERAGE_PAGES.reduce((n, p) => n + p.elements.length, 0);
+  const tickets = useMemo(() => COVERAGE_EPICS.flatMap((e) => e.tickets), []);
+  const overall = useMemo(() => avg(tickets.map((t) => t.coverage)), [tickets]);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -32,12 +55,10 @@ export function CoverageOverview() {
       </header>
 
       <div className="min-h-0 flex-1 overflow-auto px-6 py-4">
-        <table className="w-full min-w-[860px] border-collapse text-[13px]">
+        <table className="w-full min-w-[760px] border-collapse text-[13px]">
           <thead>
             <tr className="border-b border-[#E5E7EB] dark:border-[#2a2a2a]">
-              <th className={th}>Screen</th>
-              <th className={th}>URL</th>
-              <th className={th}>Page objects</th>
+              <th className={th}>Epic / Ticket</th>
               <th className={th}>Tests</th>
               <th className={th}>Passed</th>
               <th className={th}>Failed</th>
@@ -46,57 +67,44 @@ export function CoverageOverview() {
             </tr>
           </thead>
           <tbody>
-            {GROUPS.map((g) => (
-              <Fragment key={g}>
-                <tr>
-                  <td colSpan={8} className="pt-4 pb-1.5 pl-4 text-[10.5px] font-semibold tracking-[0.1em] text-[#8664F2] uppercase">{g}</td>
-                </tr>
-                {COVERAGE_PAGES.filter((p) => p.group === g).map((p) => {
-                  const b = band(p.coverage);
-                  const isOpen = open === p.url;
-                  return (
-                    <Fragment key={p.url}>
-                      <tr className="cursor-pointer border-b border-[#EEE] hover:bg-[#F8F9FB] dark:border-[#1a1a1a] dark:hover:bg-[#101010]" onClick={() => setOpen(isOpen ? null : p.url)}>
-                        <td className="px-4 py-3">
-                          <button type="button" aria-expanded={isOpen} aria-label={`${isOpen ? "Hide" : "Show"} the elements of ${p.screen}`} className="flex items-center gap-2 text-left font-medium text-[#1F1F1F] dark:text-[#ededed]">
-                            {isOpen ? <TbChevronDown size={13} className="text-[#7E7E7E]" /> : <TbChevronRight size={13} className="text-[#7E7E7E]" />}
-                            <i className={`h-2.5 w-2.5 shrink-0 rounded-full ${b.dot}`} /> {p.screen}
-                          </button>
-                        </td>
-                        <td className="px-4 py-3 font-mono text-[12px] text-[#7E7E7E]">{p.url}</td>
-                        <td className="px-4 py-3 font-semibold text-[#2563EB]">{p.elements.length}</td>
-                        <td className="px-4 py-3 text-[#1F1F1F] dark:text-[#ededed]">{p.tests}</td>
-                        <td className="px-4 py-3 font-semibold text-[#1F1F1F] dark:text-[#ededed]">{p.passed}</td>
-                        <td className={`px-4 py-3 font-semibold ${p.tests - p.passed ? "text-[#DC2626]" : "text-[#7E7E7E]"}`}>{p.tests - p.passed}</td>
-                        <td className="px-4 py-3">
-                          <div className="w-[130px]">
-                            <div className="h-[6px] overflow-hidden rounded-full bg-[#E5E7EB] dark:bg-[#2a2a2a]"><div className={`h-full ${b.bar}`} style={{ width: `${p.coverage}%` }} /></div>
-                            <div className="mt-1 text-[10.5px] text-[#7E7E7E]">{p.coverage}%</div>
-                          </div>
-                        </td>
-                        <td className={`px-4 py-3 font-semibold ${qualityTone(p.quality)}`}>{p.quality}/100</td>
-                      </tr>
-                      {isOpen && (
-                        <tr className="border-b border-[#EEE] bg-[#F8F9FB] dark:border-[#1a1a1a] dark:bg-[#101010]">
-                          <td colSpan={8} className="px-10 py-3">
-                            <div className="mb-1.5 text-[10.5px] font-semibold tracking-wide text-[#5E6066] uppercase dark:text-[#9ca3af]">Elements on this page (from the spec)</div>
-                            <ul className="grid gap-x-8 gap-y-1 text-[12.5px] text-[#1F1F1F] sm:grid-cols-2 dark:text-[#ededed]">
-                              {p.elements.map((e) => (
-                                <li key={e} className="flex items-start gap-2"><span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-[#8664F2]" />{e}</li>
-                              ))}
-                            </ul>
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
-                  );
-                })}
-              </Fragment>
-            ))}
+            {COVERAGE_EPICS.map((e) => {
+              const tests = e.tickets.reduce((n, t) => n + t.tests, 0);
+              const passed = e.tickets.reduce((n, t) => n + t.passed, 0);
+              const cov = avg(e.tickets.map((t) => t.coverage));
+              const q = avg(e.tickets.map((t) => t.quality));
+              const b = band(cov);
+              return (
+                <Fragment key={e.key}>
+                  <tr className="border-b border-[#E6E1F5] bg-[#F4EFFE]/60 dark:border-[#2a2440] dark:bg-[#1e1a2e]/60">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2 font-semibold text-[#1F1F1F] dark:text-[#ededed]">
+                        <span className="h-[10px] w-[10px] shrink-0 rounded-[2px] bg-[#8664F2]" />
+                        <span className="shrink-0 text-[12px] text-[#8664F2]">{e.key}</span>
+                        <span className="truncate">{e.name}</span>
+                        <span className="shrink-0 text-[10.5px] font-medium text-[#7E7E7E]">{e.tickets.length} {e.tickets.length === 1 ? "ticket" : "tickets"}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 font-semibold text-[#1F1F1F] dark:text-[#ededed]">{tests}</td>
+                    <td className="px-4 py-3 font-semibold text-[#1F1F1F] dark:text-[#ededed]">{passed}</td>
+                    <td className={`px-4 py-3 font-semibold ${tests - passed ? "text-[#DC2626]" : "text-[#7E7E7E]"}`}>{tests - passed}</td>
+                    <td className="px-4 py-3">
+                      <div className="w-[130px]">
+                        <div className="h-[6px] overflow-hidden rounded-full bg-[#E5E7EB] dark:bg-[#2a2a2a]"><div className={`h-full ${b.bar}`} style={{ width: `${cov}%` }} /></div>
+                        <div className="mt-1 text-[10.5px] text-[#7E7E7E]">{cov}%</div>
+                      </div>
+                    </td>
+                    <td className={`px-4 py-3 font-semibold ${qualityTone(q)}`}>{q}/100</td>
+                  </tr>
+                  {e.tickets.map((t) => (
+                    <Row key={t.key} t={t} />
+                  ))}
+                </Fragment>
+              );
+            })}
           </tbody>
         </table>
         <p className="mt-4 text-[11.5px] text-[#7E7E7E]">
-          {COVERAGE_PAGES.length} screens · {objects} page objects, taken from the Digital Wallet specification. Tests, passed, coverage and quality are sample figures until these pages are tested.
+          {COVERAGE_EPICS.length} epics · {tickets.length} tickets, from the Digital Wallet Jira project (DW). Tests, passed, coverage and quality are sample figures until these tickets are tested.
         </p>
       </div>
     </div>

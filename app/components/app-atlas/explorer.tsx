@@ -6,6 +6,9 @@ import {
   TbChevronLeft,
   TbChevronRight,
   TbDeviceFloppy,
+  TbDeviceDesktop,
+  TbDeviceMobile,
+  TbDeviceTablet,
   TbDotsVertical,
   TbFolder,
   TbFolderFilled,
@@ -50,18 +53,27 @@ type Props = {
   onView: (view: "screens" | "api") => void;
 };
 
+const DEVICES = [
+  { id: "mobile", label: "Mobile", hint: "Phone viewport", icon: TbDeviceMobile },
+  { id: "tablet", label: "Tablet", hint: "Tablet viewport", icon: TbDeviceTablet },
+  { id: "desktop", label: "Desktop", hint: "Full browser window", icon: TbDeviceDesktop },
+] as const;
+
 export function Explorer(props: Props) {
   const { canvases, loading, selectedId, canvas } = props;
+  const [deviceOpen, setDeviceOpen] = useState(false);
+  // Only desktop can be picked for now: the other two cards look the same but ignore the click.
+  const [device, setDevice] = useState<(typeof DEVICES)[number]["id"]>("desktop");
   const [canvasesOpen, setCanvasesOpen] = useState(true);
   const [detailsOpen, setDetailsOpen] = useState(true);
   const [menuFor, setMenuFor] = useState<string | null>(null);
 
   return (
     <div className="flex h-full w-[270px] shrink-0 flex-col border-r border-[#EEE] bg-white dark:border-[#1a1a1a] dark:bg-[#0a0a0a]">
-      <div className="flex items-center justify-between border-b border-[#EEE] px-4 py-3 dark:border-[#1a1a1a]">
+      <div className="relative flex items-center justify-between border-b border-[#EEE] px-4 py-3 dark:border-[#1a1a1a]">
         <div className="text-[15px] font-medium text-[#1F1F1F] dark:text-[#ededed]">Explorer</div>
         <div className="flex items-center gap-1">
-          <button type="button" className={iconButton} title="New canvas: start recording" onClick={props.onNew} disabled={!props.canStart}>
+          <button type="button" className={iconButton} title="New canvas: choose a device" aria-haspopup="dialog" aria-expanded={deviceOpen} onClick={() => setDeviceOpen((o) => !o)} disabled={!props.canStart}>
             <TbPlus size={16} />
           </button>
           <button type="button" className={iconButton} title={props.canSave ? "Save execution" : "Nothing to save"} onClick={props.onSave} disabled={!props.canSave}>
@@ -74,6 +86,46 @@ export function Explorer(props: Props) {
             <TbChevronLeft size={16} />
           </button>
         </div>
+        {deviceOpen && (
+          <>
+            <div className="fixed inset-0 z-30" onClick={() => setDeviceOpen(false)} />
+            <div role="dialog" aria-label="Create canvas" className="absolute top-[52px] right-3 left-3 z-40 rounded-[10px] border border-[#E6E1F5] bg-white p-3 shadow-lg dark:border-[#2a2a2a] dark:bg-[#141414]">
+              <div className="mb-2 text-[12.5px] font-medium text-[#1F1F1F] dark:text-[#ededed]">Which device do you want to create the canvas for?</div>
+              <div className="grid grid-cols-3 gap-2">
+                {DEVICES.map(({ id, label, hint, icon: Icon }) => {
+                  const on = device === id;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      aria-pressed={on}
+                      title={hint}
+                      onClick={() => id === "desktop" && setDevice(id)}
+                      className={`flex flex-col items-center gap-1.5 rounded-[8px] border px-2 py-3 text-[11.5px] font-medium ${
+                        on
+                          ? "border-[#8664F2] bg-[#F2EBFB] text-[#8664F2] dark:bg-[#2a2440]"
+                          : "border-[#E5E7EB] text-[#1F1F1F] hover:border-[#C9B8F7] dark:border-[#2a2a2a] dark:text-[#ededed]"
+                      }`}
+                    >
+                      <Icon size={22} />
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setDeviceOpen(false);
+                  props.onNew();
+                }}
+                className="mt-3 w-full rounded-[8px] bg-[#8664F2] py-2 text-[12.5px] font-medium text-white hover:bg-[#7451e8]"
+              >
+                Create canvas
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto text-[12px]">
