@@ -1,5 +1,18 @@
 import { API_AGENT_BASE } from "@/app/config/urls";
-import type { EndpointDetail, EndpointsResponse, LintReport } from "@/app/interfaces/api-testing";
+import type {
+  AccountSpec,
+  DataRow,
+  IdentityReport,
+  IdentitySuggestionsResponse,
+  DependenciesResponse,
+  EndpointDetail,
+  EndpointsResponse,
+  GenerationResponse,
+  LintReport,
+  PrerequisiteSuggestion,
+  RunRequest,
+  RunResponse,
+} from "@/app/interfaces/api-testing";
 
 export class ApiAgentError extends Error {
   constructor(
@@ -37,4 +50,20 @@ export const apiAgent = {
   lint: (swaggerUrl: string, signal?: AbortSignal) => post<LintReport>("/api/specs/lint", { swaggerUrl }, signal),
   detail: (swaggerUrl: string, path: string, method: string, signal?: AbortSignal) =>
     post<EndpointDetail>("/api/endpoints/detail", { swaggerUrl, path, method }, signal),
+  /** Runs prerequisites, then the target tests, in one call. Secrets come back masked, except `session` (browser memory only). */
+  executeChain: (req: RunRequest, signal?: AbortSignal) => post<RunResponse>("/api/execute-chain", req, signal),
+  suggestPrerequisites: (swaggerUrl: string, path: string, method: string, signal?: AbortSignal) =>
+    post<{ suggestions: PrerequisiteSuggestion[] }>("/api/prerequisites/suggest", { swaggerUrl, path, method }, signal),
+  generateRows: (swaggerUrl: string, path: string, method: string, signal?: AbortSignal) =>
+    post<{ rows: DataRow[] }>("/api/test-data/rows", { swaggerUrl, path, method, valid: 1, invalid: 4 }, signal),
+  /** Which endpoints stand on their own and which need another call first. */
+  dependencies: (swaggerUrl: string, signal?: AbortSignal) => post<DependenciesResponse>("/api/endpoints/dependencies", { swaggerUrl }, signal),
+  /** Suggested accounts for a spec (customer, fresh customer, admin, verified customer, second user). Heuristics: the person edits them. */
+  suggestIdentities: (swaggerUrl: string, signal?: AbortSignal) => post<IdentitySuggestionsResponse>("/api/identities/suggest", { swaggerUrl }, signal),
+  /** Test login: gives every account a usable token (uses it, logs in, or registers). Tokens come back only inside `session`. */
+  checkIdentities: (req: { swaggerUrl: string; baseUrl: string; identities: AccountSpec[]; session?: Record<string, string> }, signal?: AbortSignal) =>
+    post<{ identities: IdentityReport[]; session: Record<string, string> }>("/api/identities/check", req, signal),
+  /** The existing scenario generator. useLlm false is instant and deterministic; true asks the model (can take a while). */
+  suggestScenarios: (swaggerUrl: string, path: string, method: string, useLlm: boolean, signal?: AbortSignal) =>
+    post<GenerationResponse>("/api/generate-from-swagger", { swaggerUrl, path, method, useLlm }, signal),
 };

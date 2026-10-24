@@ -7,7 +7,7 @@ import type { ApiModule, GateRow, LintReport, SpecEndpoint } from "@/app/interfa
 export const DEFAULT_PASS_SCORE = 75;
 export const UNTAGGED = "Untagged";
 
-type Loaded = { endpoints: SpecEndpoint[]; lint: LintReport };
+type Loaded = { endpoints: SpecEndpoint[]; lint: LintReport; serverUrl: string | null };
 export type ApiSpecState = {
   status: "idle" | "loading" | "ready" | "error";
   error: string | null;
@@ -36,7 +36,7 @@ export function useApiSpec(specUrl: string | null) {
     setState({ status: "loading", error: null, data: null });
     Promise.all([apiAgent.endpoints(specUrl, ctrl.signal), apiAgent.lint(specUrl, ctrl.signal)])
       .then(([eps, lint]) => {
-        const data = { endpoints: eps.endpoints, lint };
+        const data = { endpoints: eps.endpoints, lint, serverUrl: eps.serverUrl ?? null };
         cache.set(specUrl, data);
         setState({ status: "ready", error: null, data });
       })

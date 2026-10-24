@@ -9,10 +9,8 @@ import {
   TbChevronRight,
   TbHistory,
   TbLayoutGrid,
-  TbNetwork,
   TbReportSearch,
   TbShieldCheck,
-  TbBrandSpeedtest,
   TbWorld,
   TbListCheck,
 } from "react-icons/tb";
@@ -26,16 +24,16 @@ import { JiraPanel } from "./jira-panel";
 import { SaveExecutionModal } from "./save-execution-modal";
 import { RecordingView } from "./recording-view";
 import { ApiTestingView } from "./api-testing-view";
+import { CoverageOverview } from "./coverage-overview";
+import { SecurityOverview } from "./security-overview";
 import { useApiSpec, useApiSpecView } from "@/app/hooks/use-api-spec";
 import { clearCanvasSwagger, getCanvasSwagger, type CanvasSwagger } from "@/app/lib/canvas-swagger";
 
 const TABS = [
   { id: "canvas", label: "Canvas", icon: TbLayoutGrid },
-  { id: "api", label: "API Testing", icon: TbNetwork },
   { id: "sit", label: "SIT", icon: TbListCheck },
   { id: "coverage", label: "Coverage", icon: TbChartLine },
   { id: "security", label: "Security", icon: TbShieldCheck },
-  { id: "performance", label: "Performance", icon: TbBrandSpeedtest },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -470,15 +468,21 @@ export default function AtlasWorkspace() {
           <button
             type="button"
             onClick={() => setExplorerOpen(true)}
-            className="flex w-[28px] shrink-0 items-start justify-center border-r border-[#EEE] bg-white pt-3 text-[#5E6066] hover:text-[#8664F2] dark:border-[#1a1a1a] dark:bg-[#0a0a0a]"
+            className="flex w-[34px] shrink-0 flex-col items-center gap-4 border-r border-[#E1E3E8] bg-[#EEF0F3] pt-3 text-[#5E6066] transition-colors hover:bg-[#E6E8ED] hover:text-[#8664F2] dark:border-[#1f1f1f] dark:bg-[#161616] dark:hover:bg-[#1c1c1c]"
             title="Show explorer"
+            aria-label="Show explorer"
           >
             <TbChevronRight size={16} />
+            <span className="text-[10.5px] font-semibold tracking-[0.22em] uppercase [writing-mode:vertical-rl]">Explorer</span>
           </button>
         )}
 
         <div className="relative min-w-0 flex-1">
-          {tab !== "canvas" ? (
+          {tab === "security" ? (
+            <SecurityOverview targetUrl={appUrl} projectName={project?.name} />
+          ) : tab === "coverage" ? (
+            <CoverageOverview />
+          ) : tab !== "canvas" ? (
             <EmptyState title={`${tabLabel} is coming soon`} body="This part of AppAtlas isn't available yet. Use Canvas to record and map your app." />
           ) : recording ? (
             <RecordingView key={recording.id} client={client} initial={recording} onFinished={onRecordingDone} onSwitchViewer={switchViewer} onDiscarded={() => {

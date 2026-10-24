@@ -9,6 +9,7 @@ import type { Canvas, CanvasSummary, JiraProject } from "@/app/interfaces/appatl
 import type { AtlasClient } from "@/app/services/appatlas";
 import { useIntegrationStatus, type SwaggerStatus } from "@/app/hooks/use-integration-status";
 import { clearCanvasSwagger, setCanvasSwagger, type CanvasSwagger } from "@/app/lib/canvas-swagger";
+import { clearToken, getEnvironment, getToken, setEnvironment, setToken, validateBaseUrl } from "@/app/lib/api-testing/environment";
 import { Modal, fieldInput, fieldLabel, outlineButton, primaryButton } from "./modal";
 
 type AppId = "jira" | "linear" | "swagger" | "redocly" | "stoplight" | "teams" | "slack";
@@ -273,13 +274,26 @@ function SwaggerStep({
   onChange: (conn: CanvasSwagger | null) => void;
 }) {
   const specUrl = integration.specUrl;
+  // Where the tests are sent. The base URL is kept in this browser; the token only in memory.
+  const [baseUrl, setBaseUrl] = useState(() => (specUrl ? getEnvironment(specUrl).baseUrl : ""));
+  const [token, setTokenText] = useState(() => (specUrl ? getToken(specUrl) : ""));
+  const baseUrlError = baseUrl.trim() ? validateBaseUrl(baseUrl) : null;
+  useEffect(() => {
+    if (!specUrl) return;
+    const e = getEnvironment(specUrl);
+    setBaseUrl(e.baseUrl);
+    setTokenText(getToken(specUrl));
+  }, [specUrl]);
 
   const connect = () => {
-    if (!specUrl) return;
+    if (!specUrl || baseUrlError) return;
+    setEnvironment(specUrl, { baseUrl });
+    setToken(specUrl, token);
     onChange(setCanvasSwagger(canvas.id, { specUrl, title: integration.title }));
   };
 
   const disconnect = () => {
+    if (specUrl) clearToken(specUrl);
     clearCanvasSwagger(canvas.id);
     onChange(null);
   };
@@ -303,13 +317,44 @@ function SwaggerStep({
       <p className="mt-3 text-[12px] leading-relaxed text-[#7E7E7E]">
         Adds an API Testing view to this canvas: the spec&apos;s modules and a quality check for every endpoint. It works on its own and doesn&apos;t depend on the Jira connection.
       </p>
+      <div className="mt-4 space-y-3">
+        <div>
+          <label className={fieldLabel} htmlFor="swagger-base-url">
+            Base URL for testing
+          </label>
+          <input
+            id="swagger-base-url"
+            className={fieldInput}
+            value={baseUrl}
+            onChange={(e) => setBaseUrl(e.target.value)}
+            placeholder="https://staging.example.com/api"
+            autoComplete="off"
+          />
+          {baseUrlError && <p className="mt-1 text-[11.5px] text-[#DC2626]">{baseUrlError}</p>}
+        </div>
+        <div>
+          <label className={fieldLabel} htmlFor="swagger-token">
+            Bearer token (optional)
+          </label>
+          <input
+            id="swagger-token"
+            className={fieldInput}
+            type="password"
+            value={token}
+            onChange={(e) => setTokenText(e.target.value)}
+            placeholder="Paste a token, or log in with a prerequisite later"
+            autoComplete="new-password"
+          />
+          <p className="mt-1 text-[11.5px] text-[#7E7E7E]">Kept in memory only: never saved, and gone when you reload the page.</p>
+        </div>
+      </div>
       <div className="mt-5 flex justify-end gap-3">
         {current && (
           <button type="button" className={outlineButton} onClick={disconnect}>
             Disconnect
           </button>
         )}
-        <button type="button" className={primaryButton} onClick={connect} disabled={!specUrl}>
+        <button type="button" className={primaryButton} onClick={connect} disabled={!specUrl || !!baseUrlError}>
           {current ? "Reconnect" : "Connect"}
         </button>
       </div>
