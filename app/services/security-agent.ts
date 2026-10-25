@@ -59,11 +59,23 @@ export type SecurityRun = {
   /** Latest headed-browser JPEG as a data URL (polled with the run). */
   screenshot?: string | null;
   passwordsTried?: PasswordTry[];
+  guided?: {
+    lab?: string;
+    url?: string;
+    token?: string | null;
+    forged?: string;
+    flags?: Record<string, boolean>;
+    victimTxns?: { transactionId: string; label: string }[];
+    decoded?: { header?: unknown; payload?: unknown };
+    probe?: { status?: number; bodyPreview?: string };
+    stop?: boolean;
+  } | null;
   input?: {
     loginUrl?: string;
     identifier?: string;
     fields?: StuffingFields;
     maxAttempts?: number;
+    lab?: string;
   };
 };
 
@@ -140,4 +152,12 @@ export const securityAgent = {
       bodyPreview: string;
       body?: unknown;
     }>("/api/checks/http-probe", { method: "POST", body: JSON.stringify(body) }, signal),
+  startGuidedBrowser: (body: { loginUrl: string; lab: "jwt" | "idor"; headed?: boolean }, signal?: AbortSignal) =>
+    req<SecurityRun>("/api/checks/guided-browser/start", { method: "POST", body: JSON.stringify(body) }, signal),
+  guidedBrowserAction: (id: string, body: Record<string, unknown>, signal?: AbortSignal) =>
+    req<Record<string, unknown> & { run?: SecurityRun; header?: unknown; payload?: unknown; status?: number; bodyPreview?: string }>(
+      `/api/checks/guided-browser/${id}/action`,
+      { method: "POST", body: JSON.stringify(body) },
+      signal,
+    ),
 };
