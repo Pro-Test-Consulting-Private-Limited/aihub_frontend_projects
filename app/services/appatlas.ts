@@ -72,6 +72,11 @@ export function atlasClient({ instance, accounts }: Msal) {
       request<Canvas>(`/api/app-atlas/canvases/${canvasId}/jira`, json("POST", { projectKey, regenerate }), false, ""),
     disconnectJira: (canvasId: string) =>
       request<Canvas>(`/api/app-atlas/canvases/${canvasId}/jira`, json("DELETE"), false, ""),
+    /** Binds a swagger URL to the canvas; App Atlas builds/reuses the org-wide API chain. */
+    connectSwagger: (canvasId: string, body: { specUrl: string; title?: string | null; force?: boolean }) =>
+      request<Canvas>(`/api/app-atlas/canvases/${canvasId}/swagger`, json("POST", body), false, ""),
+    disconnectSwagger: (canvasId: string) =>
+      request<Canvas>(`/api/app-atlas/canvases/${canvasId}/swagger`, json("DELETE"), false, ""),
     /** Heartbeat: marks the caller present in `room` and returns everyone there. */
     presence: (room: string, leaving = false) =>
       request<{ users: PresenceUser[] }>("/presence", json("POST", { room, leaving })),

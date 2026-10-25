@@ -176,8 +176,17 @@ export type CanvasSummary = {
   pageObjects: number;
   thumbnailUrl: string | null;
   jiraProjectKey: string | null;
+  swaggerKey?: string | null;
   createdAt: number;
   updatedAt: number;
+};
+
+export type CanvasSwaggerBinding = {
+  specUrl: string;
+  title: string | null;
+  connectedAt: number;
+  swaggerKey: string;
+  specHash: string | null;
 };
 
 export type Canvas = CanvasSummary & {
@@ -188,6 +197,9 @@ export type Canvas = CanvasSummary & {
   jira: JiraMapping | null;
   /** One entry per Jira ticket mapped to a screen; filled in the background after connecting Jira. */
   clarifications?: CanvasClarification[];
+  swagger?: CanvasSwaggerBinding | null;
+  /** Present on App Atlas responses; org-wide API chain (not shown in product UI). */
+  swaggerChain?: unknown;
 };
 
 export type ClarificationQuestion = {

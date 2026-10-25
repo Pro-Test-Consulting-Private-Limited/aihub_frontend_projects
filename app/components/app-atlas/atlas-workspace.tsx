@@ -28,7 +28,7 @@ import { CoverageOverview } from "./coverage-overview";
 import { SecurityOverview } from "./security-overview";
 import { ReportsView } from "./reports-view";
 import { useApiSpec, useApiSpecView } from "@/app/hooks/use-api-spec";
-import { clearCanvasSwagger, getCanvasSwagger, type CanvasSwagger } from "@/app/lib/canvas-swagger";
+import { clearCanvasSwagger, getCanvasSwagger, setCanvasSwagger, type CanvasSwagger } from "@/app/lib/canvas-swagger";
 
 // "api" is not a page of its own: it opens the API Testing row of the selected canvas (Canvas tab, API view).
 const TABS = [
@@ -197,7 +197,25 @@ export default function AtlasWorkspace() {
       if (canvas?.id === id) return;
       setCanvas(null);
       try {
-        setCanvas(await client.getCanvas(id));
+        const full = await client.getCanvas(id);
+        setCanvas(full);
+        // Hydrate browser mirror from App Atlas (org-wide swagger binding); no reuse UI — just the connection.
+        if (full.swagger?.specUrl) {
+          setCanvasSwagger(id, {
+            specUrl: full.swagger.specUrl,
+            title: full.swagger.title,
+            connectedAt: full.swagger.connectedAt,
+            swaggerKey: full.swagger.swaggerKey,
+            specHash: full.swagger.specHash,
+          });
+          setSwagger({
+            specUrl: full.swagger.specUrl,
+            title: full.swagger.title,
+            connectedAt: full.swagger.connectedAt,
+            swaggerKey: full.swagger.swaggerKey,
+            specHash: full.swagger.specHash,
+          });
+        }
       } catch (err) {
         if (err instanceof AtlasError && err.status === 404) {
           setNotice("That canvas was deleted.");

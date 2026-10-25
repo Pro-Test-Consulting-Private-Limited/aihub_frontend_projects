@@ -171,9 +171,9 @@ export function AccountsSection({ specUrl, targetKey, baseUrl, runAs, onRunAs }:
   };
 
   const addOptions: [Draft["source"], string, string][] = [["token", "Paste a token / API key", "Fast. Cannot refresh."]];
-  if (canLogin) addOptions.push(["credentials", "Login credentials", "Refreshes itself."]);
-  if (canRegister) addOptions.push(["register", "Create a new account", "Calls register."]);
-  const kindLabel = (a: AccountSpec) => (a.source === "token" ? "pasted token" : a.source === "credentials" ? "login data" : "created by register") + (a.lifecycle === "disposable" ? " · new account every run" : "");
+  if (canLogin) addOptions.push(["credentials", "Existing login", "Uses the login API with your mobile/password (or whatever the spec asks for)."]);
+  if (canRegister) addOptions.push(["register", "Register a new account", "Calls register, then auth email if the spec needs it. Unique data every time — demo accounts are never deleted."]);
+  const kindLabel = (a: AccountSpec) => (a.source === "token" ? "pasted token" : a.source === "credentials" ? "existing login" : "created by register") + (a.lifecycle === "disposable" ? " · new account every run" : "");
   const issue = (id: string) => statuses.find((s) => s.id === id)?.error;
   const hasDefaultToken = !!getToken(specUrl);
 
@@ -185,7 +185,7 @@ export function AccountsSection({ specUrl, targetKey, baseUrl, runAs, onRunAs }:
           {!open && <span className="font-normal text-[#7E7E7E]">· runs as {runAs || (likelyAccount(specUrl, undefined, "")?.id ?? "default")}{missingRecommendedCount > 0 ? ` · ${missingRecommendedCount} recommended` : ""}</span>}
         </button>
         <div className="flex items-center gap-1.5">
-          <button type="button" className={`${outlineButton} !px-2.5 !py-1 !text-[11.5px]`} onClick={testLogin} disabled={busy !== null} title="Gives every account a usable token: uses it, logs in, or registers. No endpoint test is run.">
+          <button type="button" className={`${outlineButton} !px-2.5 !py-1 !text-[11.5px]`} onClick={testLogin} disabled={busy !== null} title="Gives every account a usable token: paste, existing login, or register (+ auth email when needed). No endpoint test is run.">
             {busy === "check" ? <TbLoader2 size={12} className="animate-spin" /> : <TbRefresh size={12} />} Test login
           </button>
           <div className="relative">
@@ -284,7 +284,7 @@ export function AccountsSection({ specUrl, targetKey, baseUrl, runAs, onRunAs }:
           )}
           {draft && (
             <div ref={formRef} className={`${box} space-y-2.5 px-3 py-3`}>
-              <div className={label}>{draft.source === "token" ? "Paste a token / API key" : draft.source === "credentials" ? "Login credentials" : "Create a new account"}</div>
+              <div className={label}>{draft.source === "token" ? "Paste a token / API key" : draft.source === "credentials" ? "Existing login credentials" : "Register a new account"}</div>
               <div className="flex flex-wrap items-center gap-2">
                 <input className={`${input} ${mono} !w-[150px]`} placeholder="name, e.g. admin" value={draft.id} onChange={(e) => setDraft({ ...draft, id: e.target.value.replace(/[^\w-]/g, "") })} aria-label="Account name" />
                 <input className={`${input} !w-[130px]`} list="account-roles" placeholder="role" value={draft.role} onChange={(e) => setDraft({ ...draft, role: e.target.value })} aria-label="Role" />
@@ -309,10 +309,11 @@ export function AccountsSection({ specUrl, targetKey, baseUrl, runAs, onRunAs }:
               )}
               {draft.source === "register" && (
                 <div className="text-[11.5px] text-[#7E7E7E]">
-                  {template?.registerStep ? `Calls ${template.registerStep.endpoint.method} ${template.registerStep.endpoint.path} with generated data and remembers what it sent, so the token can be refreshed by logging in.` : "Calls the spec's register endpoint with generated data."}
+                  {template?.registerStep ? `Calls ${template.registerStep.endpoint.method} ${template.registerStep.endpoint.path} with unique generated data (never reused — demo DBs keep accounts forever), remembers mobile/password, and later refreshes the token via login.` : "Calls the spec's register endpoint with unique generated data."}
+                  {canLogin ? " You can also add an account with Existing login if you already have credentials." : null}
                   {template?.readySteps?.length ? (
                     <label className="mt-1 flex items-center gap-1.5 text-[12px] text-[#5E6066] dark:text-[#9ca3af]">
-                      <input type="checkbox" checked={draft.ready} onChange={(e) => setDraft({ ...draft, ready: e.target.checked })} /> Then call {template.readySteps.map((r) => `${r.endpoint.method} ${r.endpoint.path}`).join(", ")} to make the account usable (a guess: check it with Test login)
+                      <input type="checkbox" checked={draft.ready} onChange={(e) => setDraft({ ...draft, ready: e.target.checked })} /> Then call {template.readySteps.map((r) => `${r.endpoint.method} ${r.endpoint.path}`).join(", ")} (auth email) so wallet/KYC APIs are not blocked by a placeholder email
                     </label>
                   ) : null}
                 </div>
