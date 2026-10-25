@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { securityAgent, SecurityAgentError, type SecurityRun } from "@/app/services/security-agent";
 
 type LabProps = {
@@ -11,8 +11,8 @@ type LabProps = {
 };
 
 /**
- * Human drives the headed Chromium window; center pane shows live screenshots.
- * Side controls only help (forge / pick victim id) — login & IDOR view happen on the live site.
+ * Human drives headed Chromium; this pane mirrors screenshots.
+ * Step 1 only completes after the first live frame arrives.
  */
 export function GuidedLiveLab({ loginUrl, lab, onEvent, onClose }: LabProps) {
   const [run, setRun] = useState<SecurityRun | null>(null);
@@ -22,10 +22,16 @@ export function GuidedLiveLab({ loginUrl, lab, onEvent, onClose }: LabProps) {
   const [passB, setPassB] = useState("");
   const [decoded, setDecoded] = useState("");
   const [probeOut, setProbeOut] = useState("");
+  const [pollErr, setPollErr] = useState<string | null>(null);
+  const startedFlag = useRef(false);
 
   const flags = run?.guided?.flags || {};
 
   useEffect(() => {
+    if ((flags.browser_ready || run?.screenshot) && !startedFlag.current) {
+      startedFlag.current = true;
+      onEvent("browser_started");
+    }
     if (flags.logged_in) onEvent("logged_in");
     if (flags.token_captured) onEvent("token_captured");
     if (flags.decoded) onEvent("decoded");
@@ -34,31 +40,42 @@ export function GuidedLiveLab({ loginUrl, lab, onEvent, onClose }: LabProps) {
     if (flags.verdict_ready) onEvent("verdict_ready");
     if (flags.victim_loaded) onEvent("victim_loaded");
     if (flags.idor_navigated) onEvent("idor_navigated");
-    if (flags.page_forbidden) onEvent("page_forbidden");
-    if (flags.page_txn_visible) onEvent("page_txn_visible");
     if (flags.idor_result) onEvent("idor_result");
-  }, [flags, onEvent]);
+  }, [flags, run?.screenshot, onEvent]);
 
   useEffect(() => {
-    if (!run || (run.status !== "queued" && run.status !== "running")) return;
-    const t = setInterval(async () => {
+    if (!run?.id) return;
+    if (run.status !== "queued" && run.status !== "running") return;
+    let cancelled = false;
+    const tick = async () => {
       try {
-        setRun(await securityAgent.getRun(run.id));
-      } catch {
-        /* ignore poll blip */
+        const next = await securityAgent.getRun(run.id);
+        if (!cancelled) {
+          setRun(next);
+          setPollErr(null);
+          if (next.error) setErr(next.error);
+        }
+      } catch (e) {
+        if (!cancelled) setPollErr(e instanceof Error ? e.message : "Poll failed");
       }
-    }, 900);
-    return () => clearInterval(t);
+    };
+    tick();
+    const t = setInterval(tick, 600);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
   }, [run?.id, run?.status]);
 
   const start = async () => {
     setBusy(true);
     setErr(null);
+    setPollErr(null);
+    startedFlag.current = false;
     try {
       if (!loginUrl) throw new Error("Application URL required on the project.");
       const next = await securityAgent.startGuidedBrowser({ loginUrl, lab, headed: true });
       setRun(next);
-      onEvent("browser_started");
     } catch (e) {
       setErr(e instanceof SecurityAgentError ? e.message : e instanceof Error ? e.message : "Start failed");
     } finally {
@@ -72,7 +89,7 @@ export function GuidedLiveLab({ loginUrl, lab, onEvent, onClose }: LabProps) {
     setErr(null);
     try {
       const out = await securityAgent.guidedBrowserAction(run.id, body);
-      if (out.run) setRun(out.run);
+      if (out.run) setRun(out.run as SecurityRun);
       if (body.type === "jwt_decode" && out.header) {
         setDecoded(JSON.stringify({ header: out.header, payload: out.payload }, null, 2));
       }
@@ -98,34 +115,54 @@ export function GuidedLiveLab({ loginUrl, lab, onEvent, onClose }: LabProps) {
   }, [run?.id, onClose]);
 
   const victimTxns = run?.guided?.victimTxns || [];
+  const lastSteps = (run?.steps || []).slice(-4);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      {/* Center: live site mirror */}
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[10px] border border-[#E6E1F5] bg-[#111] dark:border-[#2a2a2a]">
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#333] bg-[#1a1a1a] px-3 py-1.5 text-[11.5px] text-[#ccc]">
-          <span className="truncate font-mono">{run?.guided?.url || "Live browser — click Start, then use the Chromium window"}</span>
+          <span className="truncate font-mono">{run?.guided?.url || (run ? "Starting Chromium…" : "Not started")}</span>
           {run && (
             <button type="button" onClick={() => act({ type: "stop" })} className="shrink-0 text-[#f87171] underline">
               Stop browser
             </button>
           )}
         </div>
-        <div className="flex min-h-[420px] flex-1 items-center justify-center bg-[#0a0a0a] p-2">
+        <div className="flex min-h-[420px] flex-1 flex-col items-center justify-center bg-[#0a0a0a] p-2">
           {run?.screenshot ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={run.screenshot} alt="Live application" className="max-h-full max-w-full object-contain" />
           ) : (
-            <div className="max-w-md p-6 text-center text-[13px] text-[#9ca3af]">
-              {lab === "jwt"
-                ? "Start the live browser, then sign in on the Chromium window that opens. This pane mirrors that site — not a side-panel API toy."
-                : "Start the live browser, sign in as User A on Chromium. Then load User B’s txns here and open one in the live browser so the site itself shows the IDOR result."}
+            <div className="max-w-lg space-y-2 p-6 text-center text-[13px] text-[#9ca3af]">
+              {!run && (
+                <p>
+                  Click <strong className="text-[#ddd]">Start live browser</strong>. A Chromium window opens —{" "}
+                  <strong className="text-[#ddd]">sign in there</strong>. This pane mirrors that window.
+                </p>
+              )}
+              {run && !run.screenshot && (
+                <>
+                  <p className="text-[#fbbf24]">Waiting for first live frame…</p>
+                  <p>
+                    Look for a <strong className="text-[#ddd]">Chromium</strong> window on the taskbar (it may be behind Cursor). Sign in
+                    there once it opens.
+                  </p>
+                  {lastSteps.length > 0 && (
+                    <ul className="mt-2 space-y-1 text-left text-[11px] text-[#a3a3a3]">
+                      {lastSteps.map((s, i) => (
+                        <li key={`${s.at}-${i}`}>
+                          <span className="text-[#8664F2]">{s.kind}</span>: {s.message}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
             </div>
           )}
         </div>
       </div>
 
-      {/* Side controls */}
       <div className="shrink-0 space-y-2 rounded-[8px] border border-[#E6E1F5] bg-[#FAFAFA] p-2.5 dark:border-[#2a2a2a] dark:bg-[#1a1a1a]">
         <div className="text-[11.5px] font-semibold uppercase tracking-wide text-[#8664F2]">
           {lab === "jwt" ? "JWT — live site + forge tools" : "IDOR — live site + victim target"}
@@ -138,7 +175,8 @@ export function GuidedLiveLab({ loginUrl, lab, onEvent, onClose }: LabProps) {
         {run && lab === "jwt" && (
           <>
             <p className="text-[11px] text-[#7E7E7E]">
-              1) Sign in on the Chromium window. 2) When token is detected, Decode → Forge → Probe here.
+              Sign in on the <strong>Chromium</strong> window (not this panel). When the mirror shows dashboard and Decode enables, continue
+              here.
             </p>
             <div className="flex flex-wrap gap-1.5">
               <LabBtn onClick={() => act({ type: "jwt_decode" })} disabled={busy || !flags.token_captured}>
@@ -161,8 +199,8 @@ export function GuidedLiveLab({ loginUrl, lab, onEvent, onClose }: LabProps) {
         {run && lab === "idor" && (
           <>
             <p className="text-[11px] text-[#7E7E7E]">
-              Sign in as <strong>User A</strong> on Chromium. Then enter User B (has a txn) to load targets — opening a target navigates the{" "}
-              <strong>live site</strong> (watch the center).
+              Sign in as <strong>User A</strong> on Chromium. Then load User B’s txns and open one — the live site navigates (watch the
+              mirror).
             </p>
             <div className="grid grid-cols-2 gap-1.5">
               <TinyField label="User B mobile" value={mobileB} onChange={setMobileB} />
@@ -191,7 +229,7 @@ export function GuidedLiveLab({ loginUrl, lab, onEvent, onClose }: LabProps) {
             )}
           </>
         )}
-        {err && <p className="text-[11px] text-red-600">{err}</p>}
+        {(err || pollErr) && <p className="text-[11px] text-red-600">{err || pollErr}</p>}
         <button type="button" onClick={stop} className="text-[11px] text-[#7E7E7E] underline">
           Back to plan
         </button>

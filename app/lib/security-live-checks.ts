@@ -74,13 +74,13 @@ const JWT_GUIDED: GuidedProcedure = {
     {
       n: 1,
       title: "Start live browser",
-      does: "Click Start live browser — a Chromium window opens on the demo app.",
+      does: "Click Start live browser. Wait until the center pane shows the login page (Chromium may be behind Cursor — check the taskbar).",
       autoOn: "browser_started",
     },
     {
       n: 2,
       title: "Sign in on the live site",
-      does: "In the Chromium window, log in with a real demo account. Center pane must show the app after login.",
+      does: "In the Chromium window (not the center mirror), log in with a demo account. Center updates when login is detected.",
       autoOn: "logged_in",
     },
     {
@@ -123,13 +123,13 @@ const IDOR_GUIDED: GuidedProcedure = {
     {
       n: 1,
       title: "Start live browser",
-      does: "Click Start live browser.",
+      does: "Click Start live browser. Wait until the center pane mirrors the login page.",
       autoOn: "browser_started",
     },
     {
       n: 2,
       title: "Sign in as User A on the site",
-      does: "Log in as customer A in the Chromium window. Center must show the logged-in app.",
+      does: "Log in as customer A in the Chromium window (taskbar). Center mirrors after login.",
       autoOn: "logged_in",
     },
     {
