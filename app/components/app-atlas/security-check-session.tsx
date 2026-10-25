@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SecurityCheck } from "@/app/lib/security-checklist";
 import { appFrameUrl, guidedProcedureFor, type LiveKind } from "@/app/lib/security-live-checks";
+import { IdorLab, JwtLab } from "@/app/components/app-atlas/guided-labs";
 import {
   securityAgent,
   SecurityAgentError,
@@ -465,16 +466,40 @@ function GuidedSession({
 }) {
   const guide = guidedProcedureFor(checkName);
   const [doneSteps, setDoneSteps] = useState<Record<number, boolean>>({});
+  /** Manual override: once set, auto events won't flip this step. */
+  const [locked, setLocked] = useState<Record<number, boolean>>({});
+  const [liveHint, setLiveHint] = useState<string | null>(null);
+  const [frameSrc, setFrameSrc] = useState(() => appFrameUrl(loginUrl));
   const [notes, setNotes] = useState("");
   const [result, setResult] = useState<SecurityRun | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  useEffect(() => {
+    setFrameSrc(appFrameUrl(loginUrl));
+  }, [loginUrl]);
+
+  const onLabEvent = useCallback(
+    (event: string, detail?: string) => {
+      if (!guide) return;
+      if (detail) setLiveHint(detail);
+      for (const s of guide.steps) {
+        if (s.autoOn === event && !locked[s.n]) {
+          setDoneSteps((prev) => (prev[s.n] ? prev : { ...prev, [s.n]: true }));
+        }
+      }
+    },
+    [guide, locked],
+  );
+
   if (!guide) {
     return <div className="p-6 text-[13px] text-[#7E7E7E]">No guided procedure for this check yet.</div>;
   }
 
-  const toggleStep = (n: number) => setDoneSteps((prev) => ({ ...prev, [n]: !prev[n] }));
+  const toggleStep = (n: number) => {
+    setLocked((prev) => ({ ...prev, [n]: true }));
+    setDoneSteps((prev) => ({ ...prev, [n]: !prev[n] }));
+  };
 
   const submit = async (pass: boolean) => {
     setBusy(true);
@@ -484,7 +509,7 @@ function GuidedSession({
       const run = await securityAgent.submitEnumeration({
         loginUrl: loginUrl || undefined,
         sameMessage: pass,
-        notes: [notes.trim(), stepNotes].filter(Boolean).join("\n\n") || `${checkName}: ${pass ? "pass" : "fail"}`,
+        notes: [notes.trim(), stepNotes, liveHint ? `Lab: ${liveHint}` : ""].filter(Boolean).join("\n\n") || `${checkName}: ${pass ? "pass" : "fail"}`,
       });
       setResult(run);
     } catch (e) {
@@ -494,22 +519,22 @@ function GuidedSession({
     }
   };
 
-  const frameUrl = appFrameUrl(loginUrl);
   const recorded = Boolean(result?.result);
   const doneCount = guide.steps.filter((s) => doneSteps[s.n]).length;
+  const openUrl = frameSrc || appFrameUrl(loginUrl);
 
   return (
     <div className="flex min-h-0 flex-1 gap-4 p-4">
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[10px] border border-[#E6E1F5] bg-white dark:border-[#2a2a2a] dark:bg-[#141414]">
-        {frameUrl ? (
+        {openUrl ? (
           <>
             <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#EEE] bg-[#FAFAFA] px-3 py-1.5 text-[11.5px] text-[#5E6066] dark:border-[#1a1a1a] dark:bg-[#1a1a1a] dark:text-[#9ca3af]">
-              <span className="truncate font-mono">{frameUrl}</span>
-              <a href={frameUrl} target="_blank" rel="noreferrer" className="shrink-0 font-medium text-[#8664F2] underline hover:no-underline">
+              <span className="truncate font-mono">{openUrl}</span>
+              <a href={openUrl} target="_blank" rel="noreferrer" className="shrink-0 font-medium text-[#8664F2] underline hover:no-underline">
                 Open in new tab
               </a>
             </div>
-            <iframe title="Application under test" src={frameUrl} className="h-full min-h-[420px] w-full flex-1 bg-white" />
+            <iframe title="Application under test" src={openUrl} className="h-full min-h-[420px] w-full flex-1 bg-white" />
           </>
         ) : (
           <div className="flex flex-1 items-center justify-center p-8 text-center text-[13px] text-[#7E7E7E]">
@@ -517,11 +542,16 @@ function GuidedSession({
           </div>
         )}
       </div>
-      <aside className="flex w-[360px] shrink-0 min-h-0 flex-col overflow-hidden rounded-[10px] border border-[#E5E7EB] bg-white dark:border-[#2a2a2a] dark:bg-[#121212]">
+      <aside className="flex w-[400px] shrink-0 min-h-0 flex-col overflow-hidden rounded-[10px] border border-[#E5E7EB] bg-white dark:border-[#2a2a2a] dark:bg-[#121212]">
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3">
           <p className="text-[12px] font-medium text-[#1F1F1F] dark:text-[#ededed]">{guide.plainStory}</p>
+          {guide.lab === "jwt" && <JwtLab loginUrl={loginUrl} onEvent={onLabEvent} />}
+          {guide.lab === "idor" && (
+            <IdorLab loginUrl={loginUrl} onEvent={onLabEvent} onNavigateFrame={(url) => setFrameSrc(url)} />
+          )}
           <p className="text-[11px] text-[#7E7E7E]">
-            Steps done: {doneCount}/{guide.steps.length} (click Done to toggle — you can override)
+            Steps done: {doneCount}/{guide.steps.length}
+            {liveHint ? ` · ${liveHint}` : ""} — lab actions tick steps; Done overrides
           </p>
           <ol className="space-y-2">
             {guide.steps.map((s) => {
@@ -529,7 +559,7 @@ function GuidedSession({
               return (
                 <li
                   key={s.n}
-                  className={`rounded-[6px] border px-3 py-2 ${
+                  className={`rounded-[6px] border px-3 py-2 transition-colors ${
                     on ? "border-[#16A34A] bg-[#F0FDF4] dark:bg-[#0f2418]" : "border-[#E5E7EB] bg-[#FAFAFA] dark:border-[#2a2a2a] dark:bg-[#1a1a1a]"
                   }`}
                 >
@@ -537,6 +567,7 @@ function GuidedSession({
                     <div className="min-w-0">
                       <div className="text-[12.5px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">
                         {s.n}. {s.title}
+                        {on && <span className="ml-1.5 text-[10px] font-medium text-[#16A34A]">live</span>}
                       </div>
                       <div className="mt-0.5 text-[12px] leading-snug text-[#5E6066] dark:text-[#9ca3af]">{s.does}</div>
                     </div>
@@ -554,6 +585,11 @@ function GuidedSession({
               );
             })}
           </ol>
+          <p className="text-[11px] text-[#9CA3AF]">
+            Pass when: {guide.passWhen}
+            <br />
+            Fail when: {guide.failWhen}
+          </p>
           {!recorded && (
             <>
               <textarea
@@ -601,6 +637,8 @@ function GuidedSession({
                 onClick={() => {
                   setResult(null);
                   setDoneSteps({});
+                  setLocked({});
+                  setLiveHint(null);
                 }}
                 className="rounded-[6px] border px-3 py-1.5 text-[12px]"
               >

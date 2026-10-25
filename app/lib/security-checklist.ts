@@ -154,8 +154,8 @@ export const SECURITY_CATEGORIES: SecurityCategory[] = [
     "id": "authorization-and-access-control",
     "name": "Authorization & Access Control",
     "covers": "Ensures each user can only reach the data and functions their role allows; blocks privilege escalation and IDOR.",
-    "automated": 4,
-    "guided": 7,
+    "automated": 3,
+    "guided": 8,
     "itemised": true,
     "brief": "5.3 · ASVS Ch.4",
     "note": null,
@@ -168,7 +168,7 @@ export const SECURITY_CATEGORIES: SecurityCategory[] = [
       {
         "name": "IDOR probes",
         "does": "Swaps object IDs in URLs/API params and checks for unauthorised data.",
-        "mode": "automated"
+        "mode": "guided"
       },
       {
         "name": "Horizontal privilege escalation",

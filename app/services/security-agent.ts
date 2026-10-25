@@ -123,4 +123,14 @@ export const securityAgent = {
       { method: "POST", body: JSON.stringify(body) },
       signal,
     ),
+  /** Guided lab: SSRF-safe GET/POST with Bearer token against the app under test. */
+  httpProbe: (
+    body: { url: string; authorization: string; method?: "GET" | "POST" },
+    signal?: AbortSignal,
+  ) =>
+    req<{ ok: boolean; status: number; statusText: string; bodyPreview: string }>(
+      "/api/checks/http-probe",
+      { method: "POST", body: JSON.stringify(body) },
+      signal,
+    ),
 };
