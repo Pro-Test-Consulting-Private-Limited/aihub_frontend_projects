@@ -17,8 +17,17 @@ export type SecurityRunStep = {
   message: string;
   attempt?: number;
   total?: number;
+  /** Cleartext for authorized KT runs */
+  password?: string;
   hint?: string;
   detail?: string[];
+};
+
+export type PasswordTry = {
+  attempt: number;
+  password: string;
+  outcome: "trying" | "failed" | "success" | "blocked" | "error" | string;
+  at?: number;
 };
 
 export type SecurityRun = {
@@ -41,12 +50,15 @@ export type SecurityRun = {
     attempts?: number;
     reason?: string;
     summary?: string;
+    matchedPassword?: string | null;
+    lastPassword?: string | null;
     sameMessage?: boolean;
     notes?: string | null;
   } | null;
   error: string | null;
   /** Latest headed-browser JPEG as a data URL (polled with the run). */
   screenshot?: string | null;
+  passwordsTried?: PasswordTry[];
   input?: {
     loginUrl?: string;
     identifier?: string;
@@ -99,6 +111,15 @@ export const securityAgent = {
   ) =>
     req<SecurityRun>(
       "/api/checks/username-enumeration",
+      { method: "POST", body: JSON.stringify(body) },
+      signal,
+    ),
+  startUsernameEnumeration: (
+    body: { loginUrl: string; validIdentifier: string; invalidIdentifier?: string; headed?: boolean },
+    signal?: AbortSignal,
+  ) =>
+    req<SecurityRun>(
+      "/api/checks/username-enumeration/run",
       { method: "POST", body: JSON.stringify(body) },
       signal,
     ),

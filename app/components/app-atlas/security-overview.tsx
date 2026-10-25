@@ -52,6 +52,7 @@ export function SecurityOverview({
   const [selectedId, setSelectedId] = useState(SECURITY_CATEGORIES[0].id);
   const [filter, setFilter] = useState<"all" | CheckMode>("all");
   const [liveEnabled, setLiveEnabled] = useState(true);
+  const [checkEnabled, setCheckEnabled] = useState<Record<string, boolean>>({});
   const [active, setActive] = useState<{ check: SecurityCheck; kind: LiveKind } | null>(null);
 
   useEffect(() => {
@@ -62,6 +63,7 @@ export function SecurityOverview({
         if (cancelled) return;
         // Older backends omit the flag — keep live on until logs can turn it off.
         setLiveEnabled(typeof s.securityLiveChecks === "boolean" ? s.securityLiveChecks : true);
+        setCheckEnabled(s.securityCheckEnabled && typeof s.securityCheckEnabled === "object" ? s.securityCheckEnabled : {});
       })
       .catch(() => {
         /* keep default; backend may be older without the flag */
@@ -193,7 +195,7 @@ export function SecurityOverview({
 
           <ul className="mt-3 divide-y divide-[#EEE] dark:divide-[#1a1a1a]">
             {visible.map((c) => {
-              const runnable = isLiveRunnable(c, liveEnabled);
+              const runnable = isLiveRunnable(c, liveEnabled, checkEnabled);
               const kind = liveKindFor(c);
               const row = (
                 <>
