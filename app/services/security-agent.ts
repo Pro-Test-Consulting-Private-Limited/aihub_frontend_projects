@@ -45,6 +45,8 @@ export type SecurityRun = {
     notes?: string | null;
   } | null;
   error: string | null;
+  /** Latest headed-browser JPEG as a data URL (polled with the run). */
+  screenshot?: string | null;
   input?: {
     loginUrl?: string;
     identifier?: string;

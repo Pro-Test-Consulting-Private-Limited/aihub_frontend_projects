@@ -87,6 +87,9 @@ export function atlasClient({ instance, accounts }: Msal) {
     /** Owner only; stored per canvas and ticket in App Atlas, never sent to Jira. */
     saveTicketNote: (canvasId: string, issueKey: string, text: string) =>
       request<TicketNote>(`/canvases/${canvasId}/notes/${encodeURIComponent(issueKey)}`, json("PUT", { text })),
+    /** Org settings from the logs dashboard (e.g. live Security checks on/off). */
+    getSettings: () =>
+      request<{ notesCarryOver: boolean; notesWithoutQuestions: boolean; securityLiveChecks: boolean }>("/settings"),
     /** EventSource can't send headers, so the token goes in the query string. */
     openEvents: async (id: string) => {
       const token = await getFreshIdToken(instance, accounts);

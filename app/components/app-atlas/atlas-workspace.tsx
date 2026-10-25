@@ -526,7 +526,7 @@ export default function AtlasWorkspace() {
 
         <div className="relative min-w-0 flex-1">
           {tab === "security" ? (
-            <SecurityOverview targetUrl={appUrl} projectName={project?.name} />
+            <SecurityOverview targetUrl={appUrl} projectName={project?.name} client={client} />
           ) : tab === "coverage" ? (
             <CoverageOverview />
           ) : tab === "reports" ? (

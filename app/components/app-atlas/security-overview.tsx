@@ -1,15 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { TbDeviceMobile, TbServer } from "react-icons/tb";
-import { SECURITY_CATEGORIES, type CheckMode, type SecurityCategory } from "@/app/lib/security-checklist";
-import { SecurityShowcase } from "./security-showcase";
+import { SECURITY_CATEGORIES, type CheckMode, type SecurityCategory, type SecurityCheck } from "@/app/lib/security-checklist";
+import { isLiveRunnable, liveKindFor, type LiveKind } from "@/app/lib/security-live-checks";
+import type { AtlasClient } from "@/app/services/appatlas";
+import { SecurityCheckSession } from "./security-check-session";
 
 const AUTO = "text-[#16A34A] border-[#16A34A] bg-[#F0FDF4] dark:bg-[#0f2418]";
 const GUIDED = "text-[#D97706] border-[#D97706] bg-[#FFFBEB] dark:bg-[#2a2008]";
 const pct = (n: number, total: number) => (total ? Math.round((n / total) * 100) : 0);
 
-/** One bar split into automated (green) and guided (amber). */
 function SplitBar({ automated, guided, height = 6 }: { automated: number; guided: number; height?: number }) {
   const total = automated + guided;
   return (
@@ -30,16 +31,45 @@ function Stat({ value, label, tone }: { value: string | number; label: string; t
 }
 
 const ModeBadge = ({ mode }: { mode: CheckMode }) => (
-  <span className={`shrink-0 rounded-[4px] border px-2 py-0.5 text-[10.5px] font-bold tracking-wide ${mode === "automated" ? AUTO : GUIDED}`}>{mode === "automated" ? "AUTOMATED" : "GUIDED"}</span>
+  <span className={`shrink-0 rounded-[4px] border px-2 py-0.5 text-[10.5px] font-bold tracking-wide ${mode === "automated" ? AUTO : GUIDED}`}>
+    {mode === "automated" ? "AUTOMATED" : "GUIDED"}
+  </span>
 );
 
 /**
- * The security plan for the application under test: the categories, how many checks each has, and how many are automated
- * and how many are guided. Authentication Security also hosts the live Security Test Agent showcase (stuffing + enumeration).
+ * Security plan. When logs dashboard has "Live Security checks" on, runnable rows open a canvas-style session
+ * (headed stuffing for automated brute-force/stuffing; guided procedures for guided rows). Off = static list only.
  */
-export function SecurityOverview({ targetUrl, projectName }: { targetUrl?: string | null; projectName?: string | null }) {
+export function SecurityOverview({
+  targetUrl,
+  projectName,
+  client,
+}: {
+  targetUrl?: string | null;
+  projectName?: string | null;
+  client: AtlasClient;
+}) {
   const [selectedId, setSelectedId] = useState(SECURITY_CATEGORIES[0].id);
   const [filter, setFilter] = useState<"all" | CheckMode>("all");
+  const [liveEnabled, setLiveEnabled] = useState(true);
+  const [active, setActive] = useState<{ check: SecurityCheck; kind: LiveKind } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    client
+      .getSettings()
+      .then((s) => {
+        if (cancelled) return;
+        // Older backends omit the flag — keep live on until logs can turn it off.
+        setLiveEnabled(typeof s.securityLiveChecks === "boolean" ? s.securityLiveChecks : true);
+      })
+      .catch(() => {
+        /* keep default; backend may be older without the flag */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
 
   const totals = useMemo(() => {
     const automated = SECURITY_CATEGORIES.reduce((n, c) => n + c.automated, 0);
@@ -53,6 +83,17 @@ export function SecurityOverview({ targetUrl, projectName }: { targetUrl?: strin
       {text}
     </button>
   );
+
+  if (active) {
+    return (
+      <SecurityCheckSession
+        check={active.check}
+        kind={active.kind}
+        targetUrl={targetUrl}
+        onClose={() => setActive(null)}
+      />
+    );
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -70,6 +111,11 @@ export function SecurityOverview({ targetUrl, projectName }: { targetUrl?: strin
                 "No Application URL set for this project yet. Add one in the project setup to tie this plan to your app."
               )}
             </p>
+            {liveEnabled ? (
+              <p className="mt-1 text-[11.5px] text-[#8664F2]">Live checks on — click a runnable row to open a session. Toggle from the logs dashboard.</p>
+            ) : (
+              <p className="mt-1 text-[11.5px] text-[#7E7E7E]">Static plan only. Enable “Live Security checks” on the logs dashboard to run headed / guided sessions.</p>
+            )}
           </div>
           <div className="flex flex-wrap gap-2">
             <Stat value={SECURITY_CATEGORIES.length} label="categories" />
@@ -80,7 +126,7 @@ export function SecurityOverview({ targetUrl, projectName }: { targetUrl?: strin
         </div>
         <div className="mt-3 max-w-[720px]">
           <SplitBar automated={totals.automated} guided={totals.guided} height={8} />
-          <p className="mt-1.5 text-[11.5px] text-[#7E7E7E]">Automated checks run by themselves. For a guided check, the tester follows a step-by-step procedure in the platform.</p>
+          <p className="mt-1.5 text-[11.5px] text-[#7E7E7E]">Automated checks run headed in the Security agent. Guided checks are step-by-step procedures you complete and record.</p>
         </div>
       </header>
 
@@ -90,7 +136,10 @@ export function SecurityOverview({ targetUrl, projectName }: { targetUrl?: strin
             <button
               key={c.id}
               type="button"
-              onClick={() => { setSelectedId(c.id); setFilter("all"); }}
+              onClick={() => {
+                setSelectedId(c.id);
+                setFilter("all");
+              }}
               aria-current={c.id === selected.id}
               className={`block w-full px-4 py-2.5 text-left ${c.id === selected.id ? "bg-[#F2EBFB] dark:bg-[#2a2440]" : "hover:bg-[#F5F6F6] dark:hover:bg-[#141414]"}`}
             >
@@ -99,8 +148,12 @@ export function SecurityOverview({ targetUrl, projectName }: { targetUrl?: strin
                 <span className="shrink-0 rounded-full bg-[#F5F6F6] px-2 py-0.5 text-[11px] text-[#5E6066] dark:bg-[#1a1a1a] dark:text-[#9ca3af]">{c.automated + c.guided}</span>
               </div>
               <div className="mt-1.5 flex items-center gap-2">
-                <div className="flex-1"><SplitBar automated={c.automated} guided={c.guided} height={4} /></div>
-                <span className="shrink-0 text-[10.5px] text-[#7E7E7E]"><span className="text-[#16A34A]">{c.automated} auto</span> · <span className="text-[#D97706]">{c.guided} guided</span></span>
+                <div className="flex-1">
+                  <SplitBar automated={c.automated} guided={c.guided} height={4} />
+                </div>
+                <span className="shrink-0 text-[10.5px] text-[#7E7E7E]">
+                  <span className="text-[#16A34A]">{c.automated} auto</span> · <span className="text-[#D97706]">{c.guided} guided</span>
+                </span>
               </div>
             </button>
           ))}
@@ -132,8 +185,6 @@ export function SecurityOverview({ targetUrl, projectName }: { targetUrl?: strin
             {selected.itemised && chip("guided", `Guided (${selected.guided})`, GUIDED)}
           </div>
 
-          {selected.id === "authentication-security" && <div className="mt-4"><SecurityShowcase targetUrl={targetUrl} /></div>}
-
           {!selected.itemised && (
             <p className="mt-3 rounded-[8px] bg-[#F5F6F6] px-3 py-2 text-[12px] text-[#5E6066] dark:bg-[#141414] dark:text-[#9ca3af]">
               The AppAtlas brief gives only totals for this category: {selected.automated} automated and {selected.guided} guided. It doesn&apos;t say which check is which, so the checks below show no mode yet.
@@ -141,20 +192,41 @@ export function SecurityOverview({ targetUrl, projectName }: { targetUrl?: strin
           )}
 
           <ul className="mt-3 divide-y divide-[#EEE] dark:divide-[#1a1a1a]">
-            {visible.map((c) => (
-              <li key={c.name} className="flex items-start gap-3 py-2.5">
-                <span className="mt-1 h-3.5 w-3.5 shrink-0 rounded-[3px] border border-[#D9D9D9] dark:border-[#3a3a3a]" aria-hidden />
-                <div className="min-w-0 flex-1">
-                  <div className="text-[13px] text-[#1F1F1F] dark:text-[#ededed]">{c.name}</div>
-                  <div className="mt-0.5 text-[12px] text-[#7E7E7E]">{c.does}</div>
-                </div>
-                {c.mode ? <ModeBadge mode={c.mode} /> : <span className="shrink-0 text-[10.5px] text-[#9CA3AF]">not itemised</span>}
-              </li>
-            ))}
+            {visible.map((c) => {
+              const runnable = isLiveRunnable(c, liveEnabled);
+              const kind = liveKindFor(c);
+              const row = (
+                <>
+                  <span className="mt-1 h-3.5 w-3.5 shrink-0 rounded-[3px] border border-[#D9D9D9] dark:border-[#3a3a3a]" aria-hidden />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[13px] text-[#1F1F1F] dark:text-[#ededed]">
+                      {c.name}
+                      {runnable && <span className="ml-2 text-[10.5px] font-medium text-[#8664F2]">Open session</span>}
+                    </div>
+                    <div className="mt-0.5 text-[12px] text-[#7E7E7E]">{c.does}</div>
+                  </div>
+                  {c.mode ? <ModeBadge mode={c.mode} /> : <span className="shrink-0 text-[10.5px] text-[#9CA3AF]">not itemised</span>}
+                </>
+              );
+              return (
+                <li key={c.name}>
+                  {runnable && kind ? (
+                    <button
+                      type="button"
+                      onClick={() => setActive({ check: c, kind })}
+                      className="flex w-full items-start gap-3 py-2.5 text-left hover:bg-[#F5F6F6] dark:hover:bg-[#141414]"
+                    >
+                      {row}
+                    </button>
+                  ) : (
+                    <div className="flex items-start gap-3 py-2.5">{row}</div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </section>
       </div>
-
     </div>
   );
 }
