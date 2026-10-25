@@ -66,15 +66,15 @@ export type GuidedProcedure = {
 const JWT_GUIDED: GuidedProcedure = {
   title: "JWT signature validation & algorithm confusion",
   whatThisIs:
-    "Complex guided check on the live site: Start live browser → sign in on the Chromium window (center mirrors it) → when your session is detected, Decode / Forge / Probe. Steps tick from the live site + your forge clicks. Pass if the forged token is rejected.",
-  plainStory: "You drive the live website in Chromium. Center pane is that site. Steps update from what happens there.",
+    "JWT signature validation & algorithm confusion means: after login the app gives you a signed token (JWT). Attackers try to strip or swap the signature (e.g. set alg to none) so the server accepts a forged identity. This guided check has you sign in on the live site, decode the real token, forge alg:none, and probe /auth/me. Pass if the forged token is rejected.",
+  plainStory: "Live browser opens with the session. Sign in on Chromium; center mirrors it. Steps tick as you go.",
   showAppFrame: true,
   lab: "jwt",
   steps: [
     {
       n: 1,
-      title: "Start live browser",
-      does: "Click Start live browser. Wait until the center pane shows the login page (Chromium may be behind Cursor — check the taskbar).",
+      title: "Live browser ready",
+      does: "Wait until the center pane shows the login page (Chromium may be behind this window — check the taskbar).",
       autoOn: "browser_started",
     },
     {
@@ -115,15 +115,15 @@ const JWT_GUIDED: GuidedProcedure = {
 const IDOR_GUIDED: GuidedProcedure = {
   title: "IDOR probes",
   whatThisIs:
-    "Complex guided check on the live site: sign in as User A in Chromium (center mirrors it), load User B’s transaction ids, open one in the live browser while still A — watch whether the website blocks it. Steps tick from the live site.",
-  plainStory: "You use the real website in Chromium. Opening a victim id navigates that live site — center pane shows the result.",
+    "IDOR (Insecure Direct Object Reference) means: can User A open User B’s data just by changing an id in the URL/API? This guided check signs you in as A on the live site, opens B’s transaction id while still A, and watches whether the app blocks it. Pass if the live site refuses; fail if B’s receipt appears.",
+  plainStory: "Live browser opens with the session. Sign in as A on Chromium; open B’s txn on the live site.",
   showAppFrame: true,
   lab: "idor",
   steps: [
     {
       n: 1,
-      title: "Start live browser",
-      does: "Click Start live browser. Wait until the center pane mirrors the login page.",
+      title: "Live browser ready",
+      does: "Wait until the center pane mirrors the login page (Chromium may be on the taskbar).",
       autoOn: "browser_started",
     },
     {

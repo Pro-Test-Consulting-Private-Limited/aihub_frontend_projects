@@ -29,6 +29,7 @@ export function GuidedLiveLab({ loginUrl, lab, onEvent, onClose, onOutcome }: La
   const startedFlag = useRef(false);
   const runIdRef = useRef<string | null>(null);
   const outcomeSent = useRef(false);
+  const autoStarted = useRef(false);
 
   const flags = run?.guided?.flags || {};
 
@@ -94,7 +95,7 @@ export function GuidedLiveLab({ loginUrl, lab, onEvent, onClose, onOutcome }: La
     };
   }, [run?.id, run?.status]);
 
-  const start = async () => {
+  const start = useCallback(async () => {
     setBusy(true);
     setErr(null);
     setPollErr(null);
@@ -110,7 +111,14 @@ export function GuidedLiveLab({ loginUrl, lab, onEvent, onClose, onOutcome }: La
     } finally {
       setBusy(false);
     }
-  };
+  }, [loginUrl, lab]);
+
+  // Open like automated sessions — no separate Start button.
+  useEffect(() => {
+    if (autoStarted.current || !loginUrl) return;
+    autoStarted.current = true;
+    void start();
+  }, [loginUrl, start]);
 
   const act = async (body: Record<string, unknown>) => {
     if (!run) return;
@@ -170,7 +178,7 @@ export function GuidedLiveLab({ loginUrl, lab, onEvent, onClose, onOutcome }: La
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[10px] border border-[#E6E1F5] bg-[#111] dark:border-[#2a2a2a]">
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#333] bg-[#1a1a1a] px-3 py-1.5 text-[11.5px] text-[#ccc]">
-          <span className="truncate font-mono">{run?.guided?.url || (run ? "Starting Chromium…" : "Not started")}</span>
+          <span className="truncate font-mono">{run?.guided?.url || (busy || run ? "Opening live browser…" : "Preparing…")}</span>
           {run && (
             <button type="button" onClick={() => act({ type: "stop" })} className="shrink-0 text-[#f87171] underline">
               Stop browser
@@ -183,30 +191,21 @@ export function GuidedLiveLab({ loginUrl, lab, onEvent, onClose, onOutcome }: La
             <img src={run.screenshot} alt="Live application" className="max-h-full max-w-full object-contain" />
           ) : (
             <div className="max-w-lg space-y-2 p-6 text-center text-[13px] text-[#9ca3af]">
-              {!run && (
-                <p>
-                  Click <strong className="text-[#ddd]">Start live browser</strong>. A Chromium window opens —{" "}
-                  <strong className="text-[#ddd]">sign in there</strong>. This pane mirrors that window.
-                </p>
+              <p className="text-[#fbbf24]">Opening live browser…</p>
+              <p>
+                A <strong className="text-[#ddd]">Chromium</strong> window opens with this session — sign in{" "}
+                <strong className="text-[#ddd]">there</strong>. This pane mirrors it (check the taskbar if you don’t see it).
+              </p>
+              {lastSteps.length > 0 && (
+                <ul className="mt-2 space-y-1 text-left text-[11px] text-[#a3a3a3]">
+                  {lastSteps.map((s, i) => (
+                    <li key={`${s.at}-${i}`}>
+                      <span className="text-[#8664F2]">{s.kind}</span>: {s.message}
+                    </li>
+                  ))}
+                </ul>
               )}
-              {run && !run.screenshot && (
-                <>
-                  <p className="text-[#fbbf24]">Waiting for first live frame…</p>
-                  <p>
-                    Look for a <strong className="text-[#ddd]">Chromium</strong> window on the taskbar (it may be behind Cursor). Sign in
-                    there once it opens.
-                  </p>
-                  {lastSteps.length > 0 && (
-                    <ul className="mt-2 space-y-1 text-left text-[11px] text-[#a3a3a3]">
-                      {lastSteps.map((s, i) => (
-                        <li key={`${s.at}-${i}`}>
-                          <span className="text-[#8664F2]">{s.kind}</span>: {s.message}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </>
-              )}
+              {(err || pollErr) && <p className="text-[11px] text-red-400">{err || pollErr}</p>}
             </div>
           )}
         </div>
@@ -214,18 +213,12 @@ export function GuidedLiveLab({ loginUrl, lab, onEvent, onClose, onOutcome }: La
 
       <div className="shrink-0 space-y-2 rounded-[8px] border border-[#E6E1F5] bg-[#FAFAFA] p-2.5 dark:border-[#2a2a2a] dark:bg-[#1a1a1a]">
         <div className="text-[11.5px] font-semibold uppercase tracking-wide text-[#8664F2]">
-          {lab === "jwt" ? "JWT — live site + forge tools" : "IDOR — live site + victim target"}
+          {lab === "jwt" ? "JWT — decode / forge / probe" : "IDOR — victim target"}
         </div>
-        {!run && (
-          <LabBtn onClick={start} disabled={busy} primary>
-            {busy ? "Starting…" : "Start live browser"}
-          </LabBtn>
-        )}
         {run && lab === "jwt" && (
           <>
             <p className="text-[11px] text-[#7E7E7E]">
-              Sign in on the <strong>Chromium</strong> window. When Decode enables, walk Decode → Forge → Probe so the room sees each
-              stage.
+              Sign in on <strong>Chromium</strong>. When Decode enables: Decode → Forge alg:none → Probe.
             </p>
             <div className="flex flex-wrap gap-1.5">
               <LabBtn onClick={() => act({ type: "jwt_decode" })} disabled={busy || !flags.token_captured}>

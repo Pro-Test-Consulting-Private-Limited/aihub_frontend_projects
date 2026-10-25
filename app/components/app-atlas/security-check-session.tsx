@@ -19,7 +19,7 @@ type Props = {
 };
 
 const STUFFING_WHAT =
-  "This automated test acts like an attacker guessing passwords on your login. A real browser tries common and patterned passwords while you watch. If it gets in, the app failed the check. If it gets locked out or never gets in, the app held.";
+  "Brute force detection means: can someone guess passwords by trying many times in a row? This automated check opens a real browser and fires common / patterned passwords at login while you watch. Pass if the app locks out, throttles, or never lets the attacker in. Fail if a guessed password gets a session.";
 
 const ENUM_WHAT =
   "This automated test checks whether login errors leak which accounts exist. The agent tries a fake mobile and a real test mobile with the same wrong password, compares the on-screen errors, and marks pass or fail.";

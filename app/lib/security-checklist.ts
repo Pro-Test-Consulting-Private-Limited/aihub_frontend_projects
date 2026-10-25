@@ -28,9 +28,10 @@ export const SECURITY_CATEGORIES: SecurityCategory[] = [
       },
       {
         "name": "Brute force detection",
-        "does": "Confirms lockout/CAPTCHA appears after N failed attempts (configurable).",
+        "does": "Can an attacker guess passwords by trying many times? Checks lockout/throttle after repeated failures.",
         "mode": "automated"
       },
+
       {
         "name": "CAPTCHA verification",
         "does": "Fail login three times, confirm the CAPTCHA challenge appears and blocks until solved.",
@@ -83,9 +84,10 @@ export const SECURITY_CATEGORIES: SecurityCategory[] = [
       },
       {
         "name": "JWT signature validation & algorithm confusion",
-        "does": "Test forged/altered JWTs and algorithm switching.",
+        "does": "Does the server reject forged JWTs (e.g. alg:none) so attackers can’t impersonate users?",
         "mode": "guided"
       },
+
       {
         "name": "Refresh token rotation policy",
         "does": "Verify refresh tokens rotate and old ones are revoked.",
