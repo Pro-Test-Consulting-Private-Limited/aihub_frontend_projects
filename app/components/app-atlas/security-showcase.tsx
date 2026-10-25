@@ -62,6 +62,7 @@ function StuffingPanel({ loginUrl }: { loginUrl: string }) {
   const [name, setName] = useState("");
   const [year, setYear] = useState("");
   const [company, setCompany] = useState("");
+  const [osintEmail, setOsintEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [run, setRun] = useState<SecurityRun | null>(null);
@@ -97,7 +98,12 @@ function StuffingPanel({ loginUrl }: { loginUrl: string }) {
       const started = await securityAgent.startCredentialStuffing({
         loginUrl,
         identifier: identifier.trim(),
-        fields: { name: name.trim() || undefined, year: year.trim() || undefined, company: company.trim() || undefined },
+        fields: {
+          name: name.trim() || undefined,
+          year: year.trim() || undefined,
+          company: company.trim() || undefined,
+          osintEmail: osintEmail.trim() || undefined,
+        },
         headed: true,
       });
       setRun(started);
@@ -105,17 +111,18 @@ function StuffingPanel({ loginUrl }: { loginUrl: string }) {
       setBusy(false);
       setError(e instanceof SecurityAgentError ? e.message : "Could not start check");
     }
-  }, [loginUrl, identifier, name, year, company]);
+  }, [loginUrl, identifier, name, year, company, osintEmail]);
 
   return (
     <div className="space-y-3">
       <p className="text-[12.5px] leading-relaxed text-[#5E6066] dark:text-[#9ca3af]">
-        <span className="font-medium text-[#1F1F1F] dark:text-[#ededed]">Password guessing / stuffing.</span> Free OSINT checks (XposedOrNot, LeakCheck, EmailRep) see whether this email shows up in known leaks, then we build likely passwords from common lists and name/year patterns and try them in a real browser on your login.
+        <span className="font-medium text-[#1F1F1F] dark:text-[#ededed]">Password guessing / stuffing.</span> Use the real login id (mobile or email — demos often label the field Email but accept mobile). Optional name/year builds patterns like <span className="font-mono">Name@Year</span>. Optional OSINT email runs free breach checks when the login id is a phone number.
       </p>
       <div className="grid gap-2 sm:grid-cols-2">
-        <Field label="Identifier under test" value={identifier} onChange={setIdentifier} placeholder="test.user@yourorg.com" />
-        <Field label="Known name (optional)" value={name} onChange={setName} placeholder="for Name@Year patterns" />
-        <Field label="Year (optional)" value={year} onChange={setYear} placeholder="1990 or 2024" />
+        <Field label="Login identifier (mobile or email)" value={identifier} onChange={setIdentifier} placeholder="9900776952 or you@example.com" />
+        <Field label="OSINT email (optional)" value={osintEmail} onChange={setOsintEmail} placeholder="if login id is mobile" />
+        <Field label="Known name (optional)" value={name} onChange={setName} placeholder="Sai → Sai@Year" />
+        <Field label="Year (optional)" value={year} onChange={setYear} placeholder="2003" />
         <Field label="Company (optional)" value={company} onChange={setCompany} placeholder="for Company@Year" />
       </div>
       <div className="flex flex-wrap items-center gap-2">

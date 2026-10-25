@@ -9,7 +9,7 @@ export class SecurityAgentError extends Error {
   }
 }
 
-export type StuffingFields = { name?: string; year?: string; company?: string };
+export type StuffingFields = { name?: string; year?: string; company?: string; osintEmail?: string };
 
 export type SecurityRunStep = {
   at: number;
