@@ -8,13 +8,15 @@ type LabProps = {
   lab: "jwt" | "idor";
   onEvent: (event: string, detail?: string) => void;
   onClose: () => void;
+  /** Called when the live check has a lean pass/fail (probe / IDOR page result). */
+  onOutcome?: (pass: boolean, detail: string) => void;
 };
 
 /**
  * Human drives headed Chromium; this pane mirrors screenshots.
  * Step 1 only completes after the first live frame arrives.
  */
-export function GuidedLiveLab({ loginUrl, lab, onEvent, onClose }: LabProps) {
+export function GuidedLiveLab({ loginUrl, lab, onEvent, onClose, onOutcome }: LabProps) {
   const [run, setRun] = useState<SecurityRun | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -25,6 +27,8 @@ export function GuidedLiveLab({ loginUrl, lab, onEvent, onClose }: LabProps) {
   const [forgedNote, setForgedNote] = useState<string | null>(null);
   const [pollErr, setPollErr] = useState<string | null>(null);
   const startedFlag = useRef(false);
+  const runIdRef = useRef<string | null>(null);
+  const outcomeSent = useRef(false);
 
   const flags = run?.guided?.flags || {};
 
@@ -42,7 +46,29 @@ export function GuidedLiveLab({ loginUrl, lab, onEvent, onClose }: LabProps) {
     if (flags.victim_loaded) onEvent("victim_loaded");
     if (flags.idor_navigated) onEvent("idor_navigated");
     if (flags.idor_result) onEvent("idor_result");
-  }, [flags, run?.screenshot, onEvent]);
+
+    // Lean pass/fail from live site — parent auto-records when all steps are done.
+    if (!outcomeSent.current && onOutcome) {
+      if (lab === "jwt" && flags.verdict_ready && flags.probed) {
+        const pass = Boolean(flags.forge_rejected);
+        outcomeSent.current = true;
+        onOutcome(pass, pass ? "Forged JWT rejected by API" : "Forged JWT was accepted");
+      } else if (lab === "idor" && flags.idor_result) {
+        const pass = Boolean(flags.page_forbidden) && !flags.page_txn_visible;
+        outcomeSent.current = true;
+        onOutcome(pass, pass ? "Live site blocked other user’s txn" : "Live site showed other user’s txn");
+      }
+    }
+  }, [flags, run?.screenshot, onEvent, onOutcome, lab]);
+
+  // Always close Chromium when leaving this panel.
+  useEffect(() => {
+    return () => {
+      const id = runIdRef.current;
+      if (!id) return;
+      securityAgent.guidedBrowserAction(id, { type: "stop" }).catch(() => {});
+    };
+  }, []);
 
   useEffect(() => {
     if (!run?.id) return;
@@ -76,6 +102,8 @@ export function GuidedLiveLab({ loginUrl, lab, onEvent, onClose }: LabProps) {
     try {
       if (!loginUrl) throw new Error("Application URL required on the project.");
       const next = await securityAgent.startGuidedBrowser({ loginUrl, lab, headed: true });
+      runIdRef.current = next.id;
+      outcomeSent.current = false;
       setRun(next);
     } catch (e) {
       setErr(e instanceof SecurityAgentError ? e.message : e instanceof Error ? e.message : "Start failed");
@@ -101,11 +129,16 @@ export function GuidedLiveLab({ loginUrl, lab, onEvent, onClose }: LabProps) {
         setForgedNote("Forged alg:none token ready — signature emptied. Next: Probe.");
       }
       if (body.type === "jwt_probe") {
+        const rejected = Boolean(out.rejected);
         setProbeOut({
           status: out.status as number | undefined,
           body: String(out.bodyPreview || ""),
-          rejected: Boolean(out.rejected),
+          rejected,
         });
+        if (!outcomeSent.current && onOutcome) {
+          outcomeSent.current = true;
+          onOutcome(rejected, rejected ? "Forged JWT rejected by API" : "Forged JWT was accepted");
+        }
       }
     } catch (e) {
       setErr(e instanceof SecurityAgentError ? e.message : e instanceof Error ? e.message : "Action failed");
@@ -114,16 +147,21 @@ export function GuidedLiveLab({ loginUrl, lab, onEvent, onClose }: LabProps) {
     }
   };
 
-  const stop = useCallback(async () => {
-    if (run?.id) {
-      try {
-        await securityAgent.guidedBrowserAction(run.id, { type: "stop" });
-      } catch {
-        /* ignore */
-      }
+  const stopBrowser = useCallback(async () => {
+    const id = runIdRef.current || run?.id;
+    if (!id) return;
+    try {
+      await securityAgent.guidedBrowserAction(id, { type: "stop" });
+    } catch {
+      /* ignore */
     }
+    runIdRef.current = null;
+  }, [run?.id]);
+
+  const stop = useCallback(async () => {
+    await stopBrowser();
     onClose();
-  }, [run?.id, onClose]);
+  }, [stopBrowser, onClose]);
 
   const victimTxns = run?.guided?.victimTxns || [];
   const lastSteps = (run?.steps || []).slice(-4);

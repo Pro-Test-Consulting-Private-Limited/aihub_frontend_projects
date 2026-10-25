@@ -474,6 +474,8 @@ function GuidedSession({
   const [result, setResult] = useState<SecurityRun | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [leanOutcome, setLeanOutcome] = useState<{ pass: boolean; detail: string } | null>(null);
+  const autoRecorded = useRef(false);
 
   useEffect(() => {
     setFrameSrc(appFrameUrl(loginUrl));
@@ -492,6 +494,40 @@ function GuidedSession({
     [guide, locked],
   );
 
+  const submit = useCallback(
+    async (pass: boolean, detail?: string) => {
+      if (!guide) return;
+      setBusy(true);
+      setError(null);
+      try {
+        const stepNotes = guide.steps.map((s) => `${s.n}. ${s.title}: ${doneSteps[s.n] ? "DONE" : "not done"}`).join("\n");
+        const run = await securityAgent.submitEnumeration({
+          loginUrl: loginUrl || undefined,
+          sameMessage: pass,
+          notes:
+            [notes.trim(), stepNotes, detail || liveHint ? `Lab: ${detail || liveHint}` : ""]
+              .filter(Boolean)
+              .join("\n\n") || `${checkName}: ${pass ? "pass" : "fail"}`,
+        });
+        setResult(run);
+      } catch (e) {
+        setError(e instanceof SecurityAgentError ? e.message : "Submit failed");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [guide, doneSteps, notes, liveHint, loginUrl, checkName],
+  );
+
+  // When every step is done and we know lean pass/fail → auto-record.
+  useEffect(() => {
+    if (!guide || autoRecorded.current || result?.result || !leanOutcome) return;
+    const allDone = guide.steps.every((s) => doneSteps[s.n]);
+    if (!allDone) return;
+    autoRecorded.current = true;
+    void submit(leanOutcome.pass, leanOutcome.detail);
+  }, [guide, doneSteps, leanOutcome, result?.result, submit]);
+
   if (!guide) {
     return <div className="p-6 text-[13px] text-[#7E7E7E]">No guided procedure for this check yet.</div>;
   }
@@ -499,24 +535,6 @@ function GuidedSession({
   const toggleStep = (n: number) => {
     setLocked((prev) => ({ ...prev, [n]: true }));
     setDoneSteps((prev) => ({ ...prev, [n]: !prev[n] }));
-  };
-
-  const submit = async (pass: boolean) => {
-    setBusy(true);
-    setError(null);
-    try {
-      const stepNotes = guide.steps.map((s) => `${s.n}. ${s.title}: ${doneSteps[s.n] ? "DONE" : "not done"}`).join("\n");
-      const run = await securityAgent.submitEnumeration({
-        loginUrl: loginUrl || undefined,
-        sameMessage: pass,
-        notes: [notes.trim(), stepNotes, liveHint ? `Lab: ${liveHint}` : ""].filter(Boolean).join("\n\n") || `${checkName}: ${pass ? "pass" : "fail"}`,
-      });
-      setResult(run);
-    } catch (e) {
-      setError(e instanceof SecurityAgentError ? e.message : "Submit failed");
-    } finally {
-      setBusy(false);
-    }
   };
 
   const recorded = Boolean(result?.result);
@@ -528,13 +546,19 @@ function GuidedSession({
     return (
       <div className="flex min-h-0 flex-1 gap-4 p-4">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <GuidedLiveLab loginUrl={appFrameUrl(loginUrl) || loginUrl} lab={guide.lab!} onEvent={onLabEvent} onClose={onClose} />
+          <GuidedLiveLab
+            loginUrl={appFrameUrl(loginUrl) || loginUrl}
+            lab={guide.lab!}
+            onEvent={onLabEvent}
+            onClose={onClose}
+            onOutcome={(pass, detail) => setLeanOutcome({ pass, detail })}
+          />
         </div>
         <aside className="flex w-[340px] shrink-0 min-h-0 flex-col overflow-hidden rounded-[10px] border border-[#E5E7EB] bg-white dark:border-[#2a2a2a] dark:bg-[#121212]">
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3">
             <p className="text-[12px] font-medium text-[#1F1F1F] dark:text-[#ededed]">{guide.plainStory}</p>
             <p className="text-[11px] text-[#7E7E7E]">
-              Steps {doneCount}/{guide.steps.length} — tick from the live site (Done overrides)
+              Steps {doneCount}/{guide.steps.length} — ticks from the live site; pass/fail auto-records when complete
             </p>
             <ol className="space-y-2">
               {guide.steps.map((s) => {
@@ -573,6 +597,11 @@ function GuidedSession({
               <br />
               Fail: {guide.failWhen}
             </p>
+            {!recorded && leanOutcome && doneCount === guide.steps.length && (
+              <div className="rounded-[6px] border border-[#8664F2]/40 bg-[#F3EEFF] px-3 py-2 text-[12px] text-[#5B21B6]">
+                {busy ? "Recording result…" : `All steps done — auto ${leanOutcome.pass ? "PASS" : "FAIL"}: ${leanOutcome.detail}`}
+              </div>
+            )}
             {!recorded && (
               <>
                 <textarea
@@ -586,7 +615,10 @@ function GuidedSession({
                   <button
                     type="button"
                     disabled={busy}
-                    onClick={() => submit(true)}
+                    onClick={() => {
+                      autoRecorded.current = true;
+                      void submit(true);
+                    }}
                     className="rounded-[6px] border border-[#16A34A] bg-[#F0FDF4] px-3 py-1.5 text-[12px] font-semibold text-[#16A34A]"
                   >
                     Record pass
@@ -594,7 +626,10 @@ function GuidedSession({
                   <button
                     type="button"
                     disabled={busy}
-                    onClick={() => submit(false)}
+                    onClick={() => {
+                      autoRecorded.current = true;
+                      void submit(false);
+                    }}
                     className="rounded-[6px] border border-[#D97706] bg-[#FFFBEB] px-3 py-1.5 text-[12px] font-semibold text-[#D97706]"
                   >
                     Record fail
