@@ -92,6 +92,7 @@ export function SecurityOverview({
         check={active.check}
         kind={active.kind}
         targetUrl={targetUrl}
+        client={client}
         onClose={() => setActive(null)}
       />
     );

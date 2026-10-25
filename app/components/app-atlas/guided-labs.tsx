@@ -1,211 +1,305 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { securityAgent, SecurityAgentError, type SecurityRun } from "@/app/services/security-agent";
+import type { SessionSnapshot } from "@/app/interfaces/appatlas";
+import { apiBaseFromAppUrl, appOrigin } from "@/app/lib/security-live-checks";
+import { decodeJwt, forgeAlgNone, looksLikeJwt } from "@/app/lib/jwt-lab";
+import { atlasUrl, type AtlasClient } from "@/app/services/appatlas";
+import { securityAgent, SecurityAgentError } from "@/app/services/security-agent";
 
 type LabProps = {
   loginUrl: string;
   lab: "jwt" | "idor";
+  client: AtlasClient;
   onEvent: (event: string, detail?: string) => void;
   onClose: () => void;
-  /** Called when the live check has a lean pass/fail (probe / IDOR page result). */
   onOutcome?: (pass: boolean, detail: string) => void;
 };
 
+type TxnRow = { transactionId: string; label: string };
+
 /**
- * Human drives headed Chromium; this pane mirrors screenshots.
- * Step 1 only completes after the first live frame arrives.
+ * Guided JWT/IDOR using the same App Atlas remote browser as Canvas —
+ * interact in the center pane (no Chromium window on your laptop).
  */
-export function GuidedLiveLab({ loginUrl, lab, onEvent, onClose, onOutcome }: LabProps) {
-  const [run, setRun] = useState<SecurityRun | null>(null);
+export function GuidedLiveLab({ loginUrl, lab, client, onEvent, onClose, onOutcome }: LabProps) {
+  const [snap, setSnap] = useState<SessionSnapshot | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [mobileB, setMobileB] = useState("");
-  const [passB, setPassB] = useState("");
+  const [token, setToken] = useState("");
+  const [forged, setForged] = useState("");
   const [decoded, setDecoded] = useState<{ header: Record<string, unknown>; payload: Record<string, unknown> } | null>(null);
   const [probeOut, setProbeOut] = useState<{ status?: number; body?: string; rejected?: boolean } | null>(null);
   const [forgedNote, setForgedNote] = useState<string | null>(null);
-  const [pollErr, setPollErr] = useState<string | null>(null);
+  const [mobileB, setMobileB] = useState("");
+  const [passB, setPassB] = useState("");
+  const [txns, setTxns] = useState<TxnRow[]>([]);
   const startedFlag = useRef(false);
-  const runIdRef = useRef<string | null>(null);
-  const outcomeSent = useRef(false);
   const autoStarted = useRef(false);
+  const outcomeSent = useRef(false);
+  const sessionIdRef = useRef<string | null>(null);
+  const seen = useRef<Set<string>>(new Set());
 
-  const flags = run?.guided?.flags || {};
+  const mark = useCallback(
+    (event: string, detail?: string) => {
+      if (seen.current.has(event)) return;
+      seen.current.add(event);
+      onEvent(event, detail);
+    },
+    [onEvent],
+  );
 
-  useEffect(() => {
-    if ((flags.browser_ready || run?.screenshot) && !startedFlag.current) {
-      startedFlag.current = true;
-      onEvent("browser_started");
+  const discardRemote = useCallback(async () => {
+    const id = sessionIdRef.current;
+    sessionIdRef.current = null;
+    if (!id) return;
+    try {
+      await client.discardSession(id);
+    } catch {
+      /* ignore */
     }
-    if (flags.logged_in) onEvent("logged_in");
-    if (flags.token_captured) onEvent("token_captured");
-    if (flags.decoded) onEvent("decoded");
-    if (flags.forged) onEvent("forged");
-    if (flags.probed) onEvent("probed");
-    if (flags.verdict_ready) onEvent("verdict_ready");
-    if (flags.victim_loaded) onEvent("victim_loaded");
-    if (flags.idor_navigated) onEvent("idor_navigated");
-    if (flags.idor_result) onEvent("idor_result");
+  }, [client]);
 
-    // Lean pass/fail from live site — parent auto-records when all steps are done.
-    if (!outcomeSent.current && onOutcome) {
-      if (lab === "jwt" && flags.verdict_ready && flags.probed) {
-        const pass = Boolean(flags.forge_rejected);
-        outcomeSent.current = true;
-        onOutcome(pass, pass ? "Forged JWT rejected by API" : "Forged JWT was accepted");
-      } else if (lab === "idor" && flags.idor_result) {
-        const pass = Boolean(flags.page_forbidden) && !flags.page_txn_visible;
-        outcomeSent.current = true;
-        onOutcome(pass, pass ? "Live site blocked other user’s txn" : "Live site showed other user’s txn");
-      }
-    }
-  }, [flags, run?.screenshot, onEvent, onOutcome, lab]);
-
-  // Always close Chromium when leaving this panel.
   useEffect(() => {
     return () => {
-      const id = runIdRef.current;
-      if (!id) return;
-      securityAgent.guidedBrowserAction(id, { type: "stop" }).catch(() => {});
+      void discardRemote();
     };
-  }, []);
+  }, [discardRemote]);
 
-  useEffect(() => {
-    if (!run?.id) return;
-    if (run.status !== "queued" && run.status !== "running") return;
-    let cancelled = false;
-    const tick = async () => {
-      try {
-        const next = await securityAgent.getRun(run.id);
-        if (!cancelled) {
-          setRun(next);
-          setPollErr(null);
-          if (next.error) setErr(next.error);
+  const applyPageState = useCallback(
+    (state: { url: string; token: string; bodyText: string }) => {
+      if (state.token && looksLikeJwt(state.token)) {
+        setToken(state.token);
+        mark("token_captured");
+      }
+      const path = (() => {
+        try {
+          return new URL(state.url).pathname;
+        } catch {
+          return "";
         }
-      } catch (e) {
-        if (!cancelled) setPollErr(e instanceof Error ? e.message : "Poll failed");
+      })();
+      const loggedIn =
+        Boolean(state.token) || /\/(dashboard|wallet|transactions|profile|kyc|send-money|add-money)/i.test(path);
+      if (loggedIn) mark("logged_in");
+      const forbidden =
+        /not your transaction/i.test(state.bodyText) ||
+        /forbidden/i.test(state.bodyText) ||
+        /access denied/i.test(state.bodyText);
+      const txnDetail = /\/transactions\/[^/]+/i.test(path);
+      const hasDetail = txnDetail && /ledger|amount|counterparty|transaction/i.test(state.bodyText);
+      if (txnDetail) mark("idor_navigated");
+      if (forbidden) {
+        mark("idor_result");
+        mark("verdict_ready");
+        if (!outcomeSent.current && onOutcome) {
+          outcomeSent.current = true;
+          onOutcome(true, "Live site blocked other user’s txn");
+        }
+      } else if (hasDetail && lab === "idor") {
+        mark("idor_result");
+        mark("verdict_ready");
+        if (!outcomeSent.current && onOutcome) {
+          outcomeSent.current = true;
+          onOutcome(false, "Live site showed other user’s txn");
+        }
       }
-    };
-    tick();
-    const t = setInterval(tick, 600);
-    return () => {
-      cancelled = true;
-      clearInterval(t);
-    };
-  }, [run?.id, run?.status]);
+    },
+    [lab, mark, onOutcome],
+  );
 
   const start = useCallback(async () => {
     setBusy(true);
     setErr(null);
-    setPollErr(null);
-    startedFlag.current = false;
+    seen.current = new Set();
+    outcomeSent.current = false;
     try {
       if (!loginUrl) throw new Error("Application URL required on the project.");
-      const next = await securityAgent.startGuidedBrowser({ loginUrl, lab, headed: true });
-      runIdRef.current = next.id;
-      outcomeSent.current = false;
-      setRun(next);
+      const viewer = typeof window !== "undefined" && localStorage.getItem("appatlas-viewer") === "vnc" ? "vnc" : "auto";
+      const next = await client.startSession({
+        url: loginUrl,
+        devicePreset: "desktop",
+        networkPreset: "none",
+        viewer,
+      });
+      sessionIdRef.current = next.id;
+      setSnap(next);
+      mark("browser_started");
+      startedFlag.current = true;
     } catch (e) {
-      setErr(e instanceof SecurityAgentError ? e.message : e instanceof Error ? e.message : "Start failed");
+      setErr(e instanceof Error ? e.message : "Could not start remote browser");
     } finally {
       setBusy(false);
     }
-  }, [loginUrl, lab]);
+  }, [client, loginUrl, mark]);
 
-  // Open like automated sessions — no separate Start button.
   useEffect(() => {
     if (autoStarted.current || !loginUrl) return;
     autoStarted.current = true;
     void start();
   }, [loginUrl, start]);
 
-  const act = async (body: Record<string, unknown>) => {
-    if (!run) return;
-    setBusy(true);
+  // Poll page state from the remote browser (URL / token / text).
+  useEffect(() => {
+    if (!snap?.id || snap.status !== "recording") return;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const [fresh, state] = await Promise.all([client.getSession(snap.id), client.sessionPageState(snap.id)]);
+        if (cancelled) return;
+        setSnap(fresh);
+        applyPageState(state);
+      } catch {
+        /* brief blip while navigating */
+      }
+    };
+    tick();
+    const t = setInterval(tick, 1200);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, [snap?.id, snap?.status, client, applyPageState]);
+
+  const decode = () => {
     setErr(null);
     try {
-      const out = await securityAgent.guidedBrowserAction(run.id, body);
-      if (out.run) setRun(out.run as SecurityRun);
-      if (body.type === "jwt_decode" && out.header) {
-        setDecoded({
-          header: out.header as Record<string, unknown>,
-          payload: (out.payload || {}) as Record<string, unknown>,
-        });
-      }
-      if (body.type === "jwt_forge") {
-        setForgedNote("Forged alg:none token ready — signature emptied. Next: Probe.");
-      }
-      if (body.type === "jwt_probe") {
-        const rejected = Boolean(out.rejected);
-        setProbeOut({
-          status: out.status as number | undefined,
-          body: String(out.bodyPreview || ""),
-          rejected,
-        });
-        if (!outcomeSent.current && onOutcome) {
-          outcomeSent.current = true;
-          onOutcome(rejected, rejected ? "Forged JWT rejected by API" : "Forged JWT was accepted");
-        }
+      const t = token;
+      if (!looksLikeJwt(t)) throw new Error("No session token yet — sign in in the center pane first.");
+      const d = decodeJwt(t);
+      setDecoded({ header: d.header, payload: d.payload });
+      mark("decoded", `alg=${String(d.header.alg)}`);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Decode failed");
+    }
+  };
+
+  const forge = () => {
+    setErr(null);
+    try {
+      if (!looksLikeJwt(token)) throw new Error("No token yet.");
+      setForged(forgeAlgNone(token));
+      setForgedNote("Forged alg:none token ready — signature emptied. Next: Probe.");
+      mark("forged", "alg:none");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Forge failed");
+    }
+  };
+
+  const probe = async () => {
+    setBusy(true);
+    setErr(null);
+    mark("probed");
+    try {
+      const apiBase = apiBaseFromAppUrl(loginUrl);
+      if (!apiBase) throw new Error("Application URL missing.");
+      if (!forged) throw new Error("Forge a token first.");
+      const res = await securityAgent.httpProbe({ url: `${apiBase}/auth/me`, authorization: forged });
+      const rejected = res.status === 401 || res.status === 403;
+      setProbeOut({ status: res.status, body: res.bodyPreview, rejected });
+      mark("verdict_ready");
+      if (!outcomeSent.current && onOutcome) {
+        outcomeSent.current = true;
+        onOutcome(rejected, rejected ? "Forged JWT rejected by API" : "Forged JWT was accepted");
       }
     } catch (e) {
-      setErr(e instanceof SecurityAgentError ? e.message : e instanceof Error ? e.message : "Action failed");
+      setErr(e instanceof SecurityAgentError ? e.message : e instanceof Error ? e.message : "Probe failed");
     } finally {
       setBusy(false);
     }
   };
 
-  const stopBrowser = useCallback(async () => {
-    const id = runIdRef.current || run?.id;
-    if (!id) return;
+  const loadBTxns = async () => {
+    setBusy(true);
+    setErr(null);
     try {
-      await securityAgent.guidedBrowserAction(id, { type: "stop" });
-    } catch {
-      /* ignore */
+      const apiBase = apiBaseFromAppUrl(loginUrl);
+      if (!apiBase) throw new Error("Application URL missing.");
+      const loginRes = await securityAgent.httpProbe({
+        url: `${apiBase}/auth/login`,
+        method: "POST",
+        jsonBody: { mobileNumber: mobileB.trim(), password: passB },
+      });
+      const bToken = (loginRes.body as { token?: string } | null)?.token;
+      if (loginRes.status >= 400 || !bToken) throw new Error(loginRes.bodyPreview || "User B login failed");
+      const listRes = await securityAgent.httpProbe({ url: `${apiBase}/transactions`, authorization: bToken });
+      if (listRes.status >= 400) throw new Error(listRes.bodyPreview || "Could not list B’s transactions");
+      const raw = listRes.body as { data?: Record<string, unknown>[] } | null;
+      const rows = (Array.isArray(raw?.data) ? raw!.data : [])
+        .map((r) => {
+          const id = String(r.transactionId || r.id || "");
+          if (!id) return null;
+          return {
+            transactionId: id,
+            label: `${id.slice(0, 8)}… ${r.type || ""} ${r.amount ?? ""}`.trim(),
+          };
+        })
+        .filter(Boolean) as TxnRow[];
+      if (!rows.length) throw new Error("User B has no transactions yet.");
+      setTxns(rows);
+      mark("victim_loaded", `${rows.length} txn(s)`);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Load failed");
+    } finally {
+      setBusy(false);
     }
-    runIdRef.current = null;
-  }, [run?.id]);
+  };
 
-  const stop = useCallback(async () => {
-    await stopBrowser();
+  const openTxnInRemote = async (transactionId: string) => {
+    if (!snap?.id) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const origin = appOrigin(loginUrl);
+      const state = await client.sessionGoto(snap.id, `${origin}/transactions/${encodeURIComponent(transactionId)}`);
+      applyPageState(state);
+      mark("idor_navigated");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Navigate failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const stop = async () => {
+    await discardRemote();
     onClose();
-  }, [stopBrowser, onClose]);
+  };
 
-  const victimTxns = run?.guided?.victimTxns || [];
-  const lastSteps = (run?.steps || []).slice(-4);
+  const viewer = snap?.viewer;
+  const SCREEN_RATIO: Record<string, number> = { neko: 16 / 9, vnc: 16 / 10 };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[10px] border border-[#E6E1F5] bg-[#111] dark:border-[#2a2a2a]">
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#333] bg-[#1a1a1a] px-3 py-1.5 text-[11.5px] text-[#ccc]">
-          <span className="truncate font-mono">{run?.guided?.url || (busy || run ? "Opening live browser…" : "Preparing…")}</span>
-          {run && (
-            <button type="button" onClick={() => act({ type: "stop" })} className="shrink-0 text-[#f87171] underline">
+          <span className="truncate font-mono">
+            {snap?.currentUrl || snap?.startUrl || (busy ? "Starting remote browser…" : "Preparing…")}
+          </span>
+          {snap && (
+            <button type="button" onClick={() => void stop()} className="shrink-0 text-[#f87171] underline">
               Stop browser
             </button>
           )}
         </div>
-        <div className="flex min-h-[420px] flex-1 flex-col items-center justify-center bg-[#0a0a0a] p-2">
-          {run?.screenshot ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={run.screenshot} alt="Live application" className="max-h-full max-w-full object-contain" />
+        <div className="flex min-h-[420px] flex-1 items-center justify-center bg-[#0a0a0a] p-2">
+          {viewer && viewer.kind !== "local" ? (
+            <iframe
+              src={atlasUrl(viewer.url)}
+              allow="autoplay; clipboard-read; clipboard-write; fullscreen"
+              className="h-full max-h-full w-full rounded-[8px] border border-[#333] bg-black"
+              style={{ aspectRatio: SCREEN_RATIO[viewer.kind] ?? 16 / 9 }}
+              title="Remote browser — interact here"
+            />
+          ) : viewer?.kind === "local" ? (
+            <div className="max-w-md p-6 text-center text-[13px] text-[#9ca3af]">
+              Backend is in local provider mode (Chromium on the server). Prefer VNC/neko so the browser appears in this pane like Canvas.
+            </div>
           ) : (
-            <div className="max-w-lg space-y-2 p-6 text-center text-[13px] text-[#9ca3af]">
-              <p className="text-[#fbbf24]">Opening live browser…</p>
-              <p>
-                A <strong className="text-[#ddd]">Chromium</strong> window opens with this session — sign in{" "}
-                <strong className="text-[#ddd]">there</strong>. This pane mirrors it (check the taskbar if you don’t see it).
-              </p>
-              {lastSteps.length > 0 && (
-                <ul className="mt-2 space-y-1 text-left text-[11px] text-[#a3a3a3]">
-                  {lastSteps.map((s, i) => (
-                    <li key={`${s.at}-${i}`}>
-                      <span className="text-[#8664F2]">{s.kind}</span>: {s.message}
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {(err || pollErr) && <p className="text-[11px] text-red-400">{err || pollErr}</p>}
+            <div className="max-w-md space-y-2 p-6 text-center text-[13px] text-[#9ca3af]">
+              <p className="text-[#fbbf24]">{busy ? "Starting remote browser…" : "Waiting for browser…"}</p>
+              <p>Same live browser as Canvas — sign in and browse in this pane.</p>
+              {err && <p className="text-red-400">{err}</p>}
             </div>
           )}
         </div>
@@ -215,19 +309,19 @@ export function GuidedLiveLab({ loginUrl, lab, onEvent, onClose, onOutcome }: La
         <div className="text-[11.5px] font-semibold uppercase tracking-wide text-[#8664F2]">
           {lab === "jwt" ? "JWT — decode / forge / probe" : "IDOR — victim target"}
         </div>
-        {run && lab === "jwt" && (
+        {lab === "jwt" && (
           <>
             <p className="text-[11px] text-[#7E7E7E]">
-              Sign in on <strong>Chromium</strong>. When Decode enables: Decode → Forge alg:none → Probe.
+              Sign in in the <strong>center pane</strong>. When Decode enables: Decode → Forge alg:none → Probe.
             </p>
             <div className="flex flex-wrap gap-1.5">
-              <LabBtn onClick={() => act({ type: "jwt_decode" })} disabled={busy || !flags.token_captured}>
+              <LabBtn onClick={decode} disabled={busy || !looksLikeJwt(token)}>
                 Decode
               </LabBtn>
-              <LabBtn onClick={() => act({ type: "jwt_forge", mode: "none" })} disabled={busy || !flags.token_captured}>
+              <LabBtn onClick={forge} disabled={busy || !looksLikeJwt(token)}>
                 Forge alg:none
               </LabBtn>
-              <LabBtn onClick={() => act({ type: "jwt_probe" })} disabled={busy || !flags.forged} primary>
+              <LabBtn onClick={() => void probe()} disabled={busy || !forged} primary>
                 Probe /auth/me
               </LabBtn>
             </div>
@@ -256,41 +350,38 @@ export function GuidedLiveLab({ loginUrl, lab, onEvent, onClose, onOutcome }: La
             )}
           </>
         )}
-        {run && lab === "idor" && (
+        {lab === "idor" && (
           <>
             <p className="text-[11px] text-[#7E7E7E]">
-              Sign in as <strong>User A</strong> on Chromium. Then load User B’s txns and open one — the live site navigates (watch the
-              mirror).
+              Sign in as <strong>User A</strong> in the center pane. Load User B’s txns, then open one — the remote browser navigates
+              there.
             </p>
             <div className="grid grid-cols-2 gap-1.5">
               <TinyField label="User B mobile" value={mobileB} onChange={setMobileB} />
               <TinyField label="User B password" value={passB} onChange={setPassB} type="password" />
             </div>
-            <LabBtn
-              onClick={() => act({ type: "idor_load_victim", mobileNumber: mobileB, password: passB })}
-              disabled={busy || !flags.logged_in || !mobileB.trim() || !passB}
-            >
+            <LabBtn onClick={() => void loadBTxns()} disabled={busy || !mobileB.trim() || !passB || !looksLikeJwt(token)}>
               Load B’s transactions
             </LabBtn>
-            {victimTxns.length > 0 && (
+            {txns.length > 0 && (
               <div className="max-h-28 space-y-1 overflow-y-auto">
-                {victimTxns.map((t) => (
+                {txns.map((t) => (
                   <button
                     key={t.transactionId}
                     type="button"
                     disabled={busy}
-                    onClick={() => act({ type: "idor_open_in_browser", transactionId: t.transactionId })}
+                    onClick={() => void openTxnInRemote(t.transactionId)}
                     className="block w-full rounded border border-[#E5E7EB] bg-white px-2 py-1 text-left font-mono text-[11px] hover:border-[#8664F2] dark:border-[#2a2a2a] dark:bg-[#0a0a0a]"
                   >
-                    Open in live browser: {t.label}
+                    Open in center browser: {t.label}
                   </button>
                 ))}
               </div>
             )}
           </>
         )}
-        {(err || pollErr) && <p className="text-[11px] text-red-600">{err || pollErr}</p>}
-        <button type="button" onClick={stop} className="text-[11px] text-[#7E7E7E] underline">
+        {err && <p className="text-[11px] text-red-600">{err}</p>}
+        <button type="button" onClick={() => void stop()} className="text-[11px] text-[#7E7E7E] underline">
           Back to plan
         </button>
       </div>
@@ -303,17 +394,17 @@ function JwtCards({ header, payload }: { header: Record<string, unknown>; payloa
     <div className="grid gap-2 sm:grid-cols-2">
       <div className="rounded-[8px] border border-[#E5E7EB] bg-white p-2 dark:border-[#2a2a2a] dark:bg-[#0a0a0a]">
         <div className="mb-1 text-[10px] font-bold uppercase tracking-wide text-[#8664F2]">Header</div>
-        <KvRows
-          rows={Object.entries(header).map(([k, v]) => ({
-            k,
-            v: String(v),
-            hot: k === "alg",
-          }))}
-        />
+        <KvRows rows={Object.entries(header).map(([k, v]) => ({ k, v: String(v), hot: k === "alg" }))} />
       </div>
       <div className="rounded-[8px] border border-[#E5E7EB] bg-white p-2 dark:border-[#2a2a2a] dark:bg-[#0a0a0a]">
         <div className="mb-1 text-[10px] font-bold uppercase tracking-wide text-[#8664F2]">Payload</div>
-        <KvRows rows={Object.entries(payload).map(([k, v]) => ({ k, v: formatClaim(v), hot: k === "sub" || k === "exp" }))} />
+        <KvRows
+          rows={Object.entries(payload).map(([k, v]) => ({
+            k,
+            v: formatClaim(v),
+            hot: k === "sub" || k === "exp",
+          }))}
+        />
       </div>
     </div>
   );
@@ -337,7 +428,9 @@ function KvRows({ rows }: { rows: { k: string; v: string; hot?: boolean }[] }) {
       {rows.map((r) => (
         <div key={r.k} className="flex gap-2 text-[11px]">
           <dt className={`shrink-0 font-semibold ${r.hot ? "text-[#D97706]" : "text-[#7E7E7E]"}`}>{r.k}</dt>
-          <dd className={`min-w-0 break-all font-mono ${r.hot ? "font-semibold text-[#1F1F1F] dark:text-[#ededed]" : "text-[#5E6066] dark:text-[#9ca3af]"}`}>
+          <dd
+            className={`min-w-0 break-all font-mono ${r.hot ? "font-semibold text-[#1F1F1F] dark:text-[#ededed]" : "text-[#5E6066] dark:text-[#9ca3af]"}`}
+          >
             {r.v}
           </dd>
         </div>

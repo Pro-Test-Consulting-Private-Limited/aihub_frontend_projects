@@ -67,26 +67,26 @@ const JWT_GUIDED: GuidedProcedure = {
   title: "JWT signature validation & algorithm confusion",
   whatThisIs:
     "JWT signature validation & algorithm confusion means: after login the app gives you a signed token (JWT). Attackers try to strip or swap the signature (e.g. set alg to none) so the server accepts a forged identity. This guided check has you sign in on the live site, decode the real token, forge alg:none, and probe /auth/me. Pass if the forged token is rejected.",
-  plainStory: "Live browser opens with the session. Sign in on Chromium; center mirrors it. Steps tick as you go.",
+  plainStory: "Same remote browser as Canvas — sign in in the center pane. Steps tick as you go.",
   showAppFrame: true,
   lab: "jwt",
   steps: [
     {
       n: 1,
       title: "Live browser ready",
-      does: "Wait until the center pane shows the login page (Chromium may be behind this window — check the taskbar).",
+      does: "Wait until the center pane shows the login page (same remote browser as Canvas).",
       autoOn: "browser_started",
     },
     {
       n: 2,
       title: "Sign in on the live site",
-      does: "In the Chromium window (not the center mirror), log in with a demo account. Center updates when login is detected.",
+      does: "Log in with a demo account in the center pane. Step ticks when login is detected.",
       autoOn: "logged_in",
     },
     {
       n: 3,
       title: "Session token detected",
-      does: "App Atlas reads the token from the live browser (no DevTools). Step ticks when captured.",
+      does: "App Atlas reads the token from the remote browser (no DevTools). Step ticks when captured.",
       autoOn: "token_captured",
     },
     {
@@ -104,7 +104,7 @@ const JWT_GUIDED: GuidedProcedure = {
     {
       n: 6,
       title: "Probe & read outcome",
-      does: "Click Probe /auth/me. 401/403 → pass. 200 → fail. Then Record pass/fail.",
+      does: "Click Probe /auth/me. 401/403 → pass. 200 → fail. Result auto-records when all steps are done.",
       autoOn: "verdict_ready",
     },
   ],
@@ -116,20 +116,20 @@ const IDOR_GUIDED: GuidedProcedure = {
   title: "IDOR probes",
   whatThisIs:
     "IDOR (Insecure Direct Object Reference) means: can User A open User B’s data just by changing an id in the URL/API? This guided check signs you in as A on the live site, opens B’s transaction id while still A, and watches whether the app blocks it. Pass if the live site refuses; fail if B’s receipt appears.",
-  plainStory: "Live browser opens with the session. Sign in as A on Chromium; open B’s txn on the live site.",
+  plainStory: "Same remote browser as Canvas — sign in as A in the center pane; open B’s txn there.",
   showAppFrame: true,
   lab: "idor",
   steps: [
     {
       n: 1,
       title: "Live browser ready",
-      does: "Wait until the center pane mirrors the login page (Chromium may be on the taskbar).",
+      does: "Wait until the center pane shows the login page (same remote browser as Canvas).",
       autoOn: "browser_started",
     },
     {
       n: 2,
       title: "Sign in as User A on the site",
-      does: "Log in as customer A in the Chromium window (taskbar). Center mirrors after login.",
+      does: "Log in as customer A in the center pane. Step ticks when login is detected.",
       autoOn: "logged_in",
     },
     {
@@ -141,7 +141,7 @@ const IDOR_GUIDED: GuidedProcedure = {
     {
       n: 4,
       title: "Open B’s txn on the live site",
-      does: "Click Open in live browser on a B id — Chromium navigates to /transactions/{id} as A. Watch the center pane.",
+      does: "Click Open in center browser on a B id — the remote pane navigates to /transactions/{id} as A.",
       autoOn: "idor_navigated",
     },
     {
@@ -153,7 +153,7 @@ const IDOR_GUIDED: GuidedProcedure = {
     {
       n: 6,
       title: "Record the verdict",
-      does: "Record pass (blocked) or fail (data visible).",
+      does: "Result auto-records when steps complete — or use Record pass/fail.",
       autoOn: "verdict_ready",
     },
   ],

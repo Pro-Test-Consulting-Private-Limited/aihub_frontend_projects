@@ -58,6 +58,12 @@ export function atlasClient({ instance, accounts }: Msal) {
     getSession: (id: string) => request<SessionSnapshot>(`/sessions/${id}`),
     finishSession: (id: string) => request<SessionSnapshot>(`/sessions/${id}/finish`, json("POST")),
     discardSession: (id: string) => request<void>(`/sessions/${id}`, json("DELETE")),
+    /** Guided Security: read URL / JWT / page text from the remote browser (same as Canvas). */
+    sessionPageState: (id: string) =>
+      request<{ url: string; token: string; bodyText: string }>(`/sessions/${id}/page-state`),
+    /** Guided Security: navigate the remote browser while the user watches the center pane. */
+    sessionGoto: (id: string, url: string) =>
+      request<{ url: string; token: string; bodyText: string }>(`/sessions/${id}/goto`, json("POST", { url })),
     listCanvases: () => request<CanvasSummary[]>("/canvases"),
     getCanvas: (id: string) => request<Canvas>(`/canvases/${id}`),
     saveCanvas: (body: { sessionId: string; name: string; description?: string }) =>

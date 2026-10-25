@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { SecurityCheck } from "@/app/lib/security-checklist";
 import { appFrameUrl, guidedProcedureFor, type LiveKind } from "@/app/lib/security-live-checks";
 import { GuidedLiveLab } from "@/app/components/app-atlas/guided-labs";
+import type { AtlasClient } from "@/app/services/appatlas";
 import {
   securityAgent,
   SecurityAgentError,
@@ -15,6 +16,7 @@ type Props = {
   check: SecurityCheck;
   kind: LiveKind;
   targetUrl?: string | null;
+  client: AtlasClient;
   onClose: () => void;
 };
 
@@ -27,7 +29,7 @@ const ENUM_WHAT =
 /**
  * Canvas-style live session: centre = headed screenshot or app frame; side = steps / controls.
  */
-export function SecurityCheckSession({ check, kind, targetUrl, onClose }: Props) {
+export function SecurityCheckSession({ check, kind, targetUrl, client, onClose }: Props) {
   const loginUrl = (targetUrl || "").trim();
   const guide = kind === "guided" ? guidedProcedureFor(check.name) : null;
   const whatThisIs =
@@ -67,7 +69,7 @@ export function SecurityCheckSession({ check, kind, targetUrl, onClose }: Props)
       ) : kind === "enumeration" ? (
         <EnumerationSession loginUrl={loginUrl} onClose={onClose} />
       ) : (
-        <GuidedSession checkName={check.name} loginUrl={loginUrl} onClose={onClose} />
+        <GuidedSession checkName={check.name} loginUrl={loginUrl} client={client} onClose={onClose} />
       )}
     </div>
   );
@@ -458,10 +460,12 @@ function EnumerationSession({ loginUrl, onClose }: { loginUrl: string; onClose: 
 function GuidedSession({
   checkName,
   loginUrl,
+  client,
   onClose,
 }: {
   checkName: string;
   loginUrl: string;
+  client: AtlasClient;
   onClose: () => void;
 }) {
   const guide = guidedProcedureFor(checkName);
@@ -549,6 +553,7 @@ function GuidedSession({
           <GuidedLiveLab
             loginUrl={appFrameUrl(loginUrl) || loginUrl}
             lab={guide.lab!}
+            client={client}
             onEvent={onLabEvent}
             onClose={onClose}
             onOutcome={(pass, detail) => setLeanOutcome({ pass, detail })}
