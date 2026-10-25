@@ -33,8 +33,8 @@ export const SECURITY_CATEGORIES: SecurityCategory[] = [
       },
       {
         "name": "CAPTCHA verification",
-        "does": "Detects CAPTCHA presence and bypass resistance on login/registration.",
-        "mode": "automated"
+        "does": "Fail login three times, confirm the CAPTCHA challenge appears and blocks until solved.",
+        "mode": "guided"
       },
       {
         "name": "Auth bypass via direct URL access",
@@ -94,7 +94,7 @@ export const SECURITY_CATEGORIES: SecurityCategory[] = [
       {
         "name": "Username enumeration prevention",
         "does": "Compare responses for valid vs invalid usernames.",
-        "mode": "guided"
+        "mode": "automated"
       }
     ]
   },

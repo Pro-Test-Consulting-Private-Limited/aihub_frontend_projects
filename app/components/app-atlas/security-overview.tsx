@@ -197,6 +197,9 @@ export function SecurityOverview({
             {visible.map((c) => {
               const runnable = isLiveRunnable(c, liveEnabled, checkEnabled);
               const kind = liveKindFor(c);
+              // Live bindings win over static checklist mode (e.g. CAPTCHA is guided in the session).
+              const badgeMode: CheckMode | null =
+                kind === "guided" ? "guided" : kind === "stuffing" || kind === "enumeration" ? "automated" : c.mode;
               const row = (
                 <>
                   <span className="mt-1 h-3.5 w-3.5 shrink-0 rounded-[3px] border border-[#D9D9D9] dark:border-[#3a3a3a]" aria-hidden />
@@ -207,7 +210,7 @@ export function SecurityOverview({
                     </div>
                     <div className="mt-0.5 text-[12px] text-[#7E7E7E]">{c.does}</div>
                   </div>
-                  {c.mode ? <ModeBadge mode={c.mode} /> : <span className="shrink-0 text-[10.5px] text-[#9CA3AF]">not itemised</span>}
+                  {badgeMode ? <ModeBadge mode={badgeMode} /> : <span className="shrink-0 text-[10.5px] text-[#9CA3AF]">not itemised</span>}
                 </>
               );
               return (
