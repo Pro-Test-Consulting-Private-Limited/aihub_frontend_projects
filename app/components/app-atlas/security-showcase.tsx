@@ -110,7 +110,7 @@ function StuffingPanel({ loginUrl }: { loginUrl: string }) {
   return (
     <div className="space-y-3">
       <p className="text-[12.5px] leading-relaxed text-[#5E6066] dark:text-[#9ca3af]">
-        <span className="font-medium text-[#1F1F1F] dark:text-[#ededed]">Password guessing / stuffing.</span> We look up whether this identifier shows up in known breaches (HIBP when configured), build likely passwords from common lists and name/year patterns, then try them in a real browser on your login.
+        <span className="font-medium text-[#1F1F1F] dark:text-[#ededed]">Password guessing / stuffing.</span> Free OSINT checks (XposedOrNot, LeakCheck, EmailRep) see whether this email shows up in known leaks, then we build likely passwords from common lists and name/year patterns and try them in a real browser on your login.
       </p>
       <div className="grid gap-2 sm:grid-cols-2">
         <Field label="Identifier under test" value={identifier} onChange={setIdentifier} placeholder="test.user@yourorg.com" />
