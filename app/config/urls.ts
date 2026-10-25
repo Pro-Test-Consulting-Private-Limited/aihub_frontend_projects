@@ -18,6 +18,15 @@ export const CLARIFY_API_BASE =
  */
 export const API_AGENT_BASE = (process.env.NEXT_PUBLIC_API_AGENT_BASE_URL || "http://localhost:4000").replace(/\/$/, "");
 
+/**
+ * Security Test Agent (headed credential stuffing + guided enumeration on the App Atlas Security tab). Separate
+ * service: follows NEXT_PUBLIC_SECURITY_AGENT_BASE_URL everywhere. Local default port 4600.
+ */
+export const SECURITY_AGENT_BASE = (process.env.NEXT_PUBLIC_SECURITY_AGENT_BASE_URL || "http://localhost:4600").replace(
+  /\/$/,
+  "",
+);
+
 export const ACTION_DRIVEN_TEST_CASE_GENERATOR_SITE = `${
   siteOrigin() || "https://ai-hub.protestcorp.com"
 }/vnc_lite.html`;

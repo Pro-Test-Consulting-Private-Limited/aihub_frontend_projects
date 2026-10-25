@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { TbDeviceMobile, TbServer } from "react-icons/tb";
 import { SECURITY_CATEGORIES, type CheckMode, type SecurityCategory } from "@/app/lib/security-checklist";
+import { SecurityShowcase } from "./security-showcase";
 
 const AUTO = "text-[#16A34A] border-[#16A34A] bg-[#F0FDF4] dark:bg-[#0f2418]";
 const GUIDED = "text-[#D97706] border-[#D97706] bg-[#FFFBEB] dark:bg-[#2a2008]";
@@ -34,7 +35,7 @@ const ModeBadge = ({ mode }: { mode: CheckMode }) => (
 
 /**
  * The security plan for the application under test: the categories, how many checks each has, and how many are automated
- * and how many are guided (a tester follows a step-by-step procedure). Display only: nothing is run from here yet.
+ * and how many are guided. Authentication Security also hosts the live Security Test Agent showcase (stuffing + enumeration).
  */
 export function SecurityOverview({ targetUrl, projectName }: { targetUrl?: string | null; projectName?: string | null }) {
   const [selectedId, setSelectedId] = useState(SECURITY_CATEGORIES[0].id);
@@ -130,6 +131,8 @@ export function SecurityOverview({ targetUrl, projectName }: { targetUrl?: strin
             {selected.itemised && chip("automated", `Automated (${selected.automated})`, AUTO)}
             {selected.itemised && chip("guided", `Guided (${selected.guided})`, GUIDED)}
           </div>
+
+          {selected.id === "authentication-security" && <div className="mt-4"><SecurityShowcase targetUrl={targetUrl} /></div>}
 
           {!selected.itemised && (
             <p className="mt-3 rounded-[8px] bg-[#F5F6F6] px-3 py-2 text-[12px] text-[#5E6066] dark:bg-[#141414] dark:text-[#9ca3af]">
