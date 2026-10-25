@@ -123,14 +123,21 @@ export const securityAgent = {
       { method: "POST", body: JSON.stringify(body) },
       signal,
     ),
-  /** Guided lab: SSRF-safe GET/POST with Bearer token against the app under test. */
+  /** Guided lab: SSRF-safe GET/POST (+ optional JSON body / Bearer) against the app under test. */
   httpProbe: (
-    body: { url: string; authorization: string; method?: "GET" | "POST" },
+    body: {
+      url: string;
+      authorization?: string;
+      method?: "GET" | "POST";
+      jsonBody?: Record<string, unknown>;
+    },
     signal?: AbortSignal,
   ) =>
-    req<{ ok: boolean; status: number; statusText: string; bodyPreview: string }>(
-      "/api/checks/http-probe",
-      { method: "POST", body: JSON.stringify(body) },
-      signal,
-    ),
+    req<{
+      ok: boolean;
+      status: number;
+      statusText: string;
+      bodyPreview: string;
+      body?: unknown;
+    }>("/api/checks/http-probe", { method: "POST", body: JSON.stringify(body) }, signal),
 };

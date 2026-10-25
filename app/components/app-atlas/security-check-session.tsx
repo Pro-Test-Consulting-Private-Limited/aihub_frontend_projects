@@ -546,9 +546,7 @@ function GuidedSession({
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3">
           <p className="text-[12px] font-medium text-[#1F1F1F] dark:text-[#ededed]">{guide.plainStory}</p>
           {guide.lab === "jwt" && <JwtLab loginUrl={loginUrl} onEvent={onLabEvent} />}
-          {guide.lab === "idor" && (
-            <IdorLab loginUrl={loginUrl} onEvent={onLabEvent} onNavigateFrame={(url) => setFrameSrc(url)} />
-          )}
+          {guide.lab === "idor" && <IdorLab loginUrl={loginUrl} onEvent={onLabEvent} />}
           <p className="text-[11px] text-[#7E7E7E]">
             Steps done: {doneCount}/{guide.steps.length}
             {liveHint ? ` · ${liveHint}` : ""} — lab actions tick steps; Done overrides
