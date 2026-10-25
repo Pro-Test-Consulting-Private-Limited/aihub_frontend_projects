@@ -98,7 +98,7 @@ const JWT_GUIDED: GuidedProcedure = {
     {
       n: 5,
       title: "Forge the token",
-      does: "Click Forge alg:none (or Forge claim).",
+      does: "Click Forge alg:none — classic algorithm-confusion attempt (empty signature).",
       autoOn: "forged",
     },
     {

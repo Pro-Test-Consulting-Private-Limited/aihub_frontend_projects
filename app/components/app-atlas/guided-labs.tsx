@@ -20,8 +20,9 @@ export function GuidedLiveLab({ loginUrl, lab, onEvent, onClose }: LabProps) {
   const [err, setErr] = useState<string | null>(null);
   const [mobileB, setMobileB] = useState("");
   const [passB, setPassB] = useState("");
-  const [decoded, setDecoded] = useState("");
-  const [probeOut, setProbeOut] = useState("");
+  const [decoded, setDecoded] = useState<{ header: Record<string, unknown>; payload: Record<string, unknown> } | null>(null);
+  const [probeOut, setProbeOut] = useState<{ status?: number; body?: string; rejected?: boolean } | null>(null);
+  const [forgedNote, setForgedNote] = useState<string | null>(null);
   const [pollErr, setPollErr] = useState<string | null>(null);
   const startedFlag = useRef(false);
 
@@ -91,10 +92,20 @@ export function GuidedLiveLab({ loginUrl, lab, onEvent, onClose }: LabProps) {
       const out = await securityAgent.guidedBrowserAction(run.id, body);
       if (out.run) setRun(out.run as SecurityRun);
       if (body.type === "jwt_decode" && out.header) {
-        setDecoded(JSON.stringify({ header: out.header, payload: out.payload }, null, 2));
+        setDecoded({
+          header: out.header as Record<string, unknown>,
+          payload: (out.payload || {}) as Record<string, unknown>,
+        });
+      }
+      if (body.type === "jwt_forge") {
+        setForgedNote("Forged alg:none token ready — signature emptied. Next: Probe.");
       }
       if (body.type === "jwt_probe") {
-        setProbeOut(`HTTP ${out.status}\n${out.bodyPreview || ""}`);
+        setProbeOut({
+          status: out.status as number | undefined,
+          body: String(out.bodyPreview || ""),
+          rejected: Boolean(out.rejected),
+        });
       }
     } catch (e) {
       setErr(e instanceof SecurityAgentError ? e.message : e instanceof Error ? e.message : "Action failed");
@@ -175,8 +186,8 @@ export function GuidedLiveLab({ loginUrl, lab, onEvent, onClose }: LabProps) {
         {run && lab === "jwt" && (
           <>
             <p className="text-[11px] text-[#7E7E7E]">
-              Sign in on the <strong>Chromium</strong> window (not this panel). When the mirror shows dashboard and Decode enables, continue
-              here.
+              Sign in on the <strong>Chromium</strong> window. When Decode enables, walk Decode → Forge → Probe so the room sees each
+              stage.
             </p>
             <div className="flex flex-wrap gap-1.5">
               <LabBtn onClick={() => act({ type: "jwt_decode" })} disabled={busy || !flags.token_captured}>
@@ -185,15 +196,33 @@ export function GuidedLiveLab({ loginUrl, lab, onEvent, onClose }: LabProps) {
               <LabBtn onClick={() => act({ type: "jwt_forge", mode: "none" })} disabled={busy || !flags.token_captured}>
                 Forge alg:none
               </LabBtn>
-              <LabBtn onClick={() => act({ type: "jwt_forge", mode: "claim" })} disabled={busy || !flags.token_captured}>
-                Forge claim
-              </LabBtn>
               <LabBtn onClick={() => act({ type: "jwt_probe" })} disabled={busy || !flags.forged} primary>
                 Probe /auth/me
               </LabBtn>
             </div>
-            {decoded && <pre className="max-h-24 overflow-auto rounded bg-[#0a0a0a] p-2 text-[10px] text-[#A7F3D0]">{decoded}</pre>}
-            {probeOut && <pre className="max-h-20 overflow-auto rounded border p-2 text-[10px] dark:border-[#2a2a2a]">{probeOut}</pre>}
+            {decoded && <JwtCards header={decoded.header} payload={decoded.payload} />}
+            {forgedNote && (
+              <div className="rounded-[6px] border border-[#A05DFF]/40 bg-[#A05DFF]/10 px-2.5 py-2 text-[11px] text-[#5B21B6] dark:text-[#E9D5FF]">
+                {forgedNote}
+              </div>
+            )}
+            {probeOut && (
+              <div
+                className={`rounded-[6px] border px-2.5 py-2 text-[11px] ${
+                  probeOut.rejected
+                    ? "border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100"
+                    : "border-red-300 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950/40 dark:text-red-100"
+                }`}
+              >
+                <div className="font-semibold">
+                  Probe result: HTTP {probeOut.status}{" "}
+                  {probeOut.rejected ? "— rejected (lean PASS)" : "— accepted (lean FAIL)"}
+                </div>
+                {probeOut.body && (
+                  <pre className="mt-1 max-h-16 overflow-auto whitespace-pre-wrap font-mono text-[10px] opacity-80">{probeOut.body}</pre>
+                )}
+              </div>
+            )}
           </>
         )}
         {run && lab === "idor" && (
@@ -235,6 +264,54 @@ export function GuidedLiveLab({ loginUrl, lab, onEvent, onClose }: LabProps) {
         </button>
       </div>
     </div>
+  );
+}
+
+function JwtCards({ header, payload }: { header: Record<string, unknown>; payload: Record<string, unknown> }) {
+  return (
+    <div className="grid gap-2 sm:grid-cols-2">
+      <div className="rounded-[8px] border border-[#E5E7EB] bg-white p-2 dark:border-[#2a2a2a] dark:bg-[#0a0a0a]">
+        <div className="mb-1 text-[10px] font-bold uppercase tracking-wide text-[#8664F2]">Header</div>
+        <KvRows
+          rows={Object.entries(header).map(([k, v]) => ({
+            k,
+            v: String(v),
+            hot: k === "alg",
+          }))}
+        />
+      </div>
+      <div className="rounded-[8px] border border-[#E5E7EB] bg-white p-2 dark:border-[#2a2a2a] dark:bg-[#0a0a0a]">
+        <div className="mb-1 text-[10px] font-bold uppercase tracking-wide text-[#8664F2]">Payload</div>
+        <KvRows rows={Object.entries(payload).map(([k, v]) => ({ k, v: formatClaim(v), hot: k === "sub" || k === "exp" }))} />
+      </div>
+    </div>
+  );
+}
+
+function formatClaim(v: unknown): string {
+  if (typeof v === "number" && v > 1_000_000_000 && v < 4_000_000_000) {
+    try {
+      return `${v} (${new Date(v * 1000).toISOString()})`;
+    } catch {
+      return String(v);
+    }
+  }
+  if (typeof v === "object") return JSON.stringify(v);
+  return String(v);
+}
+
+function KvRows({ rows }: { rows: { k: string; v: string; hot?: boolean }[] }) {
+  return (
+    <dl className="max-h-28 space-y-1 overflow-auto">
+      {rows.map((r) => (
+        <div key={r.k} className="flex gap-2 text-[11px]">
+          <dt className={`shrink-0 font-semibold ${r.hot ? "text-[#D97706]" : "text-[#7E7E7E]"}`}>{r.k}</dt>
+          <dd className={`min-w-0 break-all font-mono ${r.hot ? "font-semibold text-[#1F1F1F] dark:text-[#ededed]" : "text-[#5E6066] dark:text-[#9ca3af]"}`}>
+            {r.v}
+          </dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
