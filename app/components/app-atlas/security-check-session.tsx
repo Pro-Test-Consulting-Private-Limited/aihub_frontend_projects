@@ -548,110 +548,124 @@ function GuidedSession({
 
   if (liveLab) {
     return (
-      <div className="flex min-h-0 flex-1 gap-4 p-4">
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <GuidedLiveLab
-            loginUrl={appFrameUrl(loginUrl) || loginUrl}
-            lab={guide.lab!}
-            client={client}
-            onEvent={onLabEvent}
-            onClose={onClose}
-            onOutcome={(pass, detail) => setLeanOutcome({ pass, detail })}
-          />
-        </div>
-        <aside className="flex w-[340px] shrink-0 min-h-0 flex-col overflow-hidden rounded-[10px] border border-[#E5E7EB] bg-white dark:border-[#2a2a2a] dark:bg-[#121212]">
-          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3">
-            <p className="text-[12px] font-medium text-[#1F1F1F] dark:text-[#ededed]">{guide.plainStory}</p>
-            <p className="text-[11px] text-[#7E7E7E]">
-              Steps {doneCount}/{guide.steps.length} — ticks from the live site; pass/fail auto-records when complete
-            </p>
-            <ol className="space-y-2">
-              {guide.steps.map((s) => {
-                const on = Boolean(doneSteps[s.n]);
-                return (
-                  <li
-                    key={s.n}
-                    className={`rounded-[6px] border px-3 py-2 ${
-                      on ? "border-[#16A34A] bg-[#F0FDF4] dark:bg-[#0f2418]" : "border-[#E5E7EB] bg-[#FAFAFA] dark:border-[#2a2a2a] dark:bg-[#1a1a1a]"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="text-[12.5px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">
-                          {s.n}. {s.title}
-                          {on && <span className="ml-1.5 text-[10px] font-medium text-[#16A34A]">live</span>}
-                        </div>
-                        <div className="mt-0.5 text-[12px] leading-snug text-[#5E6066] dark:text-[#9ca3af]">{s.does}</div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => toggleStep(s.n)}
-                        className={`shrink-0 rounded-[4px] border px-2 py-1 text-[11px] font-semibold ${
-                          on ? "border-[#16A34A] text-[#16A34A]" : "border-[#D9D9D9] text-[#7E7E7E]"
+      <GuidedLiveLab
+        loginUrl={appFrameUrl(loginUrl) || loginUrl}
+        lab={guide.lab!}
+        client={client}
+        onEvent={onLabEvent}
+        onClose={onClose}
+        onOutcome={(pass, detail) => setLeanOutcome({ pass, detail })}
+        render={({ browser, tools }) => (
+          <div className="flex min-h-0 flex-1 gap-3 p-3">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">{browser}</div>
+            <aside className="flex w-[380px] shrink-0 min-h-0 flex-col overflow-hidden rounded-[10px] border border-[#E5E7EB] bg-white dark:border-[#2a2a2a] dark:bg-[#121212]">
+              <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto px-3 py-3">
+                <p className="text-[12px] font-medium text-[#1F1F1F] dark:text-[#ededed]">{guide.plainStory}</p>
+                <p className="text-[11px] text-[#7E7E7E]">
+                  Steps {doneCount}/{guide.steps.length} — ticks from the live site; pass/fail auto-records when complete
+                </p>
+                <ol className="space-y-2">
+                  {guide.steps.map((s) => {
+                    const on = Boolean(doneSteps[s.n]);
+                    return (
+                      <li
+                        key={s.n}
+                        className={`rounded-[6px] border px-3 py-2 ${
+                          on
+                            ? "border-[#16A34A] bg-[#F0FDF4] dark:bg-[#0f2418]"
+                            : "border-[#E5E7EB] bg-[#FAFAFA] dark:border-[#2a2a2a] dark:bg-[#1a1a1a]"
                         }`}
                       >
-                        {on ? "Done" : "Mark done"}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="text-[12.5px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">
+                              {s.n}. {s.title}
+                              {on && <span className="ml-1.5 text-[10px] font-medium text-[#16A34A]">live</span>}
+                            </div>
+                            <div className="mt-0.5 text-[12px] leading-snug text-[#5E6066] dark:text-[#9ca3af]">{s.does}</div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => toggleStep(s.n)}
+                            className={`shrink-0 rounded-[4px] border px-2 py-1 text-[11px] font-semibold ${
+                              on ? "border-[#16A34A] text-[#16A34A]" : "border-[#D9D9D9] text-[#7E7E7E]"
+                            }`}
+                          >
+                            {on ? "Done" : "Mark done"}
+                          </button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ol>
+                <p className="text-[11px] text-[#9CA3AF]">
+                  Pass: {guide.passWhen}
+                  <br />
+                  Fail: {guide.failWhen}
+                </p>
+                {!recorded && leanOutcome && doneCount === guide.steps.length && (
+                  <div className="rounded-[6px] border border-[#8664F2]/40 bg-[#F3EEFF] px-3 py-2 text-[12px] text-[#5B21B6]">
+                    {busy
+                      ? "Recording result…"
+                      : `All steps done — auto ${leanOutcome.pass ? "PASS" : "FAIL"}: ${leanOutcome.detail}`}
+                  </div>
+                )}
+                {!recorded && (
+                  <>
+                    <textarea
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      rows={2}
+                      placeholder="Optional notes"
+                      className="w-full rounded-[6px] border border-[#E5E7EB] bg-white px-3 py-2 text-[12.5px] dark:border-[#2a2a2a] dark:bg-[#1a1a1a]"
+                    />
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => {
+                          autoRecorded.current = true;
+                          void submit(true);
+                        }}
+                        className="rounded-[6px] border border-[#16A34A] bg-[#F0FDF4] px-3 py-1.5 text-[12px] font-semibold text-[#16A34A]"
+                      >
+                        Record pass
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => {
+                          autoRecorded.current = true;
+                          void submit(false);
+                        }}
+                        className="rounded-[6px] border border-[#D97706] bg-[#FFFBEB] px-3 py-1.5 text-[12px] font-semibold text-[#D97706]"
+                      >
+                        Record fail
                       </button>
                     </div>
-                  </li>
-                );
-              })}
-            </ol>
-            <p className="text-[11px] text-[#9CA3AF]">
-              Pass: {guide.passWhen}
-              <br />
-              Fail: {guide.failWhen}
-            </p>
-            {!recorded && leanOutcome && doneCount === guide.steps.length && (
-              <div className="rounded-[6px] border border-[#8664F2]/40 bg-[#F3EEFF] px-3 py-2 text-[12px] text-[#5B21B6]">
-                {busy ? "Recording result…" : `All steps done — auto ${leanOutcome.pass ? "PASS" : "FAIL"}: ${leanOutcome.detail}`}
-              </div>
-            )}
-            {!recorded && (
-              <>
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  rows={2}
-                  placeholder="Optional notes"
-                  className="w-full rounded-[6px] border border-[#E5E7EB] bg-white px-3 py-2 text-[12.5px] dark:border-[#2a2a2a] dark:bg-[#1a1a1a]"
-                />
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => {
-                      autoRecorded.current = true;
-                      void submit(true);
-                    }}
-                    className="rounded-[6px] border border-[#16A34A] bg-[#F0FDF4] px-3 py-1.5 text-[12px] font-semibold text-[#16A34A]"
+                  </>
+                )}
+                {error && <p className="text-[12px] text-red-600">{error}</p>}
+                {recorded && result?.result && (
+                  <div
+                    className={`rounded-[6px] border p-2 ${
+                      result.result.verdict === "pass" ? "border-emerald-200 bg-emerald-50" : "border-red-200 bg-red-50"
+                    }`}
                   >
-                    Record pass
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => {
-                      autoRecorded.current = true;
-                      void submit(false);
-                    }}
-                    className="rounded-[6px] border border-[#D97706] bg-[#FFFBEB] px-3 py-1.5 text-[12px] font-semibold text-[#D97706]"
-                  >
-                    Record fail
-                  </button>
-                </div>
-              </>
-            )}
-            {error && <p className="text-[12px] text-red-600">{error}</p>}
-            {recorded && result?.result && (
-              <div className={`rounded-[6px] border p-2 ${result.result.verdict === "pass" ? "border-emerald-200 bg-emerald-50" : "border-red-200 bg-red-50"}`}>
-                <div className="text-[13px] font-semibold">{result.result.verdict === "pass" ? "Pass — recorded" : "Fail — recorded"}</div>
-                <p className="mt-1 text-[12px]">{result.result.summary}</p>
+                    <div className="text-[13px] font-semibold">
+                      {result.result.verdict === "pass" ? "Pass — recorded" : "Fail — recorded"}
+                    </div>
+                    <p className="mt-1 text-[12px]">{result.result.summary}</p>
+                  </div>
+                )}
               </div>
-            )}
+              <div className="max-h-[46%] shrink-0 overflow-y-auto border-t border-[#E5E7EB] bg-[#FAFAFA] dark:border-[#2a2a2a] dark:bg-[#1a1a1a]">
+                {tools}
+              </div>
+            </aside>
           </div>
-        </aside>
-      </div>
+        )}
+      />
     );
   }
 

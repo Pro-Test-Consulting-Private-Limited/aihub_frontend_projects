@@ -5,7 +5,8 @@ import type { SessionSnapshot } from "@/app/interfaces/appatlas";
 import { apiBaseFromAppUrl, appOrigin } from "@/app/lib/security-live-checks";
 import { decodeJwt, forgeAlgNone, looksLikeJwt } from "@/app/lib/jwt-lab";
 import { atlasUrl, type AtlasClient } from "@/app/services/appatlas";
-import { securityAgent, SecurityAgentError } from "@/app/services/security-agent";
+
+type LabParts = { browser: ReactNode; tools: ReactNode };
 
 type LabProps = {
   loginUrl: string;
@@ -14,6 +15,8 @@ type LabProps = {
   onEvent: (event: string, detail?: string) => void;
   onClose: () => void;
   onOutcome?: (pass: boolean, detail: string) => void;
+  /** Put tools in the right panel (steps above, decode/forge below). */
+  render: (parts: LabParts) => ReactNode;
 };
 
 type TxnRow = { transactionId: string; label: string };
@@ -22,7 +25,7 @@ type TxnRow = { transactionId: string; label: string };
  * Guided JWT/IDOR using the same App Atlas remote browser as Canvas —
  * interact in the center pane (no Chromium window on your laptop).
  */
-export function GuidedLiveLab({ loginUrl, lab, client, onEvent, onClose, onOutcome }: LabProps) {
+export function GuidedLiveLab({ loginUrl, lab, client, onEvent, onClose, onOutcome, render }: LabProps) {
   const [snap, setSnap] = useState<SessionSnapshot | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -34,7 +37,6 @@ export function GuidedLiveLab({ loginUrl, lab, client, onEvent, onClose, onOutco
   const [mobileB, setMobileB] = useState("");
   const [passB, setPassB] = useState("");
   const [txns, setTxns] = useState<TxnRow[]>([]);
-  const startedFlag = useRef(false);
   const autoStarted = useRef(false);
   const outcomeSent = useRef(false);
   const sessionIdRef = useRef<string | null>(null);
@@ -125,7 +127,6 @@ export function GuidedLiveLab({ loginUrl, lab, client, onEvent, onClose, onOutco
       sessionIdRef.current = next.id;
       setSnap(next);
       mark("browser_started");
-      startedFlag.current = true;
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Could not start remote browser");
     } finally {
@@ -139,7 +140,6 @@ export function GuidedLiveLab({ loginUrl, lab, client, onEvent, onClose, onOutco
     void start();
   }, [loginUrl, start]);
 
-  // Poll page state from the remote browser (URL / token / text).
   useEffect(() => {
     if (!snap?.id || snap.status !== "recording") return;
     let cancelled = false;
@@ -164,9 +164,8 @@ export function GuidedLiveLab({ loginUrl, lab, client, onEvent, onClose, onOutco
   const decode = () => {
     setErr(null);
     try {
-      const t = token;
-      if (!looksLikeJwt(t)) throw new Error("No session token yet — sign in in the center pane first.");
-      const d = decodeJwt(t);
+      if (!looksLikeJwt(token)) throw new Error("No session token yet — sign in in the center pane first.");
+      const d = decodeJwt(token);
       setDecoded({ header: d.header, payload: d.payload });
       mark("decoded", `alg=${String(d.header.alg)}`);
     } catch (e) {
@@ -187,6 +186,7 @@ export function GuidedLiveLab({ loginUrl, lab, client, onEvent, onClose, onOutco
   };
 
   const probe = async () => {
+    if (!snap?.id) return;
     setBusy(true);
     setErr(null);
     mark("probed");
@@ -194,7 +194,7 @@ export function GuidedLiveLab({ loginUrl, lab, client, onEvent, onClose, onOutco
       const apiBase = apiBaseFromAppUrl(loginUrl);
       if (!apiBase) throw new Error("Application URL missing.");
       if (!forged) throw new Error("Forge a token first.");
-      const res = await securityAgent.httpProbe({ url: `${apiBase}/auth/me`, authorization: forged });
+      const res = await client.sessionHttpProbe(snap.id, { url: `${apiBase}/auth/me`, authorization: forged });
       const rejected = res.status === 401 || res.status === 403;
       setProbeOut({ status: res.status, body: res.bodyPreview, rejected });
       mark("verdict_ready");
@@ -203,26 +203,27 @@ export function GuidedLiveLab({ loginUrl, lab, client, onEvent, onClose, onOutco
         onOutcome(rejected, rejected ? "Forged JWT rejected by API" : "Forged JWT was accepted");
       }
     } catch (e) {
-      setErr(e instanceof SecurityAgentError ? e.message : e instanceof Error ? e.message : "Probe failed");
+      setErr(e instanceof Error ? e.message : "Probe failed");
     } finally {
       setBusy(false);
     }
   };
 
   const loadBTxns = async () => {
+    if (!snap?.id) return;
     setBusy(true);
     setErr(null);
     try {
       const apiBase = apiBaseFromAppUrl(loginUrl);
       if (!apiBase) throw new Error("Application URL missing.");
-      const loginRes = await securityAgent.httpProbe({
+      const loginRes = await client.sessionHttpProbe(snap.id, {
         url: `${apiBase}/auth/login`,
         method: "POST",
         jsonBody: { mobileNumber: mobileB.trim(), password: passB },
       });
       const bToken = (loginRes.body as { token?: string } | null)?.token;
       if (loginRes.status >= 400 || !bToken) throw new Error(loginRes.bodyPreview || "User B login failed");
-      const listRes = await securityAgent.httpProbe({ url: `${apiBase}/transactions`, authorization: bToken });
+      const listRes = await client.sessionHttpProbe(snap.id, { url: `${apiBase}/transactions`, authorization: bToken });
       if (listRes.status >= 400) throw new Error(listRes.bodyPreview || "Could not list B’s transactions");
       const raw = listRes.body as { data?: Record<string, unknown>[] } | null;
       const rows = (Array.isArray(raw?.data) ? raw!.data : [])
@@ -269,129 +270,129 @@ export function GuidedLiveLab({ loginUrl, lab, client, onEvent, onClose, onOutco
   const viewer = snap?.viewer;
   const SCREEN_RATIO: Record<string, number> = { neko: 16 / 9, vnc: 16 / 10 };
 
-  return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[10px] border border-[#E6E1F5] bg-[#111] dark:border-[#2a2a2a]">
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#333] bg-[#1a1a1a] px-3 py-1.5 text-[11.5px] text-[#ccc]">
-          <span className="truncate font-mono">
-            {snap?.currentUrl || snap?.startUrl || (busy ? "Starting remote browser…" : "Preparing…")}
-          </span>
-          {snap && (
-            <button type="button" onClick={() => void stop()} className="shrink-0 text-[#f87171] underline">
-              Stop browser
-            </button>
-          )}
-        </div>
-        <div className="flex min-h-[420px] flex-1 items-center justify-center bg-[#0a0a0a] p-2">
-          {viewer && viewer.kind !== "local" ? (
-            <iframe
-              src={atlasUrl(viewer.url)}
-              allow="autoplay; clipboard-read; clipboard-write; fullscreen"
-              className="h-full max-h-full w-full rounded-[8px] border border-[#333] bg-black"
-              style={{ aspectRatio: SCREEN_RATIO[viewer.kind] ?? 16 / 9 }}
-              title="Remote browser — interact here"
-            />
-          ) : viewer?.kind === "local" ? (
-            <div className="max-w-md p-6 text-center text-[13px] text-[#9ca3af]">
-              Backend is in local provider mode (Chromium on the server). Prefer VNC/neko so the browser appears in this pane like Canvas.
-            </div>
-          ) : (
-            <div className="max-w-md space-y-2 p-6 text-center text-[13px] text-[#9ca3af]">
-              <p className="text-[#fbbf24]">{busy ? "Starting remote browser…" : "Waiting for browser…"}</p>
-              <p>Same live browser as Canvas — sign in and browse in this pane.</p>
-              {err && <p className="text-red-400">{err}</p>}
-            </div>
-          )}
-        </div>
+  const browser = (
+    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[10px] border border-[#E6E1F5] bg-[#111] dark:border-[#2a2a2a]">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#333] bg-[#1a1a1a] px-3 py-1.5 text-[11.5px] text-[#ccc]">
+        <span className="truncate font-mono">
+          {snap?.currentUrl || snap?.startUrl || (busy ? "Starting remote browser…" : "Preparing…")}
+        </span>
+        {snap && (
+          <button type="button" onClick={() => void stop()} className="shrink-0 text-[#f87171] underline">
+            Stop browser
+          </button>
+        )}
       </div>
-
-      <div className="shrink-0 space-y-2 rounded-[8px] border border-[#E6E1F5] bg-[#FAFAFA] p-2.5 dark:border-[#2a2a2a] dark:bg-[#1a1a1a]">
-        <div className="text-[11.5px] font-semibold uppercase tracking-wide text-[#8664F2]">
-          {lab === "jwt" ? "JWT — decode / forge / probe" : "IDOR — victim target"}
-        </div>
-        {lab === "jwt" && (
-          <>
-            <p className="text-[11px] text-[#7E7E7E]">
-              Sign in in the <strong>center pane</strong>. When Decode enables: Decode → Forge alg:none → Probe.
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              <LabBtn onClick={decode} disabled={busy || !looksLikeJwt(token)}>
-                Decode
-              </LabBtn>
-              <LabBtn onClick={forge} disabled={busy || !looksLikeJwt(token)}>
-                Forge alg:none
-              </LabBtn>
-              <LabBtn onClick={() => void probe()} disabled={busy || !forged} primary>
-                Probe /auth/me
-              </LabBtn>
-            </div>
-            {decoded && <JwtCards header={decoded.header} payload={decoded.payload} />}
-            {forgedNote && (
-              <div className="rounded-[6px] border border-[#A05DFF]/40 bg-[#A05DFF]/10 px-2.5 py-2 text-[11px] text-[#5B21B6] dark:text-[#E9D5FF]">
-                {forgedNote}
-              </div>
-            )}
-            {probeOut && (
-              <div
-                className={`rounded-[6px] border px-2.5 py-2 text-[11px] ${
-                  probeOut.rejected
-                    ? "border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100"
-                    : "border-red-300 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950/40 dark:text-red-100"
-                }`}
-              >
-                <div className="font-semibold">
-                  Probe result: HTTP {probeOut.status}{" "}
-                  {probeOut.rejected ? "— rejected (lean PASS)" : "— accepted (lean FAIL)"}
-                </div>
-                {probeOut.body && (
-                  <pre className="mt-1 max-h-16 overflow-auto whitespace-pre-wrap font-mono text-[10px] opacity-80">{probeOut.body}</pre>
-                )}
-              </div>
-            )}
-          </>
+      <div className="flex min-h-0 flex-1 items-center justify-center bg-[#0a0a0a] p-2">
+        {viewer && viewer.kind !== "local" ? (
+          <iframe
+            src={atlasUrl(viewer.url)}
+            allow="autoplay; clipboard-read; clipboard-write; fullscreen"
+            className="h-full max-h-full w-full rounded-[8px] border border-[#333] bg-black"
+            style={{ aspectRatio: SCREEN_RATIO[viewer.kind] ?? 16 / 9 }}
+            title="Remote browser — interact here"
+          />
+        ) : viewer?.kind === "local" ? (
+          <div className="max-w-md p-6 text-center text-[13px] text-[#9ca3af]">
+            Backend is in local provider mode. Prefer VNC/neko so the browser appears in this pane like Canvas.
+          </div>
+        ) : (
+          <div className="max-w-md space-y-2 p-6 text-center text-[13px] text-[#9ca3af]">
+            <p className="text-[#fbbf24]">{busy ? "Starting remote browser…" : "Waiting for browser…"}</p>
+            <p>Same live browser as Canvas — sign in and browse in this pane.</p>
+            {err && <p className="text-red-400">{err}</p>}
+          </div>
         )}
-        {lab === "idor" && (
-          <>
-            <p className="text-[11px] text-[#7E7E7E]">
-              Sign in as <strong>User A</strong> in the center pane. Load User B’s txns, then open one — the remote browser navigates
-              there.
-            </p>
-            <div className="grid grid-cols-2 gap-1.5">
-              <TinyField label="User B mobile" value={mobileB} onChange={setMobileB} />
-              <TinyField label="User B password" value={passB} onChange={setPassB} type="password" />
-            </div>
-            <LabBtn onClick={() => void loadBTxns()} disabled={busy || !mobileB.trim() || !passB || !looksLikeJwt(token)}>
-              Load B’s transactions
-            </LabBtn>
-            {txns.length > 0 && (
-              <div className="max-h-28 space-y-1 overflow-y-auto">
-                {txns.map((t) => (
-                  <button
-                    key={t.transactionId}
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void openTxnInRemote(t.transactionId)}
-                    className="block w-full rounded border border-[#E5E7EB] bg-white px-2 py-1 text-left font-mono text-[11px] hover:border-[#8664F2] dark:border-[#2a2a2a] dark:bg-[#0a0a0a]"
-                  >
-                    Open in center browser: {t.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </>
-        )}
-        {err && <p className="text-[11px] text-red-600">{err}</p>}
-        <button type="button" onClick={() => void stop()} className="text-[11px] text-[#7E7E7E] underline">
-          Back to plan
-        </button>
       </div>
     </div>
   );
+
+  const tools = (
+    <div className="space-y-2 px-3 py-2.5">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-[#8664F2]">
+        {lab === "jwt" ? "JWT — decode / forge / probe" : "IDOR — victim target"}
+      </div>
+      {lab === "jwt" && (
+        <>
+          <p className="text-[11px] leading-snug text-[#7E7E7E]">
+            Sign in in the center pane. Then: Decode → Forge alg:none → Probe.
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            <LabBtn onClick={decode} disabled={busy || !looksLikeJwt(token)}>
+              Decode
+            </LabBtn>
+            <LabBtn onClick={forge} disabled={busy || !looksLikeJwt(token)}>
+              Forge alg:none
+            </LabBtn>
+            <LabBtn onClick={() => void probe()} disabled={busy || !forged || !snap?.id} primary>
+              Probe /auth/me
+            </LabBtn>
+          </div>
+          {decoded && <JwtCards header={decoded.header} payload={decoded.payload} />}
+          {forgedNote && (
+            <div className="rounded-[6px] border border-[#A05DFF]/40 bg-[#A05DFF]/10 px-2.5 py-2 text-[11px] text-[#5B21B6] dark:text-[#E9D5FF]">
+              {forgedNote}
+            </div>
+          )}
+          {probeOut && (
+            <div
+              className={`rounded-[6px] border px-2.5 py-2 text-[11px] ${
+                probeOut.rejected
+                  ? "border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100"
+                  : "border-red-300 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950/40 dark:text-red-100"
+              }`}
+            >
+              <div className="font-semibold">
+                Probe: HTTP {probeOut.status} {probeOut.rejected ? "— rejected (PASS)" : "— accepted (FAIL)"}
+              </div>
+              {probeOut.body && (
+                <pre className="mt-1 max-h-14 overflow-auto whitespace-pre-wrap font-mono text-[10px] opacity-80">{probeOut.body}</pre>
+              )}
+            </div>
+          )}
+        </>
+      )}
+      {lab === "idor" && (
+        <>
+          <p className="text-[11px] leading-snug text-[#7E7E7E]">
+            Sign in as <strong>User A</strong> in the center. Load B’s txns, then open one in the pane.
+          </p>
+          <div className="grid grid-cols-1 gap-1.5">
+            <TinyField label="User B mobile" value={mobileB} onChange={setMobileB} />
+            <TinyField label="User B password" value={passB} onChange={setPassB} type="password" />
+          </div>
+          <LabBtn
+            onClick={() => void loadBTxns()}
+            disabled={busy || !mobileB.trim() || !passB || !looksLikeJwt(token) || !snap?.id}
+          >
+            Load B’s transactions
+          </LabBtn>
+          {txns.length > 0 && (
+            <div className="max-h-24 space-y-1 overflow-y-auto">
+              {txns.map((t) => (
+                <button
+                  key={t.transactionId}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void openTxnInRemote(t.transactionId)}
+                  className="block w-full rounded border border-[#E5E7EB] bg-white px-2 py-1 text-left font-mono text-[11px] hover:border-[#8664F2] dark:border-[#2a2a2a] dark:bg-[#0a0a0a]"
+                >
+                  Open: {t.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+      {err && <p className="text-[11px] text-red-600">{err}</p>}
+    </div>
+  );
+
+  return <>{render({ browser, tools })}</>;
 }
 
 function JwtCards({ header, payload }: { header: Record<string, unknown>; payload: Record<string, unknown> }) {
   return (
-    <div className="grid gap-2 sm:grid-cols-2">
+    <div className="space-y-2">
       <div className="rounded-[8px] border border-[#E5E7EB] bg-white p-2 dark:border-[#2a2a2a] dark:bg-[#0a0a0a]">
         <div className="mb-1 text-[10px] font-bold uppercase tracking-wide text-[#8664F2]">Header</div>
         <KvRows rows={Object.entries(header).map(([k, v]) => ({ k, v: String(v), hot: k === "alg" }))} />
@@ -424,7 +425,7 @@ function formatClaim(v: unknown): string {
 
 function KvRows({ rows }: { rows: { k: string; v: string; hot?: boolean }[] }) {
   return (
-    <dl className="max-h-28 space-y-1 overflow-auto">
+    <dl className="max-h-20 space-y-1 overflow-auto">
       {rows.map((r) => (
         <div key={r.k} className="flex gap-2 text-[11px]">
           <dt className={`shrink-0 font-semibold ${r.hot ? "text-[#D97706]" : "text-[#7E7E7E]"}`}>{r.k}</dt>

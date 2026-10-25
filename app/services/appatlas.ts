@@ -64,6 +64,12 @@ export function atlasClient({ instance, accounts }: Msal) {
     /** Guided Security: navigate the remote browser while the user watches the center pane. */
     sessionGoto: (id: string, url: string) =>
       request<{ url: string; token: string; bodyText: string }>(`/sessions/${id}/goto`, json("POST", { url })),
+    /** Guided Security: probe API from inside the remote browser (resolves demo hosts the laptop can’t). */
+    sessionHttpProbe: (
+      id: string,
+      body: { url: string; method?: string; authorization?: string; jsonBody?: Record<string, unknown> },
+    ) =>
+      request<{ status: number; body: unknown; bodyPreview: string }>(`/sessions/${id}/http-probe`, json("POST", body)),
     listCanvases: () => request<CanvasSummary[]>("/canvases"),
     getCanvas: (id: string) => request<Canvas>(`/canvases/${id}`),
     saveCanvas: (body: { sessionId: string; name: string; description?: string }) =>
