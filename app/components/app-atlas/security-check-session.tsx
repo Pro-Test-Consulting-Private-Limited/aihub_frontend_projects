@@ -498,20 +498,28 @@ function GuidedSession({
     [guide, locked],
   );
 
+  type GuidedVerdict = "pass" | "fail" | "inconclusive";
+
   const submit = useCallback(
-    async (pass: boolean, detail?: string) => {
+    async (verdict: GuidedVerdict, detail?: string) => {
       if (!guide) return;
       setBusy(true);
       setError(null);
       try {
         const stepNotes = guide.steps.map((s) => `${s.n}. ${s.title}: ${doneSteps[s.n] ? "DONE" : "not done"}`).join("\n");
-        const run = await securityAgent.submitEnumeration({
+        const labLine = detail || liveHint ? `Lab: ${detail || liveHint}` : "";
+        const run = await securityAgent.submitGuidedResult({
+          checkName,
+          verdict,
           loginUrl: loginUrl || undefined,
-          sameMessage: pass,
-          notes:
-            [notes.trim(), stepNotes, detail || liveHint ? `Lab: ${detail || liveHint}` : ""]
-              .filter(Boolean)
-              .join("\n\n") || `${checkName}: ${pass ? "pass" : "fail"}`,
+          detail:
+            detail ||
+            (verdict === "pass"
+              ? guide.passWhen
+              : verdict === "fail"
+                ? guide.failWhen
+                : "No result — tester did not conclude pass or fail."),
+          notes: [notes.trim(), stepNotes, labLine].filter(Boolean).join("\n\n") || undefined,
         });
         setResult(run);
       } catch (e) {
@@ -523,15 +531,44 @@ function GuidedSession({
     [guide, doneSteps, notes, liveHint, loginUrl, checkName],
   );
 
-  // When every step is done and we know lean pass/fail → auto-record.
+  // When every step is done and lab suggests pass/fail → auto-record (tester can still override).
   useEffect(() => {
     if (!guide || autoRecorded.current || result?.result || !leanOutcome) return;
     const allDone = guide.steps.every((s) => doneSteps[s.n]);
     if (!allDone) return;
     autoRecorded.current = true;
-    void submit(leanOutcome.pass, leanOutcome.detail);
+    void submit(leanOutcome.pass ? "pass" : "fail", leanOutcome.detail);
   }, [guide, doneSteps, leanOutcome, result?.result, submit]);
 
+  const verdictBtns = (current?: string) => (
+    <div className="flex flex-wrap gap-2">
+      {(
+        [
+          { v: "pass" as const, label: "Pass", cls: "border-[#16A34A] bg-[#F0FDF4] text-[#16A34A]" },
+          { v: "fail" as const, label: "Fail", cls: "border-[#D97706] bg-[#FFFBEB] text-[#D97706]" },
+          { v: "inconclusive" as const, label: "No result", cls: "border-[#9CA3AF] bg-[#F5F6F6] text-[#4B5563]" },
+        ] as const
+      ).map(({ v, label, cls }) => {
+        const active = current === v;
+        return (
+          <button
+            key={v}
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              autoRecorded.current = true;
+              void submit(v, leanOutcome?.detail);
+            }}
+            className={`rounded-[6px] border px-3 py-1.5 text-[12px] font-semibold disabled:opacity-50 ${cls} ${
+              active ? "ring-2 ring-offset-1 ring-[#8664F2]" : ""
+            }`}
+          >
+            {active ? `${label} ✓` : label}
+          </button>
+        );
+      })}
+    </div>
+  );
   if (!guide) {
     return <div className="p-6 text-[13px] text-[#7E7E7E]">No guided procedure for this check yet.</div>;
   }
@@ -603,57 +640,42 @@ function GuidedSession({
                   <br />
                   Fail: {guide.failWhen}
                 </p>
-                {!recorded && leanOutcome && doneCount === guide.steps.length && (
+                {leanOutcome && (
                   <div className="rounded-[6px] border border-[#8664F2]/40 bg-[#F3EEFF] px-3 py-2 text-[12px] text-[#5B21B6]">
-                    {busy
-                      ? "Recording result…"
-                      : `All steps done — auto ${leanOutcome.pass ? "PASS" : "FAIL"}: ${leanOutcome.detail}`}
+                    Lab suggests: <strong>{leanOutcome.pass ? "PASS" : "FAIL"}</strong>
+                    {leanOutcome.detail ? ` — ${leanOutcome.detail}` : ""}. You can override below.
                   </div>
                 )}
-                {!recorded && (
-                  <>
-                    <textarea
-                      value={notes}
-                      onChange={(e) => setNotes(e.target.value)}
-                      rows={2}
-                      placeholder="Optional notes"
-                      className="w-full rounded-[6px] border border-[#E5E7EB] bg-white px-3 py-2 text-[12.5px] dark:border-[#2a2a2a] dark:bg-[#1a1a1a]"
-                    />
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => {
-                          autoRecorded.current = true;
-                          void submit(true);
-                        }}
-                        className="rounded-[6px] border border-[#16A34A] bg-[#F0FDF4] px-3 py-1.5 text-[12px] font-semibold text-[#16A34A]"
-                      >
-                        Record pass
-                      </button>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => {
-                          autoRecorded.current = true;
-                          void submit(false);
-                        }}
-                        className="rounded-[6px] border border-[#D97706] bg-[#FFFBEB] px-3 py-1.5 text-[12px] font-semibold text-[#D97706]"
-                      >
-                        Record fail
-                      </button>
-                    </div>
-                  </>
-                )}
+                <textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  rows={2}
+                  placeholder="Optional notes"
+                  className="w-full rounded-[6px] border border-[#E5E7EB] bg-white px-3 py-2 text-[12.5px] dark:border-[#2a2a2a] dark:bg-[#1a1a1a]"
+                />
+                <div className="space-y-1.5">
+                  <div className="text-[11px] font-medium text-[#7E7E7E]">
+                    {recorded ? "Recorded — override anytime" : "Record result"}
+                  </div>
+                  {verdictBtns(result?.result?.verdict)}
+                </div>
                 {error && <p className="text-[12px] text-red-600">{error}</p>}
                 {recorded && result?.result && (
                   <div
                     className={`rounded-[6px] border p-2 ${
-                      result.result.verdict === "pass" ? "border-emerald-200 bg-emerald-50" : "border-red-200 bg-red-50"
+                      result.result.verdict === "pass"
+                        ? "border-emerald-200 bg-emerald-50"
+                        : result.result.verdict === "fail"
+                          ? "border-red-200 bg-red-50"
+                          : "border-[#E5E7EB] bg-[#F5F6F6]"
                     }`}
                   >
                     <div className="text-[13px] font-semibold">
-                      {result.result.verdict === "pass" ? "Pass — recorded" : "Fail — recorded"}
+                      {result.result.verdict === "pass"
+                        ? "Pass — recorded"
+                        : result.result.verdict === "fail"
+                          ? "Fail — recorded"
+                          : "No result — recorded"}
                     </div>
                     <p className="mt-1 text-[12px]">{result.result.summary}</p>
                   </div>
@@ -732,45 +754,37 @@ function GuidedSession({
             <br />
             Fail when: {guide.failWhen}
           </p>
-          {!recorded && (
-            <>
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                rows={2}
-                placeholder="Optional notes"
-                className="w-full rounded-[6px] border border-[#E5E7EB] bg-white px-3 py-2 text-[12.5px] dark:border-[#2a2a2a] dark:bg-[#1a1a1a]"
-              />
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => submit(true)}
-                  className="rounded-[6px] border border-[#16A34A] bg-[#F0FDF4] px-3 py-1.5 text-[12px] font-semibold text-[#16A34A]"
-                >
-                  Record pass
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => submit(false)}
-                  className="rounded-[6px] border border-[#D97706] bg-[#FFFBEB] px-3 py-1.5 text-[12px] font-semibold text-[#D97706]"
-                >
-                  Record fail
-                </button>
-              </div>
-            </>
-          )}
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={2}
+            placeholder="Optional notes"
+            className="w-full rounded-[6px] border border-[#E5E7EB] bg-white px-3 py-2 text-[12.5px] dark:border-[#2a2a2a] dark:bg-[#1a1a1a]"
+          />
+          <div className="space-y-1.5">
+            <div className="text-[11px] font-medium text-[#7E7E7E]">
+              {recorded ? "Recorded — override anytime" : "Record result"}
+            </div>
+            {verdictBtns(result?.result?.verdict)}
+          </div>
           {error && <p className="text-[12px] text-red-600">{error}</p>}
         </div>
         {recorded && result?.result && (
           <div
             className={`shrink-0 border-t px-3 py-3 ${
-              result.result.verdict === "pass" ? "border-emerald-100 bg-emerald-50" : "border-red-100 bg-red-50"
+              result.result.verdict === "pass"
+                ? "border-emerald-100 bg-emerald-50"
+                : result.result.verdict === "fail"
+                  ? "border-red-100 bg-red-50"
+                  : "border-[#E5E7EB] bg-[#F5F6F6]"
             }`}
           >
-            <div className={`text-[13px] font-semibold ${result.result.verdict === "pass" ? "text-emerald-800" : "text-red-800"}`}>
-              {result.result.verdict === "pass" ? "Pass — recorded" : "Fail — recorded"}
+            <div className="text-[13px] font-semibold text-[#1F1F1F]">
+              {result.result.verdict === "pass"
+                ? "Pass — recorded"
+                : result.result.verdict === "fail"
+                  ? "Fail — recorded"
+                  : "No result — recorded"}
             </div>
             <p className="mt-1 text-[12px] text-[#5E6066]">{result.result.summary}</p>
             <div className="mt-3 flex flex-wrap gap-2">
@@ -781,6 +795,7 @@ function GuidedSession({
                   setDoneSteps({});
                   setLocked({});
                   setLiveHint(null);
+                  autoRecorded.current = false;
                 }}
                 className="rounded-[6px] border px-3 py-1.5 text-[12px]"
               >

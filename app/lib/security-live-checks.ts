@@ -104,7 +104,7 @@ const JWT_GUIDED: GuidedProcedure = {
     {
       n: 6,
       title: "Probe & read outcome",
-      does: "Click Probe /auth/me. 401/403 → pass. 200 → fail. Result auto-records when all steps are done.",
+      does: "Click Probe /auth/me. Lab suggests pass/fail; you can override to Pass, Fail, or No result.",
       autoOn: "verdict_ready",
     },
   ],
@@ -153,7 +153,7 @@ const IDOR_GUIDED: GuidedProcedure = {
     {
       n: 6,
       title: "Record the verdict",
-      does: "Result auto-records when steps complete — or use Record pass/fail.",
+      does: "Lab suggests pass/fail when complete — override anytime with Pass, Fail, or No result.",
       autoOn: "verdict_ready",
     },
   ],

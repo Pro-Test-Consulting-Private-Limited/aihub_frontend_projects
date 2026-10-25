@@ -126,6 +126,18 @@ export const securityAgent = {
       { method: "POST", body: JSON.stringify(body) },
       signal,
     ),
+  /** Guided checks: pass / fail / inconclusive — tester can override the lab suggestion. */
+  submitGuidedResult: (
+    body: {
+      checkName: string;
+      verdict: "pass" | "fail" | "inconclusive";
+      loginUrl?: string;
+      notes?: string;
+      detail?: string;
+    },
+    signal?: AbortSignal,
+  ) =>
+    req<SecurityRun>("/api/checks/guided-result", { method: "POST", body: JSON.stringify(body) }, signal),
   startUsernameEnumeration: (
     body: { loginUrl: string; validIdentifier: string; invalidIdentifier?: string; headed?: boolean },
     signal?: AbortSignal,
