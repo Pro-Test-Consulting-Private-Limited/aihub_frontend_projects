@@ -11,6 +11,15 @@ export class SecurityAgentError extends Error {
 
 export type StuffingFields = { name?: string; year?: string; company?: string; osintEmail?: string };
 
+export type StuffingClue = string | { value: string };
+
+export type StuffingIntel = {
+  phone?: string;
+  fullName?: string;
+  year?: string;
+  sources?: { id: string; label: string; hit: string; score: number }[];
+};
+
 export type SecurityRunStep = {
   at: number;
   kind: string;
@@ -59,6 +68,8 @@ export type SecurityRun = {
   /** Latest headed-browser JPEG as a data URL (polled with the run). */
   screenshot?: string | null;
   passwordsTried?: PasswordTry[];
+  /** Demo phone OSINT stitch (Truecaller / UPI / HIBP-style story). */
+  intel?: StuffingIntel | null;
   guided?: {
     lab?: string;
     url?: string;
@@ -107,7 +118,14 @@ async function req<T>(path: string, init?: RequestInit, signal?: AbortSignal): P
 
 export const securityAgent = {
   startCredentialStuffing: (
-    body: { loginUrl: string; identifier: string; fields?: StuffingFields; maxAttempts?: number; headed?: boolean },
+    body: {
+      loginUrl: string;
+      identifier: string;
+      fields?: StuffingFields;
+      clues?: StuffingClue[];
+      maxAttempts?: number;
+      headed?: boolean;
+    },
     signal?: AbortSignal,
   ) =>
     req<SecurityRun>(

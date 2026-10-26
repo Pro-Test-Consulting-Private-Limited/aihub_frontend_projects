@@ -21,7 +21,7 @@ type Props = {
 };
 
 const STUFFING_WHAT =
-  "Brute force detection means: can someone guess passwords by trying many times in a row? This automated check opens a real browser and fires common / patterned passwords at login while you watch. Pass if the app locks out, throttles, or never lets the attacker in. Fail if a guessed password gets a session.";
+  "Brute force detection means: can someone guess passwords by trying many times in a row? Tell the agent what you know (often just a mobile). It fakes an OSINT stitch (Truecaller / UPI / breach-style signals), builds a Name@Year password graph, and tries those live in a headed browser. Pass if the app locks out or never lets the attacker in.";
 
 const ENUM_WHAT =
   "This automated test checks whether login errors leak which accounts exist. The agent tries a fake mobile and a real test mobile with the same wrong password, compares the on-screen errors, and marks pass or fail.";
@@ -75,20 +75,51 @@ export function SecurityCheckSession({ check, kind, targetUrl, client, onClose }
   );
 }
 
+type ClueRow = { id: string; value: string };
+
+function parseClues(rows: ClueRow[]) {
+  const values = rows.map((r) => r.value.trim()).filter(Boolean);
+  let identifier = "";
+  let name = "";
+  let year = "";
+  let company = "";
+  for (const v of values) {
+    if (/^\+?\d[\d\s-]{7,}$/.test(v) || /^\d{10}$/.test(v.replace(/\D/g, ""))) {
+      if (!identifier) identifier = v.replace(/\s+/g, "");
+    } else if (/^\d{4}$/.test(v) && Number(v) >= 1950 && Number(v) <= 2015) {
+      if (!year) year = v;
+    } else if (/@/.test(v)) {
+      if (!identifier) identifier = v;
+    } else if (/[a-zA-Z]{2,}/.test(v)) {
+      if (!name) name = v;
+      else if (!company) company = v;
+    }
+  }
+  return { identifier, name, year, company, clues: values };
+}
+
+/** Showcase: known demo mobile → name + DOB year (matches agent demo-intel). */
+const DEMO_PHONE_HINT: Record<string, { fullName: string; year: string }> = {
+  "9900776952": { fullName: "Marti Sai Santosh Pradyumna", year: "2003" },
+};
+
 function StuffingSession({ loginUrl, onClose }: { loginUrl: string; onClose: () => void }) {
-  const [identifier, setIdentifier] = useState("");
-  const [name, setName] = useState("");
-  const [year, setYear] = useState("");
-  const [company, setCompany] = useState("");
-  const [osintEmail, setOsintEmail] = useState("");
+  const [clues, setClues] = useState<ClueRow[]>([{ id: "c1", value: "" }]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [run, setRun] = useState<SecurityRun | null>(null);
   const [setupOpen, setSetupOpen] = useState(true);
+  const [intelPreview, setIntelPreview] = useState<{
+    phone: string;
+    fullName: string;
+    year: string;
+    sources: { id: string; label: string; hit: string; score: number; ready: boolean }[];
+  } | null>(null);
   const stepsEndRef = useRef<HTMLLIElement | null>(null);
 
   const done = run?.status === "completed" || run?.status === "failed";
   const verdict = run?.result?.verdict;
+  const intel = run?.intel || null;
 
   useEffect(() => {
     if (!run || (run.status !== "queued" && run.status !== "running")) return;
@@ -115,25 +146,50 @@ function StuffingSession({ loginUrl, onClose }: { loginUrl: string; onClose: () 
   const start = useCallback(async () => {
     setError(null);
     setRun(null);
+    setIntelPreview(null);
     setSetupOpen(true);
     if (!loginUrl) {
       setError("Application URL is required.");
       return;
     }
-    if (!identifier.trim()) {
-      setError("Enter the login identifier under test (mobile or email).");
+    const parsed = parseClues(clues);
+    if (!parsed.identifier) {
+      setError("Add at least a mobile number (or email) in “Say what you know”.");
       return;
     }
     setBusy(true);
     try {
+      const phoneKey = parsed.identifier.replace(/\D/g, "").slice(-10);
+      const demo = DEMO_PHONE_HINT[phoneKey];
+      if (demo) {
+        const sources = [
+          { id: "enum", label: "CNAM / SIP ENUM enrich", hit: "consumer MSISDN (non-trunk)", score: 88, ready: false },
+          { id: "truecaller", label: "Truecaller-class directory", hit: demo.fullName, score: 92, ready: false },
+          { id: "phonepe", label: "UPI VPA → display-name graph", hit: "Marti S. Pradyumna", score: 78, ready: false },
+          { id: "gpay", label: "GPay entity cluster", hit: "Sai Pradyumna", score: 71, ready: false },
+          { id: "hibp", label: "Breach-email ∩ DOB prior", hit: `birth year ${demo.year}`, score: 64, ready: false },
+          { id: "jw", label: "Jaro–Winkler resolve ≥0.86", hit: demo.fullName, score: 90, ready: false },
+        ];
+        setIntelPreview({ phone: phoneKey, fullName: demo.fullName, year: demo.year, sources });
+        for (let i = 0; i < sources.length; i++) {
+          await new Promise((r) => setTimeout(r, 420));
+          setIntelPreview((prev) =>
+            prev
+              ? { ...prev, sources: prev.sources.map((s, j) => (j <= i ? { ...s, ready: true } : s)) }
+              : prev,
+          );
+        }
+        await new Promise((r) => setTimeout(r, 350));
+      }
+
       const started = await securityAgent.startCredentialStuffing({
         loginUrl,
-        identifier: identifier.trim(),
+        identifier: parsed.identifier,
+        clues: parsed.clues,
         fields: {
-          name: name.trim() || undefined,
-          year: year.trim() || undefined,
-          company: company.trim() || undefined,
-          osintEmail: osintEmail.trim() || undefined,
+          name: parsed.name || demo?.fullName || undefined,
+          year: parsed.year || demo?.year || undefined,
+          company: parsed.company || undefined,
         },
         headed: true,
       });
@@ -142,19 +198,30 @@ function StuffingSession({ loginUrl, onClose }: { loginUrl: string; onClose: () 
       setBusy(false);
       setError(e instanceof SecurityAgentError ? e.message : "Could not start check");
     }
-  }, [loginUrl, identifier, name, year, company, osintEmail]);
+  }, [loginUrl, clues]);
+
+  const addClue = () => setClues((rows) => [...rows, { id: `c${Date.now()}`, value: "" }]);
+  const setClue = (id: string, value: string) => setClues((rows) => rows.map((r) => (r.id === id ? { ...r, value } : r)));
+  const removeClue = (id: string) => setClues((rows) => (rows.length <= 1 ? rows : rows.filter((r) => r.id !== id)));
+
+  const sourceBars = intelPreview?.sources || intel?.sources || [];
 
   return (
-    <div className="flex min-h-0 flex-1 gap-4 p-4">
+    <div className="flex min-h-0 flex-1 gap-3 p-3">
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[10px] border border-[#E6E1F5] bg-[#111] dark:border-[#2a2a2a]">
         {run?.screenshot ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={run.screenshot} alt="Live headed browser" className="h-full w-full object-contain" />
         ) : (
-          <div className="flex flex-1 items-center justify-center p-8 text-center text-[13px] text-[#9CA3AF]">
-            {busy || run?.status === "running" || run?.status === "queued"
-              ? "Headed Chromium is opening on the Security agent host. Live frames appear here as attempts run."
-              : "Start the check — the live browser view shows here while steps update on the right."}
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center text-[13px] text-[#9CA3AF]">
+            {busy || run?.status === "running" || run?.status === "queued" ? (
+              <>
+                <p className="text-[#fbbf24]">Gathering OSINT → opening headed browser…</p>
+                <p>Live login attempts appear here once Chromium is on the agent host.</p>
+              </>
+            ) : (
+              <p>Say what you know on the right, then start — live browser + password graph appear here.</p>
+            )}
           </div>
         )}
         {done && run?.result && (
@@ -171,32 +238,50 @@ function StuffingSession({ loginUrl, onClose }: { loginUrl: string; onClose: () 
         )}
       </div>
 
-      <aside className="flex w-[340px] shrink-0 min-h-0 flex-col overflow-hidden rounded-[10px] border border-[#E5E7EB] bg-white dark:border-[#2a2a2a] dark:bg-[#121212]">
-        {/* Setup — collapsible once running/done */}
+      <aside className="flex w-[400px] shrink-0 min-h-0 flex-col overflow-hidden rounded-[10px] border border-[#E5E7EB] bg-white dark:border-[#2a2a2a] dark:bg-[#121212]">
         <div className="shrink-0 border-b border-[#EEE] px-3 py-2.5 dark:border-[#1a1a1a]">
           <button
             type="button"
             className="flex w-full items-center justify-between text-[12px] font-medium text-[#1F1F1F] dark:text-[#ededed]"
             onClick={() => setSetupOpen((o) => !o)}
           >
-            Setup
+            Say what you know
             <span className="text-[11px] text-[#7E7E7E]">{setupOpen ? "Hide" : "Show"}</span>
           </button>
           {setupOpen && (
             <div className="mt-2 space-y-2">
-              <Field label="Login identifier" value={identifier} onChange={setIdentifier} placeholder="mobile or email" />
-              <Field label="Name (optional)" value={name} onChange={setName} placeholder="for Name@Year patterns" />
-              <Field label="Year (optional)" value={year} onChange={setYear} placeholder="e.g. 2003" />
-              <Field label="Company (optional)" value={company} onChange={setCompany} placeholder="for Company@Year" />
-              <Field label="Breach-check email (optional)" value={osintEmail} onChange={setOsintEmail} placeholder="name@company.com" />
+              <p className="text-[11px] leading-snug text-[#7E7E7E]">
+                Add rows — mobile is enough for the demo. Optional: full name, birth year, company.
+              </p>
+              {clues.map((row, i) => (
+                <div key={row.id} className="flex gap-1.5">
+                  <input
+                    value={row.value}
+                    onChange={(e) => setClue(row.id, e.target.value)}
+                    placeholder={i === 0 ? "e.g. 9900776952" : "name, year, company…"}
+                    className="min-w-0 flex-1 rounded-[6px] border border-[#E5E7EB] bg-white px-2.5 py-1.5 text-[12.5px] dark:border-[#2a2a2a] dark:bg-[#1a1a1a]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeClue(row.id)}
+                    disabled={clues.length <= 1}
+                    className="shrink-0 rounded-[6px] border border-[#E5E7EB] px-2 text-[11px] text-[#7E7E7E] disabled:opacity-30 dark:border-[#2a2a2a]"
+                  >
+                    −
+                  </button>
+                </div>
+              ))}
+              <button type="button" onClick={addClue} className="text-[11.5px] font-medium text-[#8664F2] underline">
+                + Add another clue
+              </button>
               {!done && (
                 <button
                   type="button"
                   disabled={busy || !loginUrl}
-                  onClick={start}
+                  onClick={() => void start()}
                   className="w-full rounded-[6px] bg-[#16A34A] px-3.5 py-2 text-[12.5px] font-semibold text-white disabled:opacity-50"
                 >
-                  {busy ? "Running…" : "Start headed attack"}
+                  {busy ? "Running OSINT + attack…" : "Start OSINT + headed attack"}
                 </button>
               )}
               {error && <p className="text-[12px] text-red-600">{error}</p>}
@@ -204,18 +289,60 @@ function StuffingSession({ loginUrl, onClose }: { loginUrl: string; onClose: () 
           )}
           {run && !setupOpen && (
             <div className="mt-1 truncate text-[11px] text-[#7E7E7E]">
-              {identifier || "—"} · {busy ? "running" : run.status}
+              {parseClues(clues).identifier || "—"} · {busy ? "running" : run.status}
               {verdict ? ` · ${verdict}` : ""}
             </div>
           )}
         </div>
 
-        {/* Password list + steps — scroll region */}
+        {(intelPreview || intel) && (
+          <div className="shrink-0 space-y-2 border-b border-[#EEE] px-3 py-2.5 dark:border-[#1a1a1a]">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-[#8664F2]">OSINT stitch</div>
+            <p className="text-[11.5px] text-[#5E6066] dark:text-[#9ca3af]">
+              Phone{" "}
+              <span className="font-mono text-[#1F1F1F] dark:text-[#ededed]">
+                {intelPreview?.phone || intel?.phone}
+              </span>
+              {(intelPreview?.fullName || intel?.fullName) && (
+                <>
+                  {" "}
+                  → <strong>{intelPreview?.fullName || intel?.fullName}</strong>
+                  {(intelPreview?.year || intel?.year) && <> · born {intelPreview?.year || intel?.year}</>}
+                </>
+              )}
+            </p>
+            <div className="space-y-1.5">
+              {sourceBars.map((s) => {
+                const ready = "ready" in s ? Boolean((s as { ready?: boolean }).ready) : true;
+                const score = s.score ?? 0;
+                return (
+                  <div key={s.id}>
+                    <div className="mb-0.5 flex justify-between gap-2 text-[10.5px] text-[#7E7E7E]">
+                      <span className="truncate">{s.label}</span>
+                      <span className="shrink-0 font-mono">{ready ? `${score}%` : "…"}</span>
+                    </div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-[#E5E7EB] dark:bg-[#2a2a2a]">
+                      <div
+                        className="h-full rounded-full bg-[#8664F2] transition-all duration-500"
+                        style={{ width: ready ? `${score}%` : "8%" }}
+                      />
+                    </div>
+                    {ready && <div className="mt-0.5 truncate text-[10.5px] text-[#5E6066] dark:text-[#9ca3af]">{s.hit}</div>}
+                  </div>
+                );
+              })}
+            </div>
+            <p className="text-[10.5px] leading-snug text-[#9CA3AF]">
+              Next: markov ⊕ leet ⊕ Name@DOB lattice (≥40 nodes). Live Chromium only on top posterior mass.
+            </p>
+          </div>
+        )}
+
         <div className="flex min-h-0 flex-1 flex-col px-3 pt-2.5">
           <div className="mb-1.5 shrink-0 text-[12px] font-medium text-[#1F1F1F] dark:text-[#ededed]">Passwords tried</div>
-          <div className="mb-2 max-h-[40%] min-h-[72px] shrink-0 overflow-y-auto rounded-[8px] border border-[#E5E7EB] dark:border-[#2a2a2a]">
+          <div className="mb-2 max-h-[36%] min-h-[72px] shrink-0 overflow-y-auto rounded-[8px] border border-[#E5E7EB] dark:border-[#2a2a2a]">
             {(run?.passwordsTried || []).length === 0 ? (
-              <div className="px-2.5 py-2 text-[11px] text-[#7E7E7E]">Cleartext passwords appear here as each attempt runs.</div>
+              <div className="px-2.5 py-2 text-[11px] text-[#7E7E7E]">Cleartext passwords appear as each attempt runs.</div>
             ) : (
               <table className="w-full text-left text-[11.5px]">
                 <thead className="sticky top-0 bg-[#F5F6F6] text-[#7E7E7E] dark:bg-[#1a1a1a]">
@@ -252,7 +379,6 @@ function StuffingSession({ loginUrl, onClose }: { loginUrl: string; onClose: () 
           </ol>
         </div>
 
-        {/* Result footer — never overlaps steps */}
         {done && run?.result && (
           <div
             className={`shrink-0 border-t px-3 py-3 dark:border-[#1a1a1a] ${
@@ -289,7 +415,7 @@ function StuffingSession({ loginUrl, onClose }: { loginUrl: string; onClose: () 
             <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={start}
+                onClick={() => void start()}
                 className="rounded-[6px] bg-[#16A34A] px-3 py-1.5 text-[12px] font-semibold text-white"
               >
                 Run again
