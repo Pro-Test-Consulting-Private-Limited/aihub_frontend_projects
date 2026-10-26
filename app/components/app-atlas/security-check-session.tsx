@@ -403,9 +403,14 @@ function StuffingSession({ loginUrl, onClose }: { loginUrl: string; onClose: () 
                   : "text-emerald-800 dark:text-emerald-300"
               }`}
             >
-              {run.result.summary}
+              {run.result.summary || run.error || run.result.reason}
               {run.result.attempts != null ? ` (${run.result.attempts} attempt${run.result.attempts === 1 ? "" : "s"})` : ""}
             </p>
+            {(run.error || run.result.reason) && verdict === "error" && (
+              <pre className="mt-1.5 max-h-20 overflow-auto whitespace-pre-wrap rounded-[6px] bg-white/80 px-2 py-1.5 font-mono text-[10.5px] text-red-900 dark:bg-black/20 dark:text-red-100">
+                {String(run.error || run.result.reason).slice(0, 500)}
+              </pre>
+            )}
             {run.result.matchedPassword && (
               <p className="mt-1.5 rounded-[6px] bg-white/80 px-2 py-1.5 font-mono text-[12.5px] text-red-900 dark:bg-black/20 dark:text-red-100">
                 Worked: {run.result.matchedPassword}
