@@ -21,7 +21,7 @@ type Props = {
 };
 
 const STUFFING_WHAT =
-  "Brute force detection means: can someone guess passwords by trying many times in a row? Tell the agent what you know (often just a mobile). It fakes an OSINT stitch (Truecaller / UPI / breach-style signals), builds a Name@Year password graph, and tries those live in a headed browser. Pass if the app locks out or never lets the attacker in.";
+  "Brute force means an attacker tries many passwords against one account until one works — often after enriching a mobile number into name and date-of-birth patterns (Name@Year). This check runs that attack path live. Pass if the app locks out, throttles, or never grants a session. Fail if a guessed password signs in.";
 
 const ENUM_WHAT =
   "This automated test checks whether login errors leak which accounts exist. The agent tries a fake mobile and a real test mobile with the same wrong password, compares the on-screen errors, and marks pass or fail.";
@@ -35,21 +35,48 @@ export function SecurityCheckSession({ check, kind, targetUrl, client, onClose }
   const whatThisIs =
     kind === "stuffing" ? STUFFING_WHAT : kind === "enumeration" ? ENUM_WHAT : guide?.whatThisIs || check.does;
   const auto = kind === "stuffing" || kind === "enumeration";
+  const [stuffingVerdict, setStuffingVerdict] = useState<string | null>(null);
+  const [stuffingSummary, setStuffingSummary] = useState<string | null>(null);
+  const onStuffingOutcome = useCallback((v: string | null, summary: string | null) => {
+    setStuffingVerdict(v);
+    setStuffingSummary(summary);
+  }, []);
+
+  const failBanner =
+    stuffingVerdict === "compromised" || stuffingVerdict === "fail" || stuffingVerdict === "error";
+  const passBanner = stuffingVerdict === "protected" || stuffingVerdict === "held";
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[#FAFAFA] dark:bg-[#0a0a0a]">
       <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[#EEE] bg-white px-5 py-3 dark:border-[#1a1a1a] dark:bg-[#0a0a0a]">
-        <div className="min-w-0 max-w-[920px]">
-          <div className="flex items-center gap-2 text-[13px] font-medium text-[#1F1F1F] dark:text-[#ededed]">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2 text-[13px] font-medium text-[#1F1F1F] dark:text-[#ededed]">
             <span
-              className={`h-[8px] w-[8px] rounded-full ${auto ? "bg-[#16A34A]" : "bg-[#D97706]"} ${auto ? "animate-pulse" : ""}`}
+              className={`h-[8px] w-[8px] rounded-full ${auto ? "bg-[#16A34A]" : "bg-[#D97706]"} ${auto && !stuffingVerdict ? "animate-pulse" : ""}`}
             />
             {check.name}
             <span className="text-[11px] font-normal uppercase tracking-wide text-[#7E7E7E]">
               {auto ? "Automated · live" : "Guided"}
             </span>
+            {failBanner && (
+              <span className="rounded-[6px] border border-red-300 bg-red-50 px-2.5 py-1 text-[11.5px] font-bold uppercase tracking-wide text-red-700 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200">
+                Failed — password cracked
+              </span>
+            )}
+            {passBanner && (
+              <span className="rounded-[6px] border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-[11.5px] font-bold uppercase tracking-wide text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
+                {stuffingVerdict === "protected" ? "Passed — attack stopped" : "Held — no login"}
+              </span>
+            )}
           </div>
-          <p className="mt-1.5 text-[12.5px] leading-relaxed text-[#5E6066] dark:text-[#9ca3af]">{whatThisIs}</p>
+          {failBanner && stuffingSummary && (
+            <div className="mt-2 rounded-[8px] border border-red-200 bg-red-50 px-3 py-2 text-[12.5px] text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-100">
+              {stuffingSummary}
+            </div>
+          )}
+          {!failBanner && (
+            <p className="mt-1.5 text-[12.5px] leading-relaxed text-[#5E6066] dark:text-[#9ca3af]">{whatThisIs}</p>
+          )}
         </div>
         <button
           type="button"
@@ -65,7 +92,7 @@ export function SecurityCheckSession({ check, kind, targetUrl, client, onClose }
         </div>
       )}
       {kind === "stuffing" ? (
-        <StuffingSession loginUrl={loginUrl} onClose={onClose} />
+        <StuffingSession loginUrl={loginUrl} onClose={onClose} onOutcome={onStuffingOutcome} />
       ) : kind === "enumeration" ? (
         <EnumerationSession loginUrl={loginUrl} onClose={onClose} />
       ) : (
@@ -103,12 +130,20 @@ const DEMO_PHONE_HINT: Record<string, { fullName: string; year: string }> = {
   "9900776952": { fullName: "Marti Sai Santosh Pradyumna", year: "2003" },
 };
 
-function StuffingSession({ loginUrl, onClose }: { loginUrl: string; onClose: () => void }) {
+function StuffingSession({
+  loginUrl,
+  onClose,
+  onOutcome,
+}: {
+  loginUrl: string;
+  onClose: () => void;
+  onOutcome?: (verdict: string | null, summary: string | null) => void;
+}) {
   const [clues, setClues] = useState<ClueRow[]>([{ id: "c1", value: "" }]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [run, setRun] = useState<SecurityRun | null>(null);
-  const [setupOpen, setSetupOpen] = useState(true);
+  const [tab, setTab] = useState<"clues" | "osint" | "attack">("clues");
   const [intelPreview, setIntelPreview] = useState<{
     phone: string;
     fullName: string;
@@ -116,10 +151,18 @@ function StuffingSession({ loginUrl, onClose }: { loginUrl: string; onClose: () 
     sources: { id: string; label: string; hit: string; score: number; ready: boolean }[];
   } | null>(null);
   const stepsEndRef = useRef<HTMLLIElement | null>(null);
+  const pwdEndRef = useRef<HTMLTableRowElement | null>(null);
 
   const done = run?.status === "completed" || run?.status === "failed";
   const verdict = run?.result?.verdict;
   const intel = run?.intel || null;
+
+  useEffect(() => {
+    onOutcome?.(
+      done && verdict ? verdict : null,
+      done && run?.result ? run.result.summary || run.result.matchedPassword || null : null,
+    );
+  }, [done, verdict, run?.result, onOutcome]);
 
   useEffect(() => {
     if (!run || (run.status !== "queued" && run.status !== "running")) return;
@@ -129,7 +172,7 @@ function StuffingSession({ loginUrl, onClose }: { loginUrl: string; onClose: () 
         setRun(next);
         if (next.status === "completed" || next.status === "failed") {
           setBusy(false);
-          setSetupOpen(false);
+          setTab("attack");
         }
       } catch (e) {
         setError(e instanceof SecurityAgentError ? e.message : "Poll failed");
@@ -141,23 +184,29 @@ function StuffingSession({ loginUrl, onClose }: { loginUrl: string; onClose: () 
 
   useEffect(() => {
     stepsEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [run?.steps?.length, run?.status]);
+  }, [run?.steps?.length, run?.status, tab]);
+
+  useEffect(() => {
+    pwdEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [run?.passwordsTried?.length, tab]);
 
   const start = useCallback(async () => {
     setError(null);
     setRun(null);
     setIntelPreview(null);
-    setSetupOpen(true);
+    onOutcome?.(null, null);
     if (!loginUrl) {
       setError("Application URL is required.");
       return;
     }
     const parsed = parseClues(clues);
     if (!parsed.identifier) {
-      setError("Add at least a mobile number (or email) in “Say what you know”.");
+      setError("Add at least a mobile number (or email).");
+      setTab("clues");
       return;
     }
     setBusy(true);
+    setTab("osint");
     try {
       const phoneKey = parsed.identifier.replace(/\D/g, "").slice(-10);
       const demo = DEMO_PHONE_HINT[phoneKey];
@@ -174,14 +223,13 @@ function StuffingSession({ loginUrl, onClose }: { loginUrl: string; onClose: () 
         for (let i = 0; i < sources.length; i++) {
           await new Promise((r) => setTimeout(r, 420));
           setIntelPreview((prev) =>
-            prev
-              ? { ...prev, sources: prev.sources.map((s, j) => (j <= i ? { ...s, ready: true } : s)) }
-              : prev,
+            prev ? { ...prev, sources: prev.sources.map((s, j) => (j <= i ? { ...s, ready: true } : s)) } : prev,
           );
         }
-        await new Promise((r) => setTimeout(r, 350));
+        await new Promise((r) => setTimeout(r, 280));
       }
 
+      setTab("attack");
       const started = await securityAgent.startCredentialStuffing({
         loginUrl,
         identifier: parsed.identifier,
@@ -196,15 +244,32 @@ function StuffingSession({ loginUrl, onClose }: { loginUrl: string; onClose: () 
       setRun(started);
     } catch (e) {
       setBusy(false);
+      setTab("clues");
       setError(e instanceof SecurityAgentError ? e.message : "Could not start check");
     }
-  }, [loginUrl, clues]);
+  }, [loginUrl, clues, onOutcome]);
 
   const addClue = () => setClues((rows) => [...rows, { id: `c${Date.now()}`, value: "" }]);
   const setClue = (id: string, value: string) => setClues((rows) => rows.map((r) => (r.id === id ? { ...r, value } : r)));
   const removeClue = (id: string) => setClues((rows) => (rows.length <= 1 ? rows : rows.filter((r) => r.id !== id)));
 
   const sourceBars = intelPreview?.sources || intel?.sources || [];
+  const profileName = intelPreview?.fullName || intel?.fullName;
+  const profileYear = intelPreview?.year || intel?.year;
+  const profilePhone = intelPreview?.phone || intel?.phone;
+  const TabBtn = ({ id, label }: { id: typeof tab; label: string }) => (
+    <button
+      type="button"
+      onClick={() => setTab(id)}
+      className={`flex-1 rounded-[5px] px-2 py-1.5 text-[11.5px] font-semibold ${
+        tab === id
+          ? "bg-[#8664F2] text-white"
+          : "bg-transparent text-[#7E7E7E] hover:text-[#1F1F1F] dark:hover:text-[#ededed]"
+      }`}
+    >
+      {label}
+    </button>
+  );
 
   return (
     <div className="flex min-h-0 flex-1 gap-3 p-3">
@@ -216,222 +281,177 @@ function StuffingSession({ loginUrl, onClose }: { loginUrl: string; onClose: () 
           <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center text-[13px] text-[#9CA3AF]">
             {busy || run?.status === "running" || run?.status === "queued" ? (
               <>
-                <p className="text-[#fbbf24]">Gathering OSINT → opening headed browser…</p>
-                <p>Live login attempts appear here once Chromium is on the agent host.</p>
+                <p className="text-[#fbbf24]">Enriching identity → opening live browser…</p>
+                <p>Login attempts appear here as Chromium runs on the agent host.</p>
               </>
             ) : (
-              <p>Say what you know on the right, then start — live browser + password graph appear here.</p>
+              <p>Enter a mobile on the right, then start — live browser and password attempts appear here.</p>
             )}
-          </div>
-        )}
-        {done && run?.result && (
-          <div
-            className={`absolute inset-x-0 bottom-0 border-t px-4 py-3 ${
-              verdict === "compromised" || verdict === "fail" || verdict === "error"
-                ? "border-red-200 bg-red-50/95 text-red-900"
-                : "border-emerald-200 bg-emerald-50/95 text-emerald-900"
-            }`}
-          >
-            <div className="text-[13px] font-semibold">{verdictHeadline(verdict)}</div>
-            <div className="mt-0.5 text-[12px] opacity-90">{run.result.summary}</div>
           </div>
         )}
       </div>
 
       <aside className="flex w-[400px] shrink-0 min-h-0 flex-col overflow-hidden rounded-[10px] border border-[#E5E7EB] bg-white dark:border-[#2a2a2a] dark:bg-[#121212]">
-        <div className="shrink-0 border-b border-[#EEE] px-3 py-2.5 dark:border-[#1a1a1a]">
-          <button
-            type="button"
-            className="flex w-full items-center justify-between text-[12px] font-medium text-[#1F1F1F] dark:text-[#ededed]"
-            onClick={() => setSetupOpen((o) => !o)}
-          >
-            Say what you know
-            <span className="text-[11px] text-[#7E7E7E]">{setupOpen ? "Hide" : "Show"}</span>
-          </button>
-          {setupOpen && (
-            <div className="mt-2 space-y-2">
-              <p className="text-[11px] leading-snug text-[#7E7E7E]">
-                Add rows — mobile is enough for the demo. Optional: full name, birth year, company.
-              </p>
-              {clues.map((row, i) => (
-                <div key={row.id} className="flex gap-1.5">
-                  <input
-                    value={row.value}
-                    onChange={(e) => setClue(row.id, e.target.value)}
-                    placeholder={i === 0 ? "e.g. 9900776952" : "name, year, company…"}
-                    className="min-w-0 flex-1 rounded-[6px] border border-[#E5E7EB] bg-white px-2.5 py-1.5 text-[12.5px] dark:border-[#2a2a2a] dark:bg-[#1a1a1a]"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeClue(row.id)}
-                    disabled={clues.length <= 1}
-                    className="shrink-0 rounded-[6px] border border-[#E5E7EB] px-2 text-[11px] text-[#7E7E7E] disabled:opacity-30 dark:border-[#2a2a2a]"
-                  >
-                    −
-                  </button>
-                </div>
-              ))}
-              <button type="button" onClick={addClue} className="text-[11.5px] font-medium text-[#8664F2] underline">
-                + Add another clue
-              </button>
-              {!done && (
-                <button
-                  type="button"
-                  disabled={busy || !loginUrl}
-                  onClick={() => void start()}
-                  className="w-full rounded-[6px] bg-[#16A34A] px-3.5 py-2 text-[12.5px] font-semibold text-white disabled:opacity-50"
-                >
-                  {busy ? "Running OSINT + attack…" : "Start OSINT + headed attack"}
-                </button>
-              )}
-              {error && <p className="text-[12px] text-red-600">{error}</p>}
-            </div>
-          )}
-          {run && !setupOpen && (
-            <div className="mt-1 truncate text-[11px] text-[#7E7E7E]">
-              {parseClues(clues).identifier || "—"} · {busy ? "running" : run.status}
-              {verdict ? ` · ${verdict}` : ""}
-            </div>
-          )}
+        <div className="flex shrink-0 gap-1 border-b border-[#EEE] bg-[#F5F6F6] p-1.5 dark:border-[#1a1a1a] dark:bg-[#1a1a1a]">
+          <TabBtn id="clues" label="Clues" />
+          <TabBtn id="osint" label="OSINT" />
+          <TabBtn id="attack" label="Attack" />
         </div>
 
-        {(intelPreview || intel) && (
-          <div className="shrink-0 space-y-2 border-b border-[#EEE] px-3 py-2.5 dark:border-[#1a1a1a]">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-[#8664F2]">OSINT stitch</div>
-            <p className="text-[11.5px] text-[#5E6066] dark:text-[#9ca3af]">
-              Phone{" "}
-              <span className="font-mono text-[#1F1F1F] dark:text-[#ededed]">
-                {intelPreview?.phone || intel?.phone}
-              </span>
-              {(intelPreview?.fullName || intel?.fullName) && (
-                <>
-                  {" "}
-                  → <strong>{intelPreview?.fullName || intel?.fullName}</strong>
-                  {(intelPreview?.year || intel?.year) && <> · born {intelPreview?.year || intel?.year}</>}
-                </>
-              )}
+        {tab === "clues" && (
+          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-3">
+            <p className="text-[11px] leading-snug text-[#7E7E7E]">
+              Say what you know — a mobile number is enough. Optional: full name, birth year, company.
             </p>
-            <div className="space-y-1.5">
-              {sourceBars.map((s) => {
-                const ready = "ready" in s ? Boolean((s as { ready?: boolean }).ready) : true;
-                const score = s.score ?? 0;
-                return (
-                  <div key={s.id}>
-                    <div className="mb-0.5 flex justify-between gap-2 text-[10.5px] text-[#7E7E7E]">
-                      <span className="truncate">{s.label}</span>
-                      <span className="shrink-0 font-mono">{ready ? `${score}%` : "…"}</span>
-                    </div>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-[#E5E7EB] dark:bg-[#2a2a2a]">
-                      <div
-                        className="h-full rounded-full bg-[#8664F2] transition-all duration-500"
-                        style={{ width: ready ? `${score}%` : "8%" }}
-                      />
-                    </div>
-                    {ready && <div className="mt-0.5 truncate text-[10.5px] text-[#5E6066] dark:text-[#9ca3af]">{s.hit}</div>}
-                  </div>
-                );
-              })}
-            </div>
-            <p className="text-[10.5px] leading-snug text-[#9CA3AF]">
-              Next: markov ⊕ leet ⊕ Name@DOB lattice (≥40 nodes). Live Chromium only on top posterior mass.
-            </p>
+            {clues.map((row, i) => (
+              <div key={row.id} className="flex gap-1.5">
+                <input
+                  value={row.value}
+                  onChange={(e) => setClue(row.id, e.target.value)}
+                  placeholder={i === 0 ? "e.g. 9900776952" : "name, year, company…"}
+                  className="min-w-0 flex-1 rounded-[6px] border border-[#E5E7EB] bg-white px-2.5 py-1.5 text-[12.5px] dark:border-[#2a2a2a] dark:bg-[#1a1a1a]"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeClue(row.id)}
+                  disabled={clues.length <= 1}
+                  className="shrink-0 rounded-[6px] border border-[#E5E7EB] px-2 text-[11px] text-[#7E7E7E] disabled:opacity-30 dark:border-[#2a2a2a]"
+                >
+                  −
+                </button>
+              </div>
+            ))}
+            <button type="button" onClick={addClue} className="text-[11.5px] font-medium text-[#8664F2] underline">
+              + Add another clue
+            </button>
+            <button
+              type="button"
+              disabled={busy || !loginUrl}
+              onClick={() => void start()}
+              className="w-full rounded-[6px] bg-[#16A34A] px-3.5 py-2 text-[12.5px] font-semibold text-white disabled:opacity-50"
+            >
+              {busy ? "Running…" : done ? "Run again" : "Start attack"}
+            </button>
+            {error && <p className="text-[12px] text-red-600">{error}</p>}
           </div>
         )}
 
-        <div className="flex min-h-0 flex-1 flex-col px-3 pt-2.5">
-          <div className="mb-1.5 shrink-0 text-[12px] font-medium text-[#1F1F1F] dark:text-[#ededed]">Passwords tried</div>
-          <div className="mb-2 max-h-[36%] min-h-[72px] shrink-0 overflow-y-auto rounded-[8px] border border-[#E5E7EB] dark:border-[#2a2a2a]">
-            {(run?.passwordsTried || []).length === 0 ? (
-              <div className="px-2.5 py-2 text-[11px] text-[#7E7E7E]">Cleartext passwords appear as each attempt runs.</div>
+        {tab === "osint" && (
+          <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto px-3 py-3">
+            {!profilePhone && !busy ? (
+              <p className="text-[12px] text-[#7E7E7E]">Start an attack to enrich the identifier.</p>
             ) : (
-              <table className="w-full text-left text-[11.5px]">
-                <thead className="sticky top-0 bg-[#F5F6F6] text-[#7E7E7E] dark:bg-[#1a1a1a]">
-                  <tr>
-                    <th className="px-2 py-1 font-medium">#</th>
-                    <th className="px-2 py-1 font-medium">Password</th>
-                    <th className="px-2 py-1 font-medium">Result</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(run?.passwordsTried || []).map((p) => (
-                    <tr key={p.attempt} className="border-t border-[#EEE] dark:border-[#1a1a1a]">
-                      <td className="px-2 py-1 align-top text-[#7E7E7E]">{p.attempt}</td>
-                      <td className="px-2 py-1 align-top font-mono text-[12px] text-[#1F1F1F] dark:text-[#ededed]">{p.password}</td>
-                      <td className="px-2 py-1 align-top">{passwordOutcomeLabel(p)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <>
+                <div className="rounded-[8px] border border-[#E6E1F5] bg-[#F8F6FF] px-2.5 py-2 dark:border-[#2a2a2a] dark:bg-[#1a1528]">
+                  <div className="text-[10.5px] font-semibold uppercase tracking-wide text-[#8664F2]">Subject</div>
+                  <div className="mt-0.5 font-mono text-[12px] text-[#1F1F1F] dark:text-[#ededed]">{profilePhone || "…"}</div>
+                  {profileName && (
+                    <div className="mt-1 text-[13px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">
+                      {profileName}
+                      {profileYear ? <span className="font-normal text-[#7E7E7E]"> · born {profileYear}</span> : null}
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  {sourceBars.map((s) => {
+                    const ready = "ready" in s ? Boolean((s as { ready?: boolean }).ready) : true;
+                    const score = s.score ?? 0;
+                    return (
+                      <div key={s.id}>
+                        <div className="mb-0.5 flex justify-between gap-2 text-[10.5px] text-[#7E7E7E]">
+                          <span className="truncate">{s.label}</span>
+                          <span className="shrink-0 font-mono">{ready ? `${score}%` : "…"}</span>
+                        </div>
+                        <div className="h-1.5 overflow-hidden rounded-full bg-[#E5E7EB] dark:bg-[#2a2a2a]">
+                          <div
+                            className="h-full rounded-full bg-[#8664F2] transition-all duration-500"
+                            style={{ width: ready ? `${score}%` : "8%" }}
+                          />
+                        </div>
+                        {ready && (
+                          <div className="mt-0.5 truncate text-[10.5px] text-[#5E6066] dark:text-[#9ca3af]">{s.hit}</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
             )}
           </div>
-          <div className="mb-1.5 shrink-0 text-[12px] font-medium text-[#1F1F1F] dark:text-[#ededed]">Live steps</div>
-          <ol className="min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-contain pb-2">
-            {(run?.steps || []).length === 0 && (
-              <li className="text-[11px] text-[#7E7E7E]">Steps appear as the attack runs.</li>
-            )}
-            {(run?.steps || []).map((s, i) => (
-              <li key={`${s.at}-${i}`} className="flex gap-2 text-[12px] leading-snug">
-                <StepDot kind={s.kind} />
-                <span className="min-w-0 text-[#1F1F1F] dark:text-[#ededed]">{s.message}</span>
-              </li>
-            ))}
-            <li ref={stepsEndRef} aria-hidden className="h-0" />
-          </ol>
-        </div>
+        )}
 
-        {done && run?.result && (
-          <div
-            className={`shrink-0 border-t px-3 py-3 dark:border-[#1a1a1a] ${
-              verdict === "compromised" || verdict === "fail" || verdict === "error"
-                ? "border-red-100 bg-red-50 dark:bg-red-950/40"
-                : "border-emerald-100 bg-emerald-50 dark:bg-emerald-950/30"
-            }`}
-          >
-            <div
-              className={`text-[13px] font-semibold ${
-                verdict === "compromised" || verdict === "fail" || verdict === "error"
-                  ? "text-red-800 dark:text-red-200"
-                  : "text-emerald-800 dark:text-emerald-200"
-              }`}
-            >
-              {verdictHeadline(verdict)}
-            </div>
-            <p
-              className={`mt-1 text-[12px] leading-relaxed ${
-                verdict === "compromised" || verdict === "fail" || verdict === "error"
-                  ? "text-red-700 dark:text-red-300"
-                  : "text-emerald-800 dark:text-emerald-300"
-              }`}
-            >
-              {run.result.summary || run.error || run.result.reason}
-              {run.result.attempts != null ? ` (${run.result.attempts} attempt${run.result.attempts === 1 ? "" : "s"})` : ""}
-            </p>
-            {(run.error || run.result.reason) && verdict === "error" && (
-              <pre className="mt-1.5 max-h-20 overflow-auto whitespace-pre-wrap rounded-[6px] bg-white/80 px-2 py-1.5 font-mono text-[10.5px] text-red-900 dark:bg-black/20 dark:text-red-100">
-                {String(run.error || run.result.reason).slice(0, 500)}
-              </pre>
-            )}
-            {run.result.matchedPassword && (
-              <p className="mt-1.5 rounded-[6px] bg-white/80 px-2 py-1.5 font-mono text-[12.5px] text-red-900 dark:bg-black/20 dark:text-red-100">
-                Worked: {run.result.matchedPassword}
-              </p>
-            )}
-            <p className="mt-2 text-[11.5px] text-[#5E6066] dark:text-[#9ca3af]">{verdictNextStep(verdict)}</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => void start()}
-                className="rounded-[6px] bg-[#16A34A] px-3 py-1.5 text-[12px] font-semibold text-white"
+        {tab === "attack" && (
+          <div className="flex min-h-0 flex-1 flex-col">
+            {done && run?.result && (
+              <div
+                className={`shrink-0 border-b px-3 py-2 dark:border-[#1a1a1a] ${
+                  verdict === "compromised" || verdict === "fail" || verdict === "error"
+                    ? "border-red-100 bg-red-50 dark:bg-red-950/40"
+                    : "border-emerald-100 bg-emerald-50 dark:bg-emerald-950/30"
+                }`}
               >
-                Run again
-              </button>
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-[6px] border border-[#E5E7EB] bg-white px-3 py-1.5 text-[12px] dark:border-[#2a2a2a] dark:bg-[#1a1a1a]"
-              >
-                Back to plan
-              </button>
+                <div className="text-[12.5px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">{verdictHeadline(verdict)}</div>
+                {run.result.matchedPassword && (
+                  <div className="mt-1 font-mono text-[12px] text-red-700 dark:text-red-200">Worked: {run.result.matchedPassword}</div>
+                )}
+                <div className="mt-2 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void start()}
+                    className="rounded-[5px] bg-[#16A34A] px-2.5 py-1 text-[11px] font-semibold text-white"
+                  >
+                    Run again
+                  </button>
+                  <button type="button" onClick={onClose} className="rounded-[5px] border px-2.5 py-1 text-[11px] dark:border-[#2a2a2a]">
+                    Back to plan
+                  </button>
+                </div>
+              </div>
+            )}
+            <div className="grid min-h-0 flex-1 grid-rows-2">
+              <div className="flex min-h-0 flex-col border-b border-[#EEE] dark:border-[#1a1a1a]">
+                <div className="shrink-0 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#7E7E7E]">
+                  Passwords ({run?.passwordsTried?.length || 0})
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+                  {(run?.passwordsTried || []).length === 0 ? (
+                    <div className="px-1 py-2 text-[11px] text-[#7E7E7E]">Attempts appear as the lattice runs.</div>
+                  ) : (
+                    <table className="w-full text-left text-[11px]">
+                      <tbody>
+                        {(run?.passwordsTried || []).map((p, idx, arr) => (
+                          <tr
+                            key={p.attempt}
+                            ref={idx === arr.length - 1 ? pwdEndRef : undefined}
+                            className="border-t border-[#F0F0F0] dark:border-[#1a1a1a]"
+                          >
+                            <td className="w-7 py-1 pr-1 align-top text-[#9CA3AF]">{p.attempt}</td>
+                            <td className="py-1 align-top font-mono text-[11.5px] text-[#1F1F1F] dark:text-[#ededed]">{p.password}</td>
+                            <td className="w-16 py-1 pl-1 align-top text-right">{passwordOutcomeLabel(p)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+              <div className="flex min-h-0 flex-col">
+                <div className="shrink-0 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#7E7E7E]">
+                  Live steps ({run?.steps?.length || 0})
+                </div>
+                <ol className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-3 pb-3">
+                  {(run?.steps || []).length === 0 && (
+                    <li className="text-[11px] text-[#7E7E7E]">Pipeline steps appear here.</li>
+                  )}
+                  {(run?.steps || []).map((s, i) => (
+                    <li key={`${s.at}-${i}`} className="flex gap-2 text-[11.5px] leading-snug">
+                      <StepDot kind={s.kind} />
+                      <span className="min-w-0 text-[#1F1F1F] dark:text-[#ededed]">{s.message}</span>
+                    </li>
+                  ))}
+                  <li ref={stepsEndRef} aria-hidden className="h-0" />
+                </ol>
+              </div>
             </div>
           </div>
         )}
