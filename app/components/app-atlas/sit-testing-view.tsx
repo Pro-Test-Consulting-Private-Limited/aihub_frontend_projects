@@ -182,19 +182,13 @@ export function SitTestingView({
             <TbClipboardList size={18} className="text-[#8664F2]" />
             SIT Testing
           </h1>
-          <p className="mt-1 max-w-2xl text-[12.5px] text-[#5E6066] dark:text-[#9ca3af]">
-            Select Jira stories from this canvas, then generate Positive / Negative / Boundary / Business-rule cases
-            via Hugging Face. Results match the QA workbook layout and update Coverage.
+          <p className="mt-0.5 text-[11px] text-[#9ca3af]">
             {canvasName ? (
               <>
-                {" "}
                 Canvas: <span className="font-medium text-[#1F1F1F] dark:text-[#ededed]">{canvasName}</span>
+                {" · "}
               </>
-            ) : (
-              " · Select a canvas with Jira connected."
-            )}
-          </p>
-          <p className="mt-0.5 text-[11px] text-[#9ca3af]">
+            ) : null}
             {source === "jira" && projectKey
               ? `Jira project ${projectKey}`
               : source === "none"
