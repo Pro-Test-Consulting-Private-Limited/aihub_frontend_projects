@@ -96,7 +96,12 @@ export function atlasClient({ instance, accounts }: Msal) {
     /** SIT Testing: epics/tickets (canvas Jira or demo catalog). */
     listSitTickets: (canvasId?: string | null) => {
       const q = canvasId ? `?canvasId=${encodeURIComponent(canvasId)}` : "";
-      return request<{ source: "jira" | "demo"; projectKey: string | null; epics: SitEpic[] }>(`/sit/tickets${q}`);
+      return request<{
+        source: "jira" | "none";
+        projectKey: string | null;
+        epics: SitEpic[];
+        note?: string;
+      }>(`/sit/tickets${q}`);
     },
     generateSitWorkbook: (body: { issueKey?: string; issueKeys?: string[]; canvasId?: string | null }) =>
       request<SitWorkbook>("/sit/generate", json("POST", body)),

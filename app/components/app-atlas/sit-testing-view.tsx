@@ -75,7 +75,9 @@ export function SitTestingView({
   canvasName?: string;
 }) {
   const [epics, setEpics] = useState<SitEpic[]>([]);
-  const [source, setSource] = useState("");
+  const [source, setSource] = useState<"jira" | "none" | "">("");
+  const [projectKey, setProjectKey] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [genState, setGenState] = useState<GenState>("idle");
@@ -87,10 +89,14 @@ export function SitTestingView({
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setSelected(new Set()); // drop any stale keys (e.g. old demo WALLET-*) when Jira list reloads
+    setWorkbook(null);
     try {
       const res = await client.listSitTickets(canvasId);
       setEpics(res.epics);
       setSource(res.source);
+      setProjectKey(res.projectKey);
+      setNote(res.note ?? null);
       const open: Record<string, boolean> = {};
       res.epics.forEach((e, i) => {
         open[e.key] = i === 0;
@@ -140,12 +146,23 @@ export function SitTestingView({
   const clearAll = () => setSelected(new Set());
 
   const handleGenerate = async () => {
-    if (!selected.size) return;
+    const valid = new Set(allTicketKeys);
+    const keys = [...selected].filter((k) => valid.has(k));
+    if (keys.length !== selected.size) setSelected(new Set(keys));
+    if (!keys.length) {
+      setError("Select tickets from the Jira list below (stale demo keys were cleared).");
+      setGenState("idle");
+      return;
+    }
+    if (!canvasId) {
+      setError("Select a canvas connected to Jira first.");
+      return;
+    }
     setGenState("generating");
     setError(null);
     try {
       const wb = await client.generateSitWorkbook({
-        issueKeys: [...selected],
+        issueKeys: keys,
         canvasId,
       });
       setWorkbook(wb);
@@ -166,20 +183,23 @@ export function SitTestingView({
             SIT Testing
           </h1>
           <p className="mt-1 max-w-2xl text-[12.5px] text-[#5E6066] dark:text-[#9ca3af]">
-            Select one or more Jira stories, then generate Positive / Negative / Boundary / Business-rule cases
-            (Hugging Face when configured, otherwise a rich template). Results match the QA workbook layout and feed Coverage.
+            Select Jira stories from this canvas, then generate Positive / Negative / Boundary / Business-rule cases
+            via Hugging Face. Results match the QA workbook layout and update Coverage.
             {canvasName ? (
               <>
                 {" "}
                 Canvas: <span className="font-medium text-[#1F1F1F] dark:text-[#ededed]">{canvasName}</span>
               </>
             ) : (
-              " · No canvas selected — demo catalog if App Atlas has no Jira mapping."
+              " · Select a canvas with Jira connected."
             )}
           </p>
           <p className="mt-0.5 text-[11px] text-[#9ca3af]">
-            Ticket source: {source || "…"}
-            {source === "demo" ? " (demo until this canvas is connected to Jira)" : ""}
+            {source === "jira" && projectKey
+              ? `Jira project ${projectKey}`
+              : source === "none"
+                ? "Jira not ready"
+                : "…"}
             {selected.size ? ` · ${selected.size} selected` : ""}
           </p>
         </div>
@@ -210,9 +230,15 @@ export function SitTestingView({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-5">
-        {error && (
-          <div className="mb-4 rounded-[8px] border border-[#f5c2c7] bg-[#fff5f5] px-3 py-2 text-[12.5px] text-[#b42318]">
-            {error}
+        {(error || note) && (
+          <div
+            className={`mb-4 rounded-[8px] border px-3 py-2 text-[12.5px] ${
+              error
+                ? "border-[#f5c2c7] bg-[#fff5f5] text-[#b42318]"
+                : "border-[#fde68a] bg-[#fffbeb] text-[#92400e]"
+            }`}
+          >
+            {error || note}
           </div>
         )}
 
