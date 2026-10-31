@@ -27,6 +27,7 @@ import { SaveExecutionModal } from "./save-execution-modal";
 import { RecordingView } from "./recording-view";
 import { ApiTestingView } from "./api-testing-view";
 import { SitTestingView } from "./sit-testing-view";
+import { CoverageOverview } from "./coverage-overview";
 import { useApiSpec, useApiSpecView } from "@/app/hooks/use-api-spec";
 import { clearCanvasSwagger, getCanvasSwagger, type CanvasSwagger } from "@/app/lib/canvas-swagger";
 
@@ -489,6 +490,8 @@ export default function AtlasWorkspace() {
         <div className="relative min-w-0 flex-1">
           {tab === "sit" || (tab === "canvas" && view === "sit") ? (
             <SitTestingView client={client} canvasId={canvas?.id ?? null} canvasName={canvas?.name} />
+          ) : tab === "coverage" ? (
+            <CoverageOverview client={client} canvasId={canvas?.id ?? null} />
           ) : tab !== "canvas" ? (
             <EmptyState title={`${tabLabel} is coming soon`} body="This part of AppAtlas isn't available yet. Use Canvas to record and map your app." />
           ) : recording ? (

@@ -98,13 +98,22 @@ export function atlasClient({ instance, accounts }: Msal) {
       const q = canvasId ? `?canvasId=${encodeURIComponent(canvasId)}` : "";
       return request<{ source: "jira" | "demo"; projectKey: string | null; epics: SitEpic[] }>(`/sit/tickets${q}`);
     },
-    generateSitWorkbook: (body: { issueKey: string; canvasId?: string | null }) =>
+    generateSitWorkbook: (body: { issueKey?: string; issueKeys?: string[]; canvasId?: string | null }) =>
       request<SitWorkbook>("/sit/generate", json("POST", body)),
     listSitWorkbooks: (canvasId?: string | null) => {
       const q = canvasId ? `?canvasId=${encodeURIComponent(canvasId)}` : "";
       return request<{ items: SitWorkbook[] }>(`/sit/workbooks${q}`);
     },
     getSitWorkbook: (id: string) => request<SitWorkbook>(`/sit/workbooks/${id}`),
+    sitCoverage: (canvasId?: string | null) => {
+      const q = canvasId ? `?canvasId=${encodeURIComponent(canvasId)}` : "";
+      return request<{
+        tickets: Record<
+          string,
+          { tests: number; byType: Record<string, number>; workbookId: string; generator: string; updatedAt: number }
+        >;
+      }>(`/sit/coverage${q}`);
+    },
 
     /** Teams Phase 1: store team/channel ids on the canvas (config, not a second login). */
     connectTeams: (canvasId: string, body: { teamId: string; channelId: string; teamName?: string; channelName?: string }) =>
