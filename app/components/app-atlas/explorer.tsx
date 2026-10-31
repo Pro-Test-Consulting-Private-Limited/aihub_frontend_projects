@@ -14,6 +14,7 @@ import {
   TbLock,
   TbPlayerPlay,
   TbNetwork,
+  TbListCheck,
   TbPlus,
 } from "react-icons/tb";
 import { SiJira, SiSwagger } from "react-icons/si";
@@ -44,10 +45,10 @@ type Props = {
   onConnect: (c: CanvasSummary) => void;
   /** Swagger spec connected to the selected canvas. Independent of Jira. */
   swagger: CanvasSwagger | null;
-  view: "screens" | "api";
+  view: "screens" | "api" | "sit";
   /** e.g. "6 Modules, 25 End-Points" */
   apiSummary: string;
-  onView: (view: "screens" | "api") => void;
+  onView: (view: "screens" | "api" | "sit") => void;
 };
 
 export function Explorer(props: Props) {
@@ -119,7 +120,7 @@ export function Explorer(props: Props) {
                       <TbLock size={12} className="shrink-0 text-[#c0c0c0]" title="View only: recorded by someone else" />
                     )}
                   </div>
-                  {active && props.swagger && (
+                  {active && (
                     <div className="mt-1.5 space-y-0.5 pl-[14px]">
                       <ViewRow
                         active={props.view === "screens"}
@@ -128,19 +129,22 @@ export function Explorer(props: Props) {
                         meta={`${c.screens} Screens, ${c.transitions} Events`}
                         onClick={() => props.onView("screens")}
                       />
+                      {props.swagger && (
+                        <ViewRow
+                          active={props.view === "api"}
+                          icon={<TbNetwork size={13} className="text-[#8664F2]" />}
+                          label="API Testing"
+                          meta={props.apiSummary}
+                          onClick={() => props.onView("api")}
+                        />
+                      )}
                       <ViewRow
-                        active={props.view === "api"}
-                        icon={<TbNetwork size={13} className="text-[#8664F2]" />}
-                        label="API Testing"
-                        meta={props.apiSummary}
-                        onClick={() => props.onView("api")}
+                        active={props.view === "sit"}
+                        icon={<TbListCheck size={13} className="text-[#8664F2]" />}
+                        label="SIT Testing"
+                        meta="Jira → cases + data"
+                        onClick={() => props.onView("sit")}
                       />
-                    </div>
-                  )}
-                  {active && !props.swagger && (
-                    <div className="mt-1.5 flex justify-between pl-[34px] text-[10.5px] text-[#5E6066] dark:text-[#9ca3af]">
-                      <span>{formatCanvasDate(c.createdAt)}</span>
-                      <span>{c.screens} Screens, {c.transitions} Events</span>
                     </div>
                   )}
                   {active && (c.isMine || c.jiraProjectKey || props.swagger) && (

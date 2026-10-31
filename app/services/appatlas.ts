@@ -1,15 +1,18 @@
 "use client";
 
 import type { IPublicClientApplication, AccountInfo } from "@azure/msal-browser";
-import { getFreshIdToken } from "@/app/lib/auth-client";
+import { getFreshIdToken, getGraphAccessToken } from "@/app/lib/auth-client";
 import { siteOrigin } from "@/app/config/urls";
 import type {
   Canvas,
   CanvasClarifications,
+  CanvasTeams,
   PresenceUser,
   CanvasSummary,
   JiraProject,
   SessionSnapshot,
+  SitEpic,
+  SitWorkbook,
   TicketNote,
 } from "@/app/interfaces/appatlas";
 
@@ -87,6 +90,38 @@ export function atlasClient({ instance, accounts }: Msal) {
       const token = await getFreshIdToken(instance, accounts);
       return new EventSource(
         `${APPATLAS_API}/sessions/${id}/events?access_token=${encodeURIComponent(token ?? "")}`,
+      );
+    },
+
+    /** SIT Testing: epics/tickets (canvas Jira or demo catalog). */
+    listSitTickets: (canvasId?: string | null) => {
+      const q = canvasId ? `?canvasId=${encodeURIComponent(canvasId)}` : "";
+      return request<{ source: "jira" | "demo"; projectKey: string | null; epics: SitEpic[] }>(`/sit/tickets${q}`);
+    },
+    generateSitWorkbook: (body: { issueKey: string; canvasId?: string | null }) =>
+      request<SitWorkbook>("/sit/generate", json("POST", body)),
+    listSitWorkbooks: (canvasId?: string | null) => {
+      const q = canvasId ? `?canvasId=${encodeURIComponent(canvasId)}` : "";
+      return request<{ items: SitWorkbook[] }>(`/sit/workbooks${q}`);
+    },
+    getSitWorkbook: (id: string) => request<SitWorkbook>(`/sit/workbooks/${id}`),
+
+    /** Teams Phase 1: store team/channel ids on the canvas (config, not a second login). */
+    connectTeams: (canvasId: string, body: { teamId: string; channelId: string; teamName?: string; channelName?: string }) =>
+      request<Canvas>(`/canvases/${canvasId}/teams`, json("POST", body)),
+    disconnectTeams: (canvasId: string) => request<Canvas>(`/canvases/${canvasId}/teams`, json("DELETE")),
+    /** Posts with Graph access token (ChannelMessage.Send); AppAtlas still uses the ID token. */
+    sendTeamsMessage: async (
+      canvasId: string,
+      body: { text: string; subject?: string; replyToId?: string; issueKey?: string },
+    ) => {
+      const graph = await getGraphAccessToken(instance, accounts);
+      return request<{ graphMessageId: string; id: string }>(
+        `/canvases/${canvasId}/teams/messages`,
+        {
+          ...json("POST", { ...body, graphAccessToken: graph }),
+          headers: { "X-Graph-Access-Token": graph },
+        },
       );
     },
   };

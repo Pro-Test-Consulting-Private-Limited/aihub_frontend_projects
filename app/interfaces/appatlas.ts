@@ -293,3 +293,57 @@ export type AtlasConfig = {
   capacity: Capacity;
   presets: { devices: Preset[]; networks: Preset[] };
 };
+
+/** Preconfigured Teams channel on a canvas (Phase 1). */
+export type CanvasTeams = {
+  teamId: string;
+  channelId: string;
+  teamName: string | null;
+  channelName: string | null;
+  connectedAt: number;
+};
+
+export type SitTicket = {
+  key: string;
+  summary: string;
+  type: string;
+  status: string;
+  statusCategory: string;
+  epicKey: string | null;
+  url: string;
+};
+
+export type SitEpic = {
+  key: string;
+  summary: string;
+  status: string;
+  statusCategory: string;
+  ticketCount: number;
+  tickets: SitTicket[];
+};
+
+export type SitSheetColumn = { id: string; name: string; width?: number };
+export type SitSheetRow = { id: string; cells: Record<string, string> };
+export type SitSheet = {
+  id: string;
+  name: string;
+  kind: "test-cases" | "test-data" | "traceability" | "custom";
+  columns: SitSheetColumn[];
+  rows: SitSheetRow[];
+  traceabilityNote?: string;
+};
+
+export type SitWorkbook = {
+  id: string;
+  canvasId: string | null;
+  confirmedId: string;
+  sourceIssueKeys: string[];
+  sourceSummaries: Record<string, string>;
+  status: "queued" | "running" | "ready" | "failed";
+  error: string | null;
+  generator: "stub" | "huggingface";
+  sheets: SitSheet[];
+  createdAt: number;
+  updatedAt: number;
+  createdBy: { id: string; name: string };
+};

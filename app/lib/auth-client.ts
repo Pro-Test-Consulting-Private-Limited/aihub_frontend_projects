@@ -7,7 +7,7 @@ import {
   type AccountInfo,
   type IPublicClientApplication,
 } from "@azure/msal-browser";
-import { loginRequest } from "@/app/lib/msal";
+import { graphTeamsRequest, loginRequest } from "@/app/lib/msal";
 
 function readJwtExp(token: string): number | null {
   try {
@@ -55,5 +55,24 @@ export async function getFreshIdToken(
       err instanceof InteractionRequiredAuthError || (err instanceof BrowserAuthError && code !== "interaction_in_progress");
     if (needsRedirect) await instance.acquireTokenRedirect({ ...loginRequest, account });
     return null;
+  }
+}
+
+/** Graph access token for Teams posting (same MSAL account as app sign-in). */
+export async function getGraphAccessToken(
+  instance: IPublicClientApplication,
+  accounts: AccountInfo[],
+) {
+  if (accounts.length === 0) throw new Error("Sign in to the application with Microsoft first");
+  const account = accounts[0];
+  try {
+    const result = await instance.acquireTokenSilent({ ...graphTeamsRequest, account });
+    return result.accessToken;
+  } catch (err) {
+    if (err instanceof InteractionRequiredAuthError) {
+      await instance.acquireTokenRedirect({ ...graphTeamsRequest, account });
+      throw new Error("Redirecting to allow posting to Teams (same Microsoft account)");
+    }
+    throw err;
   }
 }

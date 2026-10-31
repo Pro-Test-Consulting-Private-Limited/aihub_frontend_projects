@@ -57,6 +57,7 @@ export function JiraPanel({
   onClose,
   onConnect,
   onSaveNote,
+  onPostToTeams,
 }: {
   canvas: Canvas;
   nodeId: string;
@@ -65,6 +66,8 @@ export function JiraPanel({
   onClose: () => void;
   onConnect?: () => void;
   onSaveNote: (issueKey: string, text: string) => Promise<TicketNote>;
+  /** Post clarification questions to the linked Teams channel (same Entra account). */
+  onPostToTeams?: (issueKey: string, clarification: CanvasClarification) => Promise<void>;
 }) {
   const node = canvas.nodes.find((n) => n.id === nodeId);
   const mapping = canvas.jira;
@@ -177,6 +180,7 @@ export function JiraPanel({
                 clarification={t.match ? clarifications.get(t.issue.key) : undefined}
                 editable={editable}
                 onSaveNote={onSaveNote}
+                onPostToTeams={onPostToTeams}
               />
             ))}
           </>
@@ -191,11 +195,13 @@ function TicketCard({
   clarification,
   editable,
   onSaveNote,
+  onPostToTeams,
 }: {
   ticket: Ticket;
   clarification?: CanvasClarification;
   editable: boolean;
   onSaveNote: (issueKey: string, text: string) => Promise<TicketNote>;
+  onPostToTeams?: (issueKey: string, clarification: CanvasClarification) => Promise<void>;
 }) {
   const { issue, epic } = ticket;
 
@@ -229,7 +235,9 @@ function TicketCard({
         {issue.priority && <span className={`font-semibold uppercase ${PRIORITY_STYLE(issue.priority)}`}>{issue.priority}</span>}
       </div>
 
-      {clarification && <Clarifications item={clarification} editable={editable} onSaveNote={onSaveNote} />}
+      {clarification && (
+        <Clarifications item={clarification} editable={editable} onSaveNote={onSaveNote} onPostToTeams={onPostToTeams} />
+      )}
     </div>
   );
 }
@@ -238,19 +246,51 @@ function Clarifications({
   item,
   editable,
   onSaveNote,
+  onPostToTeams,
 }: {
   item: CanvasClarification;
   editable: boolean;
   onSaveNote: (issueKey: string, text: string) => Promise<TicketNote>;
+  onPostToTeams?: (issueKey: string, clarification: CanvasClarification) => Promise<void>;
 }) {
   const pending = item.status === "queued" || item.status === "running";
+  const [posting, setPosting] = useState(false);
+  const [postMsg, setPostMsg] = useState<string | null>(null);
+
+  const postTeams = async () => {
+    if (!onPostToTeams || !editable) return;
+    setPosting(true);
+    setPostMsg(null);
+    try {
+      await onPostToTeams(item.issueKey, item);
+      setPostMsg("Posted to Teams");
+    } catch (err) {
+      setPostMsg(err instanceof Error ? err.message : "Could not post to Teams");
+    } finally {
+      setPosting(false);
+    }
+  };
 
   return (
     <div className="mt-3">
-      <div className="mb-1.5 text-[10.5px] font-semibold tracking-wide text-[#5E6066] uppercase dark:text-[#9ca3af]">
-        Requirement clarification
-        {item.status === "ready" && <span className="ml-1 text-[#E1962E]">{item.questions.length}</span>}
+      <div className="mb-1.5 flex items-center justify-between gap-2 text-[10.5px] font-semibold tracking-wide text-[#5E6066] uppercase dark:text-[#9ca3af]">
+        <span>
+          Requirement clarification
+          {item.status === "ready" && <span className="ml-1 text-[#E1962E]">{item.questions.length}</span>}
+        </span>
+        {editable && onPostToTeams && item.status === "ready" && item.questions.length > 0 && (
+          <button
+            type="button"
+            disabled={posting}
+            onClick={() => void postTeams()}
+            className="rounded-[6px] border border-[#E6E1F5] bg-white px-2 py-0.5 text-[10px] font-medium normal-case text-[#6264A7] hover:border-[#6264A7] disabled:opacity-50 dark:border-[#2a2a2a] dark:bg-[#141414]"
+            title="Post these questions to the linked Teams channel (same Microsoft sign-in)"
+          >
+            {posting ? "Posting…" : "Post to Teams"}
+          </button>
+        )}
       </div>
+      {postMsg && <div className="mb-1.5 text-[11px] text-[#5E6066] dark:text-[#9ca3af]">{postMsg}</div>}
 
       {pending && (
         <div className="flex items-center gap-2 rounded-[6px] bg-[#F4EFFE] px-2 py-1.5 text-[11.5px] text-[#5B3FD1] dark:bg-[#1c1530] dark:text-[#c4b5fd]">

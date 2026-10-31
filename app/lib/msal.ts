@@ -22,8 +22,17 @@ const msalConfig: Configuration = {
   },
 };
 
+/** App sign-in only. Do not put Graph Teams scopes here. */
 export const loginRequest = {
   scopes: ["User.Read"],
+};
+
+/**
+ * Incremental consent on the same Entra account when linking a Teams channel or posting.
+ * Not a separate Teams login. Entra app needs ChannelMessage.Send + admin consent.
+ */
+export const graphTeamsRequest = {
+  scopes: ["ChannelMessage.Send"],
 };
 
 export const msalInstance = new PublicClientApplication(msalConfig);

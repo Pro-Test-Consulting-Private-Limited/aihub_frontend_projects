@@ -26,13 +26,14 @@ import { JiraPanel } from "./jira-panel";
 import { SaveExecutionModal } from "./save-execution-modal";
 import { RecordingView } from "./recording-view";
 import { ApiTestingView } from "./api-testing-view";
+import { SitTestingView } from "./sit-testing-view";
 import { useApiSpec, useApiSpecView } from "@/app/hooks/use-api-spec";
 import { clearCanvasSwagger, getCanvasSwagger, type CanvasSwagger } from "@/app/lib/canvas-swagger";
 
 const TABS = [
   { id: "canvas", label: "Canvas", icon: TbLayoutGrid },
   { id: "api", label: "API Testing", icon: TbNetwork },
-  { id: "sit", label: "SIT", icon: TbListCheck },
+  { id: "sit", label: "SIT Testing", icon: TbListCheck },
   { id: "coverage", label: "Coverage", icon: TbChartLine },
   { id: "security", label: "Security", icon: TbShieldCheck },
   { id: "performance", label: "Performance", icon: TbBrandSpeedtest },
@@ -99,7 +100,7 @@ export default function AtlasWorkspace() {
 
   // Swagger is connected per canvas and is independent of Jira (canvas.jiraProjectKey).
   const [swagger, setSwagger] = useState<CanvasSwagger | null>(null);
-  const [view, setView] = useState<"screens" | "api">("screens");
+  const [view, setView] = useState<"screens" | "api" | "sit">("screens");
   const apiSpec = useApiSpec(swagger?.specUrl ?? null);
   const apiSpecView = useApiSpecView(apiSpec);
 
@@ -391,7 +392,11 @@ export default function AtlasWorkspace() {
               <button
                 key={id}
                 type="button"
-                onClick={() => setTab(id)}
+                onClick={() => {
+                  setTab(id);
+                  if (id === "sit") setView("sit");
+                  if (id === "canvas") setView((v) => (v === "sit" ? "screens" : v));
+                }}
                 className={`flex h-[32px] items-center gap-1.5 rounded-[8px] px-3 text-[13px] ${
                   tab === id
                     ? "bg-[#F2EBFB] text-[#8664F2] dark:bg-[#2a2440]"
@@ -443,7 +448,7 @@ export default function AtlasWorkspace() {
       )}
 
       <div className="flex min-h-0 flex-1">
-        {tab === "canvas" && explorerOpen && (
+        {(tab === "canvas" || tab === "sit") && explorerOpen && (
           <Explorer
             canvases={visible}
             loading={canvasesLoading}
@@ -463,10 +468,14 @@ export default function AtlasWorkspace() {
             swagger={swagger}
             view={view}
             apiSummary={apiSummary}
-            onView={setView}
+            onView={(v) => {
+              setView(v);
+              if (v === "sit") setTab("sit");
+              else setTab("canvas");
+            }}
           />
         )}
-        {tab === "canvas" && !explorerOpen && (
+        {(tab === "canvas" || tab === "sit") && !explorerOpen && (
           <button
             type="button"
             onClick={() => setExplorerOpen(true)}
@@ -478,7 +487,9 @@ export default function AtlasWorkspace() {
         )}
 
         <div className="relative min-w-0 flex-1">
-          {tab !== "canvas" ? (
+          {tab === "sit" || (tab === "canvas" && view === "sit") ? (
+            <SitTestingView client={client} canvasId={canvas?.id ?? null} canvasName={canvas?.name} />
+          ) : tab !== "canvas" ? (
             <EmptyState title={`${tabLabel} is coming soon`} body="This part of AppAtlas isn't available yet. Use Canvas to record and map your app." />
           ) : recording ? (
             <RecordingView key={recording.id} client={client} initial={recording} onFinished={onRecordingDone} onSwitchViewer={switchViewer} onDiscarded={() => {
@@ -511,6 +522,18 @@ export default function AtlasWorkspace() {
                   editable={canvas.isMine}
                   onClose={() => setPanelNodeId(null)}
                   onConnect={canvas.isMine ? () => setConnectFor(canvas) : undefined}
+                  onPostToTeams={
+                    canvas.isMine
+                      ? async (issueKey, clarification) => {
+                          const lines = clarification.questions.map((q, i) => `${i + 1}. ${q.question}`).join("\n");
+                          await client.sendTeamsMessage(canvas.id, {
+                            issueKey,
+                            subject: `${issueKey} requirement clarifications`,
+                            text: lines || "No open questions.",
+                          });
+                        }
+                      : undefined
+                  }
                   onSaveNote={async (issueKey, text) => {
                     const note = await client.saveTicketNote(canvas.id, issueKey, text);
                     setCanvas((prev) =>

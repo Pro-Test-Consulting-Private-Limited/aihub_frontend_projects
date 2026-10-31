@@ -38,7 +38,7 @@ const CATEGORIES: { title: string; apps: { id: AppId; name: string; icon: React.
   },
 ];
 
-const CAN_MAP: AppId[] = ["jira", "swagger"];
+const CAN_MAP: AppId[] = ["jira", "swagger", "teams"];
 
 export function ConnectAppsModal({
   client,
@@ -58,16 +58,34 @@ export function ConnectAppsModal({
 }) {
   const router = useRouter();
   const { jira, swagger: swaggerIntegration, loading: statusLoading } = useIntegrationStatus();
-  const integrated: Record<AppId, boolean> = { jira: jira.connected, swagger: swaggerIntegration.connected, linear: false, redocly: false, stoplight: false, teams: false, slack: false };
-  const [step, setStep] = useState<"apps" | "jira" | "swagger">("apps");
+  // Teams uses the same Entra sign-in (Graph ChannelMessage.Send consent) — not a separate login.
+  const integrated: Record<AppId, boolean> = {
+    jira: jira.connected,
+    swagger: swaggerIntegration.connected,
+    linear: false,
+    redocly: false,
+    stoplight: false,
+    teams: true,
+    slack: false,
+  };
+  const [step, setStep] = useState<"apps" | "jira" | "swagger" | "teams">("apps");
   const [picked, setPicked] = useState<AppId | null>(canvas.jiraProjectKey ? "jira" : null);
 
   const confirmPick = () => {
-    if (picked === "jira" || picked === "swagger") setStep(picked);
+    if (picked === "jira" || picked === "swagger" || picked === "teams") setStep(picked);
   };
 
+  const stepTitle =
+    step === "apps"
+      ? "Select an app to connect with this canvas"
+      : step === "jira"
+        ? "Connect Jira"
+        : step === "teams"
+          ? "Link Teams channel"
+          : "Connect Swagger";
+
   return (
-    <Modal title={step === "apps" ? "Select an app to connect with this canvas" : step === "jira" ? "Connect Jira" : "Connect Swagger"} onClose={onClose} width={480}>
+    <Modal title={stepTitle} onClose={onClose} width={480}>
       {step === "apps" ? (
         <div className="mt-4 space-y-3">
           {CATEGORIES.map((cat) => (
@@ -122,9 +140,13 @@ export function ConnectAppsModal({
           </p>
           {picked && !CAN_MAP.includes(picked) && (
             <p className="text-[11.5px] text-[#92400E]">
-              {picked === "swagger"
-                ? "Swagger is integrated, but screens aren't mapped to API specs yet. Choose Jira to map this canvas."
-                : "This app can be selected once it's integrated, but canvas mapping is only available for Jira right now."}
+              This app can be selected once it's integrated; canvas mapping is available for Jira, Swagger, and Teams.
+            </p>
+          )}
+          {picked === "teams" && (
+            <p className="text-[11.5px] text-[#5E6066]">
+              Link channel stores Team/Channel IDs on this canvas. Posting uses your app Microsoft sign-in with Graph
+              permission only — not a separate Teams login.
             </p>
           )}
           <button
@@ -137,14 +159,92 @@ export function ConnectAppsModal({
             Connect
           </button>
         </div>
+      ) : step === "jira" ? (
+        <JiraStep client={client} canvas={canvas} siteName={jira.siteName} onBack={() => setStep("apps")} onConnected={onConnected} />
+      ) : step === "teams" ? (
+        <TeamsStep client={client} canvas={canvas} onBack={() => setStep("apps")} onConnected={onConnected} />
       ) : (
-        step === "jira" ? (
-          <JiraStep client={client} canvas={canvas} siteName={jira.siteName} onBack={() => setStep("apps")} onConnected={onConnected} />
-        ) : (
-          <SwaggerStep canvas={canvas} integration={swaggerIntegration} current={swagger} onBack={() => setStep("apps")} onChange={onSwaggerChange} />
-        )
+        <SwaggerStep canvas={canvas} integration={swaggerIntegration} current={swagger} onBack={() => setStep("apps")} onChange={onSwaggerChange} />
       )}
     </Modal>
+  );
+}
+
+function TeamsStep({
+  client,
+  canvas,
+  onBack,
+  onConnected,
+}: {
+  client: AtlasClient;
+  canvas: CanvasSummary;
+  onBack: () => void;
+  onConnected: (c: Canvas) => void;
+}) {
+  const [teamId, setTeamId] = useState("");
+  const [channelId, setChannelId] = useState("");
+  const [channelName, setChannelName] = useState("requirement-clarifications");
+  const [busy, setBusy] = useState<"link" | "disconnect" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const link = async () => {
+    setBusy("link");
+    setError(null);
+    try {
+      onConnected(
+        await client.connectTeams(canvas.id, {
+          teamId: teamId.trim(),
+          channelId: channelId.trim(),
+          channelName: channelName.trim() || undefined,
+        }),
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not link Teams channel.");
+      setBusy(null);
+    }
+  };
+
+  const disconnect = async () => {
+    setBusy("disconnect");
+    setError(null);
+    try {
+      onConnected(await client.disconnectTeams(canvas.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not disconnect Teams.");
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div>
+      <button type="button" onClick={onBack} disabled={!!busy} className="mt-3 flex items-center gap-1 text-[12px] text-[#5E6066] hover:text-[#8664F2]">
+        <TbArrowLeft size={14} /> All apps
+      </button>
+      <div className="mt-3 flex items-center gap-3 rounded-[10px] border border-[#ECECEC] p-3 dark:border-[#2a2a2a]">
+        <span className="flex h-[38px] w-[38px] items-center justify-center rounded-[8px] border-2 border-[#22C55E] bg-white">
+          <FaMicrosoft size={20} color="#6264A7" />
+        </span>
+        <div className="min-w-0 text-[12.5px]">
+          <div className="font-medium text-[#1F1F1F] dark:text-[#ededed]">Microsoft Teams</div>
+          <div className="text-[#7E7E7E]">Same Microsoft account as AI Hub. Link a channel to post clarifications (Phase 1).</div>
+        </div>
+      </div>
+      <label className={fieldLabel}>Team ID</label>
+      <input className={fieldInput} value={teamId} onChange={(e) => setTeamId(e.target.value)} placeholder="GUID from Teams admin / Graph" disabled={!!busy} />
+      <label className={fieldLabel}>Channel ID</label>
+      <input className={fieldInput} value={channelId} onChange={(e) => setChannelId(e.target.value)} placeholder="19:….@thread.tacv2" disabled={!!busy} />
+      <label className={fieldLabel}>Channel name (display)</label>
+      <input className={fieldInput} value={channelName} onChange={(e) => setChannelName(e.target.value)} disabled={!!busy} />
+      {error && <div className="mt-3 rounded-[8px] bg-[#FDF1F1] px-3 py-2 text-[12px] text-[#991B1B]">{error}</div>}
+      <div className="mt-5 flex justify-end gap-3">
+        <button type="button" className={outlineButton} onClick={disconnect} disabled={!!busy}>
+          {busy === "disconnect" ? "Disconnecting…" : "Disconnect"}
+        </button>
+        <button type="button" className={primaryButton} onClick={link} disabled={!!busy || !teamId.trim() || !channelId.trim()}>
+          {busy === "link" ? "Linking…" : "Link channel"}
+        </button>
+      </div>
+    </div>
   );
 }
 
