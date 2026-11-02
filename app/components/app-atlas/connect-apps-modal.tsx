@@ -3,15 +3,16 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { TbArrowLeft, TbChevronRight, TbLink, TbLoader2 } from "react-icons/tb";
-import { SiJira, SiLinear, SiSwagger } from "react-icons/si";
+import { SiGithub, SiJira, SiLinear, SiSwagger } from "react-icons/si";
 import { FaBook, FaCode, FaMicrosoft, FaSlack } from "react-icons/fa";
-import type { Canvas, CanvasSummary, JiraProject } from "@/app/interfaces/appatlas";
+import type { Canvas, CanvasGithub, CanvasSummary, JiraProject } from "@/app/interfaces/appatlas";
 import type { AtlasClient } from "@/app/services/appatlas";
 import { useIntegrationStatus, type SwaggerStatus } from "@/app/hooks/use-integration-status";
 import { clearCanvasSwagger, setCanvasSwagger, type CanvasSwagger } from "@/app/lib/canvas-swagger";
+import { APPATLAS_API } from "@/app/services/appatlas";
 import { Modal, fieldInput, fieldLabel, outlineButton, primaryButton } from "./modal";
 
-type AppId = "jira" | "linear" | "swagger" | "redocly" | "stoplight" | "teams" | "slack";
+type AppId = "jira" | "linear" | "swagger" | "redocly" | "stoplight" | "teams" | "slack" | "github";
 
 const CATEGORIES: { title: string; apps: { id: AppId; name: string; icon: React.ReactNode }[] }[] = [
   {
@@ -30,6 +31,10 @@ const CATEGORIES: { title: string; apps: { id: AppId; name: string; icon: React.
     ],
   },
   {
+    title: "CI / Source control (trial)",
+    apps: [{ id: "github", name: "GitHub", icon: <SiGithub size={26} color="#24292F" /> }],
+  },
+  {
     title: "Team Collaboration & Communication",
     apps: [
       { id: "teams", name: "Microsoft Teams", icon: <FaMicrosoft size={24} color="#6264A7" /> },
@@ -38,7 +43,7 @@ const CATEGORIES: { title: string; apps: { id: AppId; name: string; icon: React.
   },
 ];
 
-const CAN_MAP: AppId[] = ["jira", "swagger", "teams"];
+const CAN_MAP: AppId[] = ["jira", "swagger", "teams", "github"];
 
 export function ConnectAppsModal({
   client,
@@ -53,26 +58,51 @@ export function ConnectAppsModal({
   /** Swagger spec already connected to this canvas, if any. */
   swagger: CanvasSwagger | null;
   onSwaggerChange: (conn: CanvasSwagger | null) => void;
-  onConnected: (c: Canvas) => void;
+  onConnected: (c: Canvas, opts?: { keepOpen?: boolean }) => void;
   onClose: () => void;
 }) {
   const router = useRouter();
   const { jira, swagger: swaggerIntegration, loading: statusLoading } = useIntegrationStatus();
+  const [cicdTrial, setCicdTrial] = useState(false);
+  const [githubLink, setGithubLink] = useState<CanvasGithub | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    client
+      .getSettings()
+      .then((s) => {
+        if (!cancelled) setCicdTrial(!!s.cicdCanvasTrial);
+      })
+      .catch(() => {
+        if (!cancelled) setCicdTrial(false);
+      });
+    client
+      .getCanvas(canvas.id)
+      .then((c) => {
+        if (!cancelled) setGithubLink(c.github ?? null);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [client, canvas.id]);
+
   // Teams uses the same Entra sign-in (Graph ChannelMessage.Send consent) — not a separate login.
   const integrated: Record<AppId, boolean> = {
     jira: jira.connected,
     swagger: swaggerIntegration.connected,
+    github: cicdTrial,
     linear: false,
     redocly: false,
     stoplight: false,
     teams: true,
     slack: false,
   };
-  const [step, setStep] = useState<"apps" | "jira" | "swagger" | "teams">("apps");
+  const [step, setStep] = useState<"apps" | "jira" | "swagger" | "teams" | "github">("apps");
   const [picked, setPicked] = useState<AppId | null>(canvas.jiraProjectKey ? "jira" : null);
 
   const confirmPick = () => {
-    if (picked === "jira" || picked === "swagger" || picked === "teams") setStep(picked);
+    if (picked === "jira" || picked === "swagger" || picked === "teams" || picked === "github") setStep(picked);
   };
 
   const stepTitle =
@@ -82,65 +112,75 @@ export function ConnectAppsModal({
         ? "Connect Jira"
         : step === "teams"
           ? "Link Teams channel"
-          : "Connect Swagger";
+          : step === "github"
+            ? "Connect GitHub (CI/CD trial)"
+            : "Connect Swagger";
 
   return (
     <Modal title={stepTitle} onClose={onClose} width={480}>
       {step === "apps" ? (
         <div className="mt-4 space-y-3">
-          {CATEGORIES.map((cat) => (
-            <div key={cat.title} className="rounded-[12px] border border-[#ECECEC] bg-[#FAFAFA] p-4 dark:border-[#2a2a2a] dark:bg-[#101010]">
-              <button
-                type="button"
-                onClick={() => router.push("/integrations")}
-                className="flex w-full items-center justify-between text-left text-[14px] font-medium text-[#1F1F1F] dark:text-[#ededed]"
-                title="Manage integrations"
-              >
-                {cat.title}
-                <TbChevronRight size={16} className="text-[#7E7E7E]" />
-              </button>
-              <div className="mt-3 flex gap-3">
-                {cat.apps.map((app) => {
-                  const ok = integrated[app.id];
-                  const connected = (app.id === "jira" && !!canvas.jiraProjectKey) || (app.id === "swagger" && !!swagger);
-                  const selected = picked === app.id;
-                  return (
-                    <button
-                      key={app.id}
-                      type="button"
-                      disabled={!ok}
-                      onClick={() => setPicked(app.id)}
-                      title={
-                        ok
-                          ? connected
-                            ? `${app.name}: connected to ${app.id === "swagger" ? swagger?.title || "this spec" : canvas.jiraProjectKey}`
-                            : `Select ${app.name}`
-                          : `${app.name} isn't integrated yet. Integrate it on the Integrations page first.`
-                      }
-                      className={`relative flex h-[56px] w-[56px] items-center justify-center rounded-[10px] bg-white shadow-sm transition dark:bg-[#1a1a1a] ${
-                        ok
-                          ? selected
-                            ? "border-2 border-[#22C55E] ring-2 ring-[#22C55E]/30"
-                            : "border-2 border-[#22C55E] hover:scale-105"
-                          : "cursor-not-allowed border border-[#E5E7EB] opacity-45 grayscale dark:border-[#2a2a2a]"
-                      }`}
-                    >
-                      {app.icon}
-                      {connected && <span className="absolute -top-1 -right-1 h-[10px] w-[10px] rounded-full border-2 border-white bg-[#22C55E]" />}
-                    </button>
-                  );
-                })}
+          {CATEGORIES.map((cat) => {
+            if (cat.apps.every((a) => a.id === "github") && !cicdTrial) return null;
+            return (
+              <div key={cat.title} className="rounded-[12px] border border-[#ECECEC] bg-[#FAFAFA] p-4 dark:border-[#2a2a2a] dark:bg-[#101010]">
+                <button
+                  type="button"
+                  onClick={() => router.push("/integrations")}
+                  className="flex w-full items-center justify-between text-left text-[14px] font-medium text-[#1F1F1F] dark:text-[#ededed]"
+                  title="Manage integrations"
+                >
+                  {cat.title}
+                  <TbChevronRight size={16} className="text-[#7E7E7E]" />
+                </button>
+                <div className="mt-3 flex gap-3">
+                  {cat.apps.map((app) => {
+                    const ok = integrated[app.id];
+                    const connected =
+                      (app.id === "jira" && !!canvas.jiraProjectKey) ||
+                      (app.id === "swagger" && !!swagger) ||
+                      (app.id === "github" && !!githubLink);
+                    const selected = picked === app.id;
+                    return (
+                      <button
+                        key={app.id}
+                        type="button"
+                        disabled={!ok}
+                        onClick={() => setPicked(app.id)}
+                        title={
+                          ok
+                            ? connected
+                              ? `${app.name}: connected`
+                              : `Select ${app.name}`
+                            : app.id === "github"
+                              ? "Canvas GitHub trial is off (Features → CI/CD canvas). Prefer the CI/CD nav page."
+                              : `${app.name} isn't integrated yet. Integrate it on the Integrations page first.`
+                        }
+                        className={`relative flex h-[56px] w-[56px] items-center justify-center rounded-[10px] bg-white shadow-sm transition dark:bg-[#1a1a1a] ${
+                          ok
+                            ? selected
+                              ? "border-2 border-[#22C55E] ring-2 ring-[#22C55E]/30"
+                              : "border-2 border-[#22C55E] hover:scale-105"
+                            : "cursor-not-allowed border border-[#E5E7EB] opacity-45 grayscale dark:border-[#2a2a2a]"
+                        }`}
+                      >
+                        {app.icon}
+                        {connected && <span className="absolute -top-1 -right-1 h-[10px] w-[10px] rounded-full border-2 border-white bg-[#22C55E]" />}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           <p className="text-[11.5px] text-[#7E7E7E]">
             {statusLoading
               ? "Checking your integrations…"
-              : "Apps with a green border are integrated in AI Hub. Select one, then Connect. Integrate the others from the Integrations page."}
+              : "Apps with a green border are available. Select one, then Connect. Canvas GitHub is optional (Features → CI/CD canvas); prefer the CI/CD nav page."}
           </p>
           {picked && !CAN_MAP.includes(picked) && (
             <p className="text-[11.5px] text-[#92400E]">
-              This app can be selected once it's integrated; canvas mapping is available for Jira, Swagger, and Teams.
+              This app can be selected once it's integrated; canvas mapping is available for Jira, Swagger, Teams, and GitHub (trial).
             </p>
           )}
           {picked === "teams" && (
@@ -163,10 +203,132 @@ export function ConnectAppsModal({
         <JiraStep client={client} canvas={canvas} siteName={jira.siteName} onBack={() => setStep("apps")} onConnected={onConnected} />
       ) : step === "teams" ? (
         <TeamsStep client={client} canvas={canvas} onBack={() => setStep("apps")} onConnected={onConnected} />
+      ) : step === "github" ? (
+        <GithubStep
+          client={client}
+          canvas={canvas}
+          current={githubLink}
+          onBack={() => setStep("apps")}
+          onConnected={(c, opts) => {
+            setGithubLink(c.github ?? null);
+            onConnected(c, opts);
+          }}
+        />
       ) : (
         <SwaggerStep canvas={canvas} integration={swaggerIntegration} current={swagger} onBack={() => setStep("apps")} onChange={onSwaggerChange} />
       )}
     </Modal>
+  );
+}
+
+function GithubStep({
+  client,
+  canvas,
+  current,
+  onBack,
+  onConnected,
+}: {
+  client: AtlasClient;
+  canvas: CanvasSummary;
+  current: CanvasGithub | null;
+  onBack: () => void;
+  onConnected: (c: Canvas, opts?: { keepOpen?: boolean }) => void;
+}) {
+  const [owner, setOwner] = useState(current?.owner ?? "");
+  const [repo, setRepo] = useState(current?.repo ?? "");
+  const [openapiPath, setOpenapiPath] = useState(current?.openapiPath ?? "openapi.json");
+  const [smokeBaseUrl, setSmokeBaseUrl] = useState(current?.smokeBaseUrl ?? "");
+  const [busy, setBusy] = useState<"link" | "disconnect" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [secretOnce, setSecretOnce] = useState<string | null>(null);
+
+  const link = async () => {
+    setBusy("link");
+    setError(null);
+    setSecretOnce(null);
+    try {
+      const updated = await client.connectGithub(canvas.id, {
+        owner: owner.trim(),
+        repo: repo.trim(),
+        openapiPath: openapiPath.trim() || "openapi.json",
+        smokeBaseUrl: smokeBaseUrl.trim() || undefined,
+      });
+      setSecretOnce(updated.github?.webhookSecret ?? null);
+      // Keep modal open so the webhook secret can be copied once.
+      onConnected(updated, { keepOpen: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not link GitHub.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const disconnect = async () => {
+    setBusy("disconnect");
+    setError(null);
+    setSecretOnce(null);
+    try {
+      onConnected(await client.disconnectGithub(canvas.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not disconnect GitHub.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const webhookUrl = `${APPATLAS_API}/webhooks/github`;
+
+  return (
+    <div>
+      <button type="button" onClick={onBack} disabled={!!busy} className="mt-3 flex items-center gap-1 text-[12px] text-[#5E6066] hover:text-[#8664F2]">
+        <TbArrowLeft size={14} /> All apps
+      </button>
+      <div className="mt-3 flex items-center gap-3 rounded-[10px] border border-[#ECECEC] p-3 dark:border-[#2a2a2a]">
+        <span className="flex h-[38px] w-[38px] items-center justify-center rounded-[8px] border-2 border-[#22C55E] bg-white">
+          <SiGithub size={20} color="#24292F" />
+        </span>
+        <div className="min-w-0 text-[12.5px]">
+          <div className="font-medium text-[#1F1F1F] dark:text-[#ededed]">GitHub · CI/CD trial</div>
+          <div className="text-[#7E7E7E]">
+            {current ? `Linked to ${current.owner}/${current.repo}` : "PR / push / release → OpenAPI sync + run history on this canvas."}
+          </div>
+        </div>
+      </div>
+      <label className={fieldLabel}>Owner</label>
+      <input className={fieldInput} value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="org-or-user" disabled={!!busy} />
+      <label className={fieldLabel}>Repository</label>
+      <input className={fieldInput} value={repo} onChange={(e) => setRepo(e.target.value)} placeholder="digital-wallet" disabled={!!busy} />
+      <label className={fieldLabel}>OpenAPI path in repo</label>
+      <input className={fieldInput} value={openapiPath} onChange={(e) => setOpenapiPath(e.target.value)} placeholder="openapi.json" disabled={!!busy} />
+      <label className={fieldLabel}>Smoke base URL (optional)</label>
+      <input
+        className={fieldInput}
+        value={smokeBaseUrl}
+        onChange={(e) => setSmokeBaseUrl(e.target.value)}
+        placeholder="https://staging.example.com"
+        disabled={!!busy}
+      />
+      <p className="mt-3 text-[11.5px] leading-relaxed text-[#7E7E7E]">
+        Webhook URL (events: pull_request, push, release):{" "}
+        <code className="break-all text-[11px] text-[#1F1F1F] dark:text-[#ededed]">{webhookUrl}</code>
+      </p>
+      {secretOnce && (
+        <div className="mt-2 rounded-[8px] bg-[#F0FDF4] px-3 py-2 text-[12px] text-[#166534]">
+          Webhook secret (copy now — shown once): <code className="break-all">{secretOnce}</code>
+        </div>
+      )}
+      {error && <div className="mt-3 rounded-[8px] bg-[#FDF1F1] px-3 py-2 text-[12px] text-[#991B1B]">{error}</div>}
+      <div className="mt-5 flex justify-end gap-3">
+        {current && (
+          <button type="button" className={outlineButton} onClick={disconnect} disabled={!!busy}>
+            {busy === "disconnect" ? "Disconnecting…" : "Disconnect"}
+          </button>
+        )}
+        <button type="button" className={primaryButton} onClick={link} disabled={!!busy || !owner.trim() || !repo.trim()}>
+          {busy === "link" ? "Linking…" : current ? "Re-link" : "Link repo"}
+        </button>
+      </div>
+    </div>
   );
 }
 

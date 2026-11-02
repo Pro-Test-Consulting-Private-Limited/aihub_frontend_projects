@@ -1,11 +1,71 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { TbLoader2, TbBolt, TbClipboardList, TbGitMerge } from "react-icons/tb";
-import type { SitEpic, SitSheet, SitWorkbook } from "@/app/interfaces/appatlas";
+import { TbLoader2, TbBolt, TbBookmarkFilled, TbClipboardList, TbGitMerge } from "react-icons/tb";
+import type { SitEpic, SitModelStatus, SitSheet, SitSheetRow, SitWorkbook } from "@/app/interfaces/appatlas";
 import type { AtlasClient } from "@/app/services/appatlas";
+import { SitCaseDrawer } from "./sit-case-drawer";
+
+function EpicIcon() {
+  return (
+    <span className="inline-flex h-6 w-6 items-center justify-center rounded bg-[#7C3AED] text-white" title="Epic">
+      <TbBolt size={12} />
+    </span>
+  );
+}
+
+function StoryIcon() {
+  return (
+    <span className="inline-flex h-6 w-6 items-center justify-center rounded bg-[#16A34A] text-white" title="Story">
+      <TbBookmarkFilled size={12} />
+    </span>
+  );
+}
+
+function filterSheetRows(
+  sheet: SitSheet,
+  ticketKey: string | "all",
+  testType: string | null,
+): SitSheet {
+  let rows = sheet.rows;
+  if (ticketKey !== "all") {
+    rows = rows.filter(
+      (r) =>
+        r.cells.requirementId === ticketKey ||
+        r.cells.issueKey === ticketKey ||
+        (r.cells.feature || "").startsWith(ticketKey),
+    );
+  }
+  if (testType) {
+    rows = rows.filter((r) => (r.cells.testType || "").toLowerCase() === testType.toLowerCase());
+  }
+  return { ...sheet, rows };
+}
 
 type GenState = "idle" | "ready" | "generating" | "done" | "error";
+
+/** Compact status light: same idea as the projects / status idle · model off tag. */
+function modelBadge(model: SitModelStatus | null) {
+  if (!model) return null;
+  if (model.state === "up") {
+    return { className: "border-[#bbf7d0] bg-[#f0fdf4] text-[#166534]", dot: "bg-[#16a34a]" };
+  }
+  if (model.state === "idle" || model.state === "unconfigured") {
+    return { className: "border-[#fecaca] bg-[#fff5f5] text-[#b91c1c]", dot: "bg-[#ef4444]" };
+  }
+  if (model.state === "down") {
+    return { className: "border-[#fdba74] bg-[#fff7ed] text-[#c2410c]", dot: "bg-[#ea580c]" };
+  }
+  return { className: "border-[#e5e7eb] bg-[#f9fafb] text-[#6b7280]", dot: "bg-[#9ca3af]" };
+}
+
+function agoShort(ts: number) {
+  const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if (s < 60) return `${s}s ago`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+}
 
 function statusColor(cat: string) {
   if (cat === "done") return "bg-[#d1fae5] text-[#065f46]";
@@ -59,7 +119,7 @@ function LinkMap({ sheet }: { sheet: SitSheet }) {
         ))}
       </div>
       {sheet.rows.length > 24 && (
-        <p className="mt-2 text-[10.5px] text-[#8a93a8]">Showing 24 of {sheet.rows.length} links — full matrix in the table.</p>
+        <p className="mt-2 text-[10.5px] text-[#8a93a8]">Showing 24 of {sheet.rows.length} links. Full matrix in the table.</p>
       )}
     </div>
   );
@@ -69,10 +129,16 @@ export function SitTestingView({
   client,
   canvasId,
   canvasName,
+  focusWorkbookId,
+  focusTicketKey,
+  focusTestType,
 }: {
   client: AtlasClient;
   canvasId: string | null;
   canvasName?: string;
+  focusWorkbookId?: string | null;
+  focusTicketKey?: string | null;
+  focusTestType?: string | null;
 }) {
   const [epics, setEpics] = useState<SitEpic[]>([]);
   const [source, setSource] = useState<"jira" | "none" | "">("");
@@ -83,25 +149,49 @@ export function SitTestingView({
   const [genState, setGenState] = useState<GenState>("idle");
   const [error, setError] = useState<string | null>(null);
   const [workbook, setWorkbook] = useState<SitWorkbook | null>(null);
+  const [history, setHistory] = useState<SitWorkbook[]>([]);
   const [activeSheetId, setActiveSheetId] = useState("test-cases");
+  const [resultTicket, setResultTicket] = useState<string | "all">("all");
+  const [resultType, setResultType] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [model, setModel] = useState<SitModelStatus | null>(null);
+  const [caseDrawer, setCaseDrawer] = useState<{
+    workbookId: string;
+    ticketKey: string;
+    ticketName: string;
+    focusRowId: string;
+  } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     setSelected(new Set()); // drop any stale keys (e.g. old demo WALLET-*) when Jira list reloads
-    setWorkbook(null);
     try {
-      const res = await client.listSitTickets(canvasId);
+      const [res, saved] = await Promise.all([
+        client.listSitTickets(canvasId),
+        client.listSitWorkbooks(canvasId).catch(() => ({ items: [] as SitWorkbook[] })),
+      ]);
       setEpics(res.epics);
       setSource(res.source);
       setProjectKey(res.projectKey);
       setNote(res.note ?? null);
+      if (res.model) setModel(res.model);
       const open: Record<string, boolean> = {};
       res.epics.forEach((e, i) => {
         open[e.key] = i === 0;
       });
       setExpanded(open);
+      const items = saved.items || [];
+      setHistory(items);
+      // Restore last generated results even when the HF model is off.
+      if (items[0]) {
+        setWorkbook(items[0]);
+        setActiveSheetId(items[0].sheets[0]?.id || "test-cases");
+        setResultTicket("all");
+        setGenState("done");
+      } else {
+        setWorkbook(null);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load tickets");
     } finally {
@@ -113,9 +203,42 @@ export function SitTestingView({
     void load();
   }, [load]);
 
+  // Keep model status fresh while the tab is open (HF can scale to zero).
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const m = await client.getSitModelStatus();
+        if (!cancelled) setModel(m);
+      } catch {
+        /* ignore probe failures */
+      }
+    };
+    const id = setInterval(() => void tick(), 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [client]);
+
+  const badge = modelBadge(model);
+  const modelInactive = model?.state === "idle" || model?.state === "unconfigured" || model?.state === "down";
+
   useEffect(() => {
     setGenState(selected.size ? "ready" : "idle");
   }, [selected]);
+
+  useEffect(() => {
+    if (!focusWorkbookId || !history.length) return;
+    const wb = history.find((h) => h.id === focusWorkbookId);
+    if (wb) {
+      setWorkbook(wb);
+      setActiveSheetId(wb.sheets[0]?.id || "test-cases");
+      setResultTicket(focusTicketKey || "all");
+      setResultType(focusTestType || null);
+      setGenState("done");
+    }
+  }, [focusWorkbookId, focusTicketKey, focusTestType, history]);
 
   const allTicketKeys = useMemo(() => epics.flatMap((e) => e.tickets.map((t) => t.key)), [epics]);
 
@@ -130,8 +253,9 @@ export function SitTestingView({
     return labels;
   }, [epics, selected]);
 
-  const activeSheet: SitSheet | null =
+  const rawSheet: SitSheet | null =
     workbook?.sheets.find((s) => s.id === activeSheetId) || workbook?.sheets[0] || null;
+  const activeSheet: SitSheet | null = rawSheet ? filterSheetRows(rawSheet, resultTicket, resultType) : null;
 
   const toggle = (key: string) => {
     setSelected((prev) => {
@@ -145,7 +269,7 @@ export function SitTestingView({
   const selectAll = () => setSelected(new Set(allTicketKeys));
   const clearAll = () => setSelected(new Set());
 
-  const handleGenerate = async () => {
+  const handleGenerate = async (useTemplate = false) => {
     const valid = new Set(allTicketKeys);
     const keys = [...selected].filter((k) => valid.has(k));
     if (keys.length !== selected.size) setSelected(new Set(keys));
@@ -164,23 +288,72 @@ export function SitTestingView({
       const wb = await client.generateSitWorkbook({
         issueKeys: keys,
         canvasId,
+        useTemplate,
       });
       setWorkbook(wb);
       setActiveSheetId(wb.sheets[0]?.id || "test-cases");
+      setResultTicket(wb.sourceIssueKeys.length === 1 ? wb.sourceIssueKeys[0] : "all");
       setGenState("done");
+      setHistory((prev) => [wb, ...prev.filter((x) => x.id !== wb.id)].slice(0, 50));
+      void client.getSitModelStatus().then(setModel).catch(() => undefined);
     } catch (err) {
       setGenState("error");
       setError(err instanceof Error ? err.message : "Generation failed");
+      void client.getSitModelStatus().then(setModel).catch(() => undefined);
     }
   };
+
+  const openSaved = (wb: SitWorkbook) => {
+    setWorkbook(wb);
+    setActiveSheetId(wb.sheets[0]?.id || "test-cases");
+    setResultTicket("all");
+    setResultType(null);
+    setGenState("done");
+    setError(null);
+  };
+
+  const ticketKeyForRow = (row: SitSheetRow) => {
+    if (row.cells.requirementId) return row.cells.requirementId;
+    if (row.cells.issueKey) return row.cells.issueKey;
+    const feature = row.cells.feature || "";
+    return workbook?.sourceIssueKeys.find((k) => feature.startsWith(k)) || "";
+  };
+
+  const openCaseDrawer = (row: SitSheetRow) => {
+    if (!workbook) return;
+    const ticketKey = ticketKeyForRow(row);
+    if (!ticketKey) return;
+    setCaseDrawer({
+      workbookId: workbook.id,
+      ticketKey,
+      ticketName: workbook.sourceSummaries[ticketKey] || ticketKey,
+      focusRowId: row.id,
+    });
+  };
+
+  const generateDisabled = !selected.size || genState === "generating" || !!modelInactive;
+  const generateTitle = modelInactive
+    ? "Model is not running"
+    : !selected.size
+      ? "Select one or more tickets"
+      : undefined;
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-[#f7f8fb] dark:bg-[#0a0a0a]">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[#EEE] bg-white px-5 py-4 dark:border-[#1a1a1a] dark:bg-[#0a0a0a]">
         <div>
-          <h1 className="flex items-center gap-2 text-[16px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">
+          <h1 className="flex flex-wrap items-center gap-2 text-[16px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">
             <TbClipboardList size={18} className="text-[#8664F2]" />
             SIT Testing
+            {model && badge ? (
+              <span
+                title={model.detail}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${badge.className}`}
+              >
+                <span className={`h-1.5 w-1.5 rounded-full ${badge.dot}`} />
+                {model.label}
+              </span>
+            ) : null}
           </h1>
           <p className="mt-0.5 text-[11px] text-[#9ca3af]">
             {canvasName ? (
@@ -192,34 +365,45 @@ export function SitTestingView({
             {source === "jira" && projectKey
               ? `Jira project ${projectKey}`
               : source === "none"
-                ? "Jira not ready"
+                ? "Select a Jira-connected canvas in the explorer"
                 : "…"}
             {selected.size ? ` · ${selected.size} selected` : ""}
+            {history.length ? ` · ${history.length} saved run${history.length === 1 ? "" : "s"}` : ""}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button type="button" onClick={selectAll} className="rounded-[8px] border border-[#e2e6ef] px-3 py-2 text-[12px] dark:border-[#2a2a2a]">
-            Select all
+            {selected.size ? `${selected.size} selected` : `Select all (${allTicketKeys.length})`}
           </button>
           <button type="button" onClick={clearAll} className="rounded-[8px] border border-[#e2e6ef] px-3 py-2 text-[12px] dark:border-[#2a2a2a]">
             Clear
           </button>
-          <button
-            type="button"
-            disabled={!selected.size || genState === "generating"}
-            onClick={() => void handleGenerate()}
-            className="rounded-[8px] bg-[#8664F2] px-4 py-2 text-[13px] font-medium text-white disabled:opacity-40"
-          >
-            {genState === "generating" ? (
-              <span className="inline-flex items-center gap-1.5">
-                <TbLoader2 className="animate-spin" size={14} /> Generating…
-              </span>
-            ) : selected.size > 1 ? (
-              `Generate for ${selected.size} tickets`
-            ) : (
-              "Generate Test Cases + Test Data"
-            )}
-          </button>
+          <span className="relative inline-flex flex-col items-end gap-1 sm:flex-row sm:items-center">
+            <button
+              type="button"
+              disabled={generateDisabled}
+              title={generateTitle}
+              onClick={() => void handleGenerate(false)}
+              className="rounded-[8px] bg-[#8664F2] px-4 py-2 text-[13px] font-medium text-white disabled:opacity-40"
+            >
+              {genState === "generating" ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <TbLoader2 className="animate-spin" size={14} /> Generating…
+                </span>
+              ) : (
+                `Generate Test Cases + Test Data${selected.size ? ` (${selected.size})` : ""}`
+              )}
+            </button>
+            <button
+              type="button"
+              disabled={!selected.size || genState === "generating" || !canvasId}
+              title="Create template cases without calling the model. Test depth will be based on template cases."
+              onClick={() => void handleGenerate(true)}
+              className="rounded-[8px] border border-[#e2e6ef] px-3 py-2 text-[12px] text-[#5b647a] disabled:opacity-40 dark:border-[#2a2a2a]"
+            >
+              Use template
+            </button>
+          </span>
         </div>
       </div>
 
@@ -245,6 +429,52 @@ export function SitTestingView({
           </div>
         )}
 
+        {history.length > 0 && (
+          <section className="mb-6 overflow-hidden rounded-[10px] border border-[#e2e6ef] bg-white dark:border-[#1a1a1a] dark:bg-[#101010]">
+            <div className="border-b border-[#eef0f5] px-4 py-3 text-[13px] font-medium text-[#1F1F1F] dark:border-[#1a1a1a] dark:text-[#ededed]">
+              Saved SIT runs
+              <span className="ml-2 text-[11px] font-normal text-[#8a93a8]">kept when the model is inactive</span>
+            </div>
+            <ul className="divide-y divide-[#f3f4f6] dark:divide-[#1a1a1a]">
+              {history.slice(0, 8).map((wb) => {
+                const cases = wb.sheets.find((s) => s.kind === "test-cases")?.rows.length ?? 0;
+                const active = workbook?.id === wb.id;
+                return (
+                  <li key={wb.id}>
+                    <button
+                      type="button"
+                      onClick={() => openSaved(wb)}
+                      className={`flex w-full items-center gap-3 px-4 py-2.5 text-left text-[12.5px] hover:bg-[#fafafa] dark:hover:bg-[#141414] ${
+                        active ? "bg-[#f3f0ff] dark:bg-[#1c1530]" : ""
+                      }`}
+                    >
+                      <span className="min-w-0 flex-1 truncate">
+                        <span className="font-semibold text-[#1F1F1F] dark:text-[#ededed]">
+                          {wb.sourceIssueKeys.join(", ")}
+                        </span>
+                        <span className="ml-2 text-[#8a93a8]">
+                          {Object.values(wb.sourceSummaries || {})
+                            .slice(0, 2)
+                            .join(" · ")}
+                        </span>
+                      </span>
+                      <span className="shrink-0 tabular-nums text-[#5b647a]">{cases} cases</span>
+                      <span className="shrink-0 text-[11px] text-[#9ca3af]">{agoShort(wb.createdAt)}</span>
+                      <span
+                        className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                          wb.generator === "huggingface" ? "bg-[#dcfce7] text-[#166534]" : "bg-[#f3f4f6] text-[#6b7280]"
+                        }`}
+                      >
+                        {wb.generator}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
+
         <section className="mb-6 overflow-hidden rounded-[10px] border border-[#e2e6ef] bg-white dark:border-[#1a1a1a] dark:bg-[#101010]">
           <div className="border-b border-[#eef0f5] px-4 py-3 text-[13px] font-medium text-[#1F1F1F] dark:border-[#1a1a1a] dark:text-[#ededed]">
             Jira epics & tickets
@@ -263,9 +493,7 @@ export function SitTestingView({
                     onClick={() => setExpanded((e) => ({ ...e, [epic.key]: !e[epic.key] }))}
                   >
                     <span className="w-4 text-[#8664F2]">{expanded[epic.key] ? "▾" : "▸"}</span>
-                    <span className="inline-flex h-6 w-6 items-center justify-center rounded bg-[#ede9fe] text-[10px] font-bold text-[#8664F2]">
-                      <TbBolt size={12} />
-                    </span>
+                    <EpicIcon />
                     <span className="flex-1 font-medium text-[#1F1F1F] dark:text-[#ededed]">
                       {epic.summary}
                       <span className="ml-2 text-[11px] font-normal text-[#8a93a8]">
@@ -295,9 +523,7 @@ export function SitTestingView({
                                 onChange={() => toggle(t.key)}
                                 className="accent-[#8664F2]"
                               />
-                              <span className="inline-flex h-6 w-6 items-center justify-center rounded bg-[#dbeafe] text-[10px] font-bold text-[#1d4ed8]">
-                                S
-                              </span>
+                              <StoryIcon />
                               <span className="flex-1 text-[#1F1F1F] dark:text-[#ededed]">
                                 <span className="font-medium">{t.key}</span>
                                 <span className="text-[#5b647a] dark:text-[#9ca3af]">: {t.summary}</span>
@@ -325,7 +551,7 @@ export function SitTestingView({
                 <div className="mt-0.5 text-[11px] text-[#5b647a] dark:text-[#9ca3af]">
                   Source:{" "}
                   {workbook.sourceIssueKeys
-                    .map((k) => `${k}${workbook.sourceSummaries[k] ? ` — ${workbook.sourceSummaries[k]}` : ""}`)
+                    .map((k) => `${k}${workbook.sourceSummaries[k] ? `: ${workbook.sourceSummaries[k]}` : ""}`)
                     .join("; ")}
                   {" · "}Confirmed ID: <code className="text-[10.5px]">{workbook.confirmedId}</code>
                   {" · "}Generator:{" "}
@@ -333,7 +559,9 @@ export function SitTestingView({
                     {workbook.generator}
                   </span>
                   {" · "}
-                  {workbook.sheets.find((s) => s.kind === "test-cases")?.rows.length ?? 0} test cases
+                  {activeSheet.rows.length} rows
+                  {resultTicket !== "all" ? ` · ${resultTicket}` : ""}
+                  {resultType ? ` · ${resultType}` : ""}
                 </div>
               </div>
               <button
@@ -344,8 +572,43 @@ export function SitTestingView({
                   setGenState(selected.size ? "ready" : "idle");
                 }}
               >
-                Back to ticket list
+                Hide results
               </button>
+            </div>
+
+            <div className="flex flex-wrap gap-1 border-b border-[#eef0f5] bg-[#fafafa] px-3 py-2 dark:border-[#1a1a1a] dark:bg-[#141414]">
+              <button
+                type="button"
+                onClick={() => setResultTicket("all")}
+                className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                  resultTicket === "all" ? "bg-[#8664F2] text-white" : "bg-white text-[#5b647a] border border-[#e2e6ef]"
+                }`}
+              >
+                All tickets
+              </button>
+              {workbook.sourceIssueKeys.map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => setResultTicket(k)}
+                  className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                    resultTicket === k ? "bg-[#8664F2] text-white" : "bg-white text-[#5b647a] border border-[#e2e6ef]"
+                  }`}
+                  title={workbook.sourceSummaries[k] || k}
+                >
+                  {k}
+                </button>
+              ))}
+              {resultType ? (
+                <button
+                  type="button"
+                  onClick={() => setResultType(null)}
+                  className="rounded-full border border-[#f5c2c7] bg-[#fff5f5] px-2.5 py-1 text-[11px] font-medium text-[#b91c1c]"
+                  title="Clear type filter"
+                >
+                  Type: {resultType} ×
+                </button>
+              ) : null}
             </div>
 
             {activeSheet.kind === "traceability" && <LinkMap sheet={activeSheet} />}
@@ -359,7 +622,17 @@ export function SitTestingView({
                         key={col.id}
                         className="whitespace-nowrap border-b border-[#163a5c] px-3 py-2 text-left text-[11px] font-semibold tracking-wide"
                       >
-                        {col.name}
+                        <span className="inline-flex items-center gap-1">
+                          {col.name}
+                          {col.id === "priority" || col.id === "severity" ? (
+                            <span
+                              title="AI-assisted estimate. Review before relying on it."
+                              className="rounded border border-white/30 bg-white/15 px-1 py-px text-[9px] font-semibold uppercase tracking-wide text-white"
+                            >
+                              beta
+                            </span>
+                          ) : null}
+                        </span>
                       </th>
                     ))}
                   </tr>
@@ -374,6 +647,15 @@ export function SitTestingView({
                         >
                           {col.id === "testType" || col.id === "coverage" ? (
                             <TypePill value={row.cells[col.id] || ""} />
+                          ) : col.id === "priority" || col.id === "severity" ? (
+                            <button
+                              type="button"
+                              title={row.cells.why || undefined}
+                              onClick={() => openCaseDrawer(row)}
+                              className="text-left underline decoration-dotted decoration-[#c4b5fd] underline-offset-2 hover:text-[#8664F2]"
+                            >
+                              {row.cells[col.id] || "-"}
+                            </button>
                           ) : (
                             row.cells[col.id] ?? ""
                           )}
@@ -405,10 +687,28 @@ export function SitTestingView({
           </section>
         )}
 
-        {!workbook && genState === "idle" && (
-          <p className="text-[13px] text-[#8a93a8]">Select one or more tickets to enable generation.</p>
+        {!workbook && !history.length && genState === "idle" && (
+          <p className="text-[13px] text-[#8a93a8]">
+            Select a Jira-connected canvas, then pick tickets to generate, or open a saved run above once you have one.
+          </p>
         )}
       </div>
+      {caseDrawer ? (
+        <SitCaseDrawer
+          client={client}
+          workbookId={caseDrawer.workbookId}
+          ticketKey={caseDrawer.ticketKey}
+          ticketName={caseDrawer.ticketName}
+          focusRowId={caseDrawer.focusRowId}
+          modelInactive={!!modelInactive}
+          canvasId={canvasId}
+          onClose={() => setCaseDrawer(null)}
+          onChanged={(wb) => {
+            setWorkbook(wb);
+            setHistory((prev) => prev.map((h) => (h.id === wb.id ? wb : h)));
+          }}
+        />
+      ) : null}
     </div>
   );
 }

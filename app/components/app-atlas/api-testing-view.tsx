@@ -9,7 +9,10 @@ import {
 } from "react-icons/tb";
 import type { ApiSpecState } from "@/app/hooks/use-api-spec";
 import { useApiSpecView } from "@/app/hooks/use-api-spec";
+import type { AtlasClient } from "@/app/services/appatlas";
+import type { CanvasGithub } from "@/app/interfaces/appatlas";
 import { EndpointDetailPanel } from "./endpoint-detail-panel";
+import { CicdRunsPanel } from "./cicd-runs-panel";
 
 type GateFilter = "all" | "blocked" | "passed";
 
@@ -37,10 +40,16 @@ export function ApiTestingView({
   spec,
   onReload,
   specUrl,
+  client,
+  canvasId,
+  github,
 }: {
   spec: ApiSpecState;
   onReload: () => void;
   specUrl: string;
+  client?: AtlasClient;
+  canvasId?: string | null;
+  github?: CanvasGithub | null;
 }) {
   const { modules, rows, passScore } = useApiSpecView(spec);
   const [selectedModule, setSelectedModule] = useState<string | null>(null);
@@ -120,6 +129,11 @@ export function ApiTestingView({
   return (
     <div className="relative h-full">
       <div className="h-full overflow-y-auto bg-[#F7F7FA] px-4 py-4 dark:bg-[#0a0a0a]">
+        {client && canvasId && github && (
+          <div className="mb-4">
+            <CicdRunsPanel client={client} canvasId={canvasId} github={github} />
+          </div>
+        )}
         <h3 className={sectionTitle}>
           Cross-Module Dependencies: How Modules Call Into Each Other
         </h3>

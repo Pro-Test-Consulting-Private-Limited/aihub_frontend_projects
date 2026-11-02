@@ -5,22 +5,24 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { useIsAuthenticated, useMsal } from "@azure/msal-react";
 import { InteractionStatus } from "@azure/msal-browser";
+import { hasDevTestSession } from "@/app/lib/dev-test-auth";
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const isAuthenticated = useIsAuthenticated();
   const { inProgress } = useMsal();
+  const devSession = hasDevTestSession();
 
   useEffect(() => {
     async function checkAuth() {
-      if (!isAuthenticated) router.replace("/");
+      if (!isAuthenticated && !hasDevTestSession()) router.replace("/");
       setLoading(false);
     }
     if (inProgress === InteractionStatus.None) checkAuth();
   }, [isAuthenticated, router, inProgress]);
 
-  if (loading)
+  if (loading && !devSession)
     return (
       <div className="w-[100%] h-[calc(100%-80px)] flex items-center justify-center">
         <Image

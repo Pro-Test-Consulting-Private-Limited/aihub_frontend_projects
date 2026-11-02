@@ -8,6 +8,7 @@ import {
   type IPublicClientApplication,
 } from "@azure/msal-browser";
 import { graphTeamsRequest, loginRequest } from "@/app/lib/msal";
+import { getDevTestToken } from "@/app/lib/dev-test-auth";
 
 function readJwtExp(token: string): number | null {
   try {
@@ -24,6 +25,9 @@ export async function getFreshIdToken(
   accounts: AccountInfo[],
   forceRefresh = false,
 ) {
+  const devToken = getDevTestToken();
+  if (devToken) return devToken;
+
   if (accounts.length === 0) return null;
   const account = accounts[0];
 

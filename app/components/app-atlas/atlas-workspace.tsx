@@ -15,6 +15,7 @@ import {
   TbBrandSpeedtest,
   TbWorld,
   TbListCheck,
+  TbGitBranch,
 } from "react-icons/tb";
 import { useProjects } from "@/app/lib/projectsStore";
 import type { Canvas, CanvasSummary, PresenceUser, SessionSnapshot } from "@/app/interfaces/appatlas";
@@ -26,21 +27,25 @@ import { JiraPanel } from "./jira-panel";
 import { SaveExecutionModal } from "./save-execution-modal";
 import { RecordingView } from "./recording-view";
 import { ApiTestingView } from "./api-testing-view";
+import { CicdRunsPanel } from "./cicd-runs-panel";
+import { CicdView } from "./cicd-view";
 import { SitTestingView } from "./sit-testing-view";
 import { CoverageOverview } from "./coverage-overview";
 import { useApiSpec, useApiSpecView } from "@/app/hooks/use-api-spec";
 import { clearCanvasSwagger, getCanvasSwagger, type CanvasSwagger } from "@/app/lib/canvas-swagger";
+import { hasDevTestSession } from "@/app/lib/dev-test-auth";
 
-const TABS = [
+const BASE_TABS = [
   { id: "canvas", label: "Canvas", icon: TbLayoutGrid },
   { id: "api", label: "API Testing", icon: TbNetwork },
   { id: "sit", label: "SIT Testing", icon: TbListCheck },
+  { id: "cicd", label: "CI/CD", icon: TbGitBranch, trial: "cicdPage" as const },
   { id: "coverage", label: "Coverage", icon: TbChartLine },
   { id: "security", label: "Security", icon: TbShieldCheck },
   { id: "performance", label: "Performance", icon: TbBrandSpeedtest },
 ] as const;
 
-type TabId = (typeof TABS)[number]["id"];
+type TabId = (typeof BASE_TABS)[number]["id"];
 
 const hostOf = (url: string) => {
   try {
@@ -102,8 +107,35 @@ export default function AtlasWorkspace() {
   // Swagger is connected per canvas and is independent of Jira (canvas.jiraProjectKey).
   const [swagger, setSwagger] = useState<CanvasSwagger | null>(null);
   const [view, setView] = useState<"screens" | "api" | "sit">("screens");
+  const [sitFocus, setSitFocus] = useState<{ workbookId?: string; ticketKey?: string; testType?: string } | null>(null);
+  const [cicdPageTrial, setCicdPageTrial] = useState(false);
+  const [devTestBanner] = useState(() => (typeof window !== "undefined" ? hasDevTestSession() : false));
   const apiSpec = useApiSpec(swagger?.specUrl ?? null);
   const apiSpecView = useApiSpecView(apiSpec);
+
+  const TABS = useMemo(
+    () => BASE_TABS.filter((t) => !("trial" in t && t.trial === "cicdPage") || cicdPageTrial),
+    [cicdPageTrial],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    client
+      .getSettings()
+      .then((s) => {
+        if (!cancelled) setCicdPageTrial(!!s.cicdPageTrial);
+      })
+      .catch(() => {
+        if (!cancelled) setCicdPageTrial(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
+
+  useEffect(() => {
+    if (tab === "cicd" && !cicdPageTrial) setTab("canvas");
+  }, [tab, cicdPageTrial]);
 
   useEffect(() => {
     setSwagger(selectedId ? getCanvasSwagger(selectedId) : null);
@@ -136,10 +168,10 @@ export default function AtlasWorkspace() {
     return () => clearInterval(timer);
   }, [canvasId, clarifying, client, mergeClarifications]);
 
-  const onJiraConnected = (updated: Canvas) => {
+  const onJiraConnected = (updated: Canvas, opts?: { keepOpen?: boolean }) => {
     setCanvases((prev) => prev.map((x) => (x.id === updated.id ? { ...x, jiraProjectKey: updated.jiraProjectKey } : x)));
     if (canvas?.id === updated.id) setCanvas(updated);
-    setConnectFor(null);
+    if (!opts?.keepOpen) setConnectFor(null);
   };
 
   const loadCanvases = useCallback(async () => {
@@ -154,7 +186,7 @@ export default function AtlasWorkspace() {
   }, [client]);
 
   useEffect(() => {
-    if (accounts.length) loadCanvases();
+    if (accounts.length || hasDevTestSession()) loadCanvases();
   }, [accounts.length, loadCanvases]);
 
   const visible = useMemo(
@@ -327,7 +359,7 @@ export default function AtlasWorkspace() {
   };
 
   const canStart = !!appUrl && !recording && !starting;
-  const tabLabel = TABS.find((t) => t.id === tab)!.label;
+  const tabLabel = TABS.find((t) => t.id === tab)?.label ?? tab;
   const apiSummary =
     apiSpec.status === "ready" && apiSpec.data
       ? `${apiSpecView.modules.length} Modules, ${apiSpec.data.endpoints.length} End-Points`
@@ -337,13 +369,18 @@ export default function AtlasWorkspace() {
 
   return (
     <div className="flex h-full flex-col bg-[#F7F7FA] dark:bg-[#0a0a0a]">
-      <div className="flex h-[56px] shrink-0 items-center justify-between border-b border-[#EEE] bg-white px-4 dark:border-[#1a1a1a] dark:bg-[#0a0a0a]">
-        <div className="flex min-w-0 items-center gap-4">
-          <div className="relative">
+      {devTestBanner ? (
+        <div className="shrink-0 bg-[#F59E0B] px-4 py-1.5 text-center text-[12px] font-semibold tracking-wide text-[#1F1F1F]">
+          TEST SESSION
+        </div>
+      ) : null}
+      <div className="flex h-[56px] shrink-0 items-center justify-between gap-3 border-b border-[#EEE] bg-white px-4 dark:border-[#1a1a1a] dark:bg-[#0a0a0a]">
+        <div className="flex min-w-0 flex-1 items-center gap-3 overflow-hidden">
+          <div className="relative shrink-0">
             <button
               type="button"
               onClick={() => setProjectMenu((o) => !o)}
-              className="flex h-[34px] max-w-[340px] items-center gap-2 rounded-[8px] border border-[#E5E7EB] bg-[#F5F6F6] px-3 text-[13px] text-[#1F1F1F] dark:border-[#2a2a2a] dark:bg-[#141414] dark:text-[#ededed]"
+              className="flex h-[34px] max-w-[220px] items-center gap-2 rounded-[8px] border border-[#E5E7EB] bg-[#F5F6F6] px-3 text-[13px] text-[#1F1F1F] dark:border-[#2a2a2a] dark:bg-[#141414] dark:text-[#ededed] sm:max-w-[280px]"
               title={appUrl || "No application URL"}
             >
               <TbWorld size={15} className="shrink-0 text-[#5E6066]" />
@@ -388,7 +425,7 @@ export default function AtlasWorkspace() {
               </div>
             )}
           </div>
-          <nav className="flex items-center gap-1">
+          <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto pb-0.5 [scrollbar-width:thin]">
             {TABS.map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
@@ -398,7 +435,7 @@ export default function AtlasWorkspace() {
                   if (id === "sit") setView("sit");
                   if (id === "canvas") setView((v) => (v === "sit" ? "screens" : v));
                 }}
-                className={`flex h-[32px] items-center gap-1.5 rounded-[8px] px-3 text-[13px] ${
+                className={`flex h-[32px] shrink-0 items-center gap-1.5 rounded-[8px] px-2.5 text-[13px] sm:px-3 ${
                   tab === id
                     ? "bg-[#F2EBFB] text-[#8664F2] dark:bg-[#2a2440]"
                     : "text-[#1F1F1F] hover:text-[#8664F2] dark:text-[#ededed]"
@@ -410,16 +447,16 @@ export default function AtlasWorkspace() {
             ))}
           </nav>
         </div>
-        <div className="flex shrink-0 items-center gap-4 text-[13px] text-[#1F1F1F] dark:text-[#ededed]">
-          <div className="h-[24px] w-px bg-[#E5E7EB] dark:bg-[#2a2a2a]" />
+        <div className="flex shrink-0 items-center gap-3 text-[13px] text-[#1F1F1F] dark:text-[#ededed] sm:gap-4">
+          <div className="hidden h-[24px] w-px bg-[#E5E7EB] dark:bg-[#2a2a2a] sm:block" />
           <button
             type="button"
-            className={`flex items-center gap-1.5 hover:text-[#8664F2] ${mineOnly ? "text-[#8664F2]" : ""}`}
+            className={`flex shrink-0 items-center gap-1.5 hover:text-[#8664F2] ${mineOnly ? "text-[#8664F2]" : ""}`}
             onClick={() => setMineOnly((m) => !m)}
             title={mineOnly ? "Showing only your canvases" : "Show only your canvases"}
           >
             <TbHistory size={15} />
-            {mineOnly ? "My History" : "History"}
+            <span className="hidden sm:inline">{mineOnly ? "My History" : "History"}</span>
           </button>
           <div className="flex -space-x-2" title={online.length ? `On this page now: ${online.map((u) => u.name || u.email).join(", ")}` : undefined}>
             {online.slice(0, 3).map((u, i) => (
@@ -488,10 +525,26 @@ export default function AtlasWorkspace() {
         )}
 
         <div className="relative min-w-0 flex-1">
-          {tab === "sit" || (tab === "canvas" && view === "sit") ? (
-            <SitTestingView client={client} canvasId={canvas?.id ?? null} canvasName={canvas?.name} />
+          {tab === "cicd" ? (
+            <CicdView client={client} />
+          ) : tab === "sit" || (tab === "canvas" && view === "sit") ? (
+            <SitTestingView
+              client={client}
+              canvasId={canvas?.id ?? null}
+              canvasName={canvas?.name}
+              focusWorkbookId={sitFocus?.workbookId}
+              focusTicketKey={sitFocus?.ticketKey}
+              focusTestType={sitFocus?.testType}
+            />
           ) : tab === "coverage" ? (
-            <CoverageOverview client={client} canvasId={canvas?.id ?? null} />
+            <CoverageOverview
+              client={client}
+              canvasId={canvas?.id ?? null}
+              onOpenSit={(opts) => {
+                setSitFocus(opts ?? null);
+                setTab("sit");
+              }}
+            />
           ) : tab !== "canvas" ? (
             <EmptyState title={`${tabLabel} is coming soon`} body="This part of AppAtlas isn't available yet. Use Canvas to record and map your app." />
           ) : recording ? (
@@ -500,8 +553,21 @@ export default function AtlasWorkspace() {
                 setRecording(null);
               }}
             />
-          ) : canvas && view === "api" && swagger ? (
-            <ApiTestingView spec={apiSpec} onReload={apiSpec.reload} specUrl={swagger.specUrl} />
+          ) : canvas && view === "api" && (swagger || canvas.github) ? (
+            swagger ? (
+              <ApiTestingView
+                spec={apiSpec}
+                onReload={apiSpec.reload}
+                specUrl={swagger.specUrl}
+                client={client}
+                canvasId={canvas.id}
+                github={canvas.github}
+              />
+            ) : canvas.github ? (
+              <div className="h-full overflow-y-auto bg-[#F7F7FA] p-4 dark:bg-[#0a0a0a]">
+                <CicdRunsPanel client={client} canvasId={canvas.id} github={canvas.github} />
+              </div>
+            ) : null
           ) : canvas ? (
             <>
               <CanvasFlow

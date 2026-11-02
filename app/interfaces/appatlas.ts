@@ -188,6 +188,9 @@ export type Canvas = CanvasSummary & {
   jira: JiraMapping | null;
   /** One entry per Jira ticket mapped to a screen; filled in the background after connecting Jira. */
   clarifications?: CanvasClarification[];
+  teams?: CanvasTeams | null;
+  github?: CanvasGithub | null;
+  cicd?: CanvasCicd | null;
 };
 
 export type ClarificationQuestion = {
@@ -303,6 +306,109 @@ export type CanvasTeams = {
   connectedAt: number;
 };
 
+/** GitHub repo linked for CI/CD canvas trial. Secret masked after connect. */
+export type CanvasGithub = {
+  owner: string;
+  repo: string;
+  openapiPath: string;
+  smokeBaseUrl: string;
+  webhookSecret: string;
+  connectedAt: number;
+  connectedBy: { id: string; name: string };
+};
+
+/** CI/CD page: Jenkins/Actions trigger binding. Secret masked after enable (full only once). */
+export type CanvasCicd = {
+  triggerSecret: string;
+  smokeBaseUrl: string;
+  enabledAt: number;
+  enabledBy: { id: string; name: string };
+};
+
+export type CicdSnippets = { curl: string; githubActions: string; jenkins: string };
+
+export type SuiteLayer = "contract" | "functional" | "data_driven" | "schema" | "chain";
+
+export type SuiteCase = {
+  id: string;
+  layer: SuiteLayer;
+  name: string;
+  method: string;
+  path: string;
+};
+
+export type SuiteSnapshot = {
+  specHash: string;
+  generatedAt: number;
+  counts: Record<SuiteLayer, number>;
+  cases: SuiteCase[];
+};
+
+export type CaseResult = SuiteCase & {
+  status: "passed" | "failed" | "skipped";
+  detail: string;
+  ms: number;
+};
+
+export type CicdPipeline = {
+  id: string;
+  name: string;
+  baseUrl: string;
+  swaggerUrl: string;
+  mode: "live" | "demo";
+  triggerSecret: string;
+  suite: SuiteSnapshot | null;
+  ownerId: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type PipelineRun = {
+  id: string;
+  pipelineId: string;
+  event: "pull_request" | "push" | "release" | "manual";
+  status: "queued" | "running" | "passed" | "failed" | "skipped";
+  title: string;
+  branch: string | null;
+  sha: string | null;
+  prNumber: number | null;
+  specHashBefore: string | null;
+  specHashAfter: string | null;
+  summary: string | null;
+  error: string | null;
+  results: CaseResult[] | null;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type CicdRun = {
+  id: string;
+  canvasId: string;
+  event: "pull_request" | "push" | "release" | "manual";
+  status: "queued" | "running" | "passed" | "failed" | "skipped";
+  title: string;
+  branch: string | null;
+  sha: string | null;
+  prNumber: number | null;
+  specHashBefore: string | null;
+  specHashAfter: string | null;
+  delta: { added: string[]; removed: string[]; changed: string[] } | null;
+  summary: string | null;
+  error: string | null;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type AtlasSettings = {
+  notesCarryOver: boolean;
+  notesWithoutQuestions: boolean;
+  shareDataAcrossEnvironments: boolean;
+  securityLiveChecks: boolean;
+  securityCheckEnabled: Record<string, boolean>;
+  cicdPageTrial: boolean;
+  cicdCanvasTrial: boolean;
+};
+
 export type SitTicket = {
   key: string;
   summary: string;
@@ -320,6 +426,17 @@ export type SitEpic = {
   statusCategory: string;
   ticketCount: number;
   tickets: SitTicket[];
+};
+
+export type SitModelState = "up" | "idle" | "down" | "unconfigured" | "unknown";
+
+export type SitModelStatus = {
+  state: SitModelState;
+  label: string;
+  detail: string;
+  model: string | null;
+  httpCode: number | null;
+  ms: number | null;
 };
 
 export type SitSheetColumn = { id: string; name: string; width?: number };
@@ -345,5 +462,42 @@ export type SitWorkbook = {
   sheets: SitSheet[];
   createdAt: number;
   updatedAt: number;
+  generatedAt?: number | null;
+  assessedAt?: number | null;
   createdBy: { id: string; name: string };
 };
+
+export type SitJobKind = "generate" | "reassess";
+export type SitJobStatus = "queued" | "running" | "done" | "failed" | "cancelled";
+export type SitJobStage = "queued" | "generating" | "saving" | "assessing" | "done" | "failed";
+
+export type SitJobProgress = {
+  stage: SitJobStage;
+  queuePosition?: number;
+  batchSize?: number;
+  message?: string;
+  workbookId?: string;
+  caseIndex?: number;
+  caseTotal?: number;
+  elapsedMs?: number;
+};
+
+export type SitJob = {
+  id: string;
+  kind: SitJobKind;
+  status: SitJobStatus;
+  canvasId: string | null;
+  issueKey: string | null;
+  workbookId: string | null;
+  batchId: string | null;
+  user: { id: string; name: string };
+  progress: SitJobProgress;
+  plannedModelCalls: number;
+  error: string | null;
+  createdAt: number;
+  updatedAt: number;
+  startedAt: number | null;
+  finishedAt: number | null;
+};
+
+export type SitJobsList = { items: SitJob[]; pending: number };
