@@ -169,9 +169,16 @@ export default function AtlasWorkspace() {
   }, [canvasId, clarifying, client, mergeClarifications]);
 
   const onJiraConnected = (updated: Canvas, opts?: { keepOpen?: boolean }) => {
-    setCanvases((prev) => prev.map((x) => (x.id === updated.id ? { ...x, jiraProjectKey: updated.jiraProjectKey } : x)));
+    setCanvases((prev) =>
+      prev.map((x) =>
+        x.id === updated.id
+          ? { ...x, jiraProjectKey: updated.jiraProjectKey, teams: updated.teams ?? null }
+          : x,
+      ),
+    );
     if (canvas?.id === updated.id) setCanvas(updated);
-    if (!opts?.keepOpen) setConnectFor(null);
+    if (opts?.keepOpen) setConnectFor((prev) => (prev && prev.id === updated.id ? { ...prev, ...updated } : prev));
+    else setConnectFor(null);
   };
 
   const loadCanvases = useCallback(async () => {

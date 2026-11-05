@@ -28,10 +28,17 @@ export const loginRequest = {
 };
 
 /**
- * Incremental consent on the same Entra account when linking a Teams channel or posting.
- * Not a separate Teams login. Entra app needs ChannelMessage.Send + admin consent.
+ * Incremental consent on the same Entra account (not a second Teams login).
+ * Entra app needs these delegated scopes + admin consent:
+ * - Team.ReadBasic.All / Channel.ReadBasic.All: Integrations Connect + canvas picker
+ * - ChannelMessage.Send: Post to Teams
  */
 export const graphTeamsRequest = {
+  scopes: ["Team.ReadBasic.All", "Channel.ReadBasic.All", "ChannelMessage.Send"],
+};
+
+/** Post-only (subset). Prefer graphTeamsRequest so one consent covers picker + send. */
+export const graphTeamsSendRequest = {
   scopes: ["ChannelMessage.Send"],
 };
 

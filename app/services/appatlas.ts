@@ -176,11 +176,25 @@ export function atlasClient({ instance, accounts }: Msal) {
       }>(`/sit/coverage${q}`);
     },
 
-    /** Teams Phase 1: store team/channel ids on the canvas (config, not a second login). */
+    /** Store team/channel on the canvas (owner only; picker preferred). */
     connectTeams: (canvasId: string, body: { teamId: string; channelId: string; teamName?: string; channelName?: string }) =>
       request<Canvas>(`/canvases/${canvasId}/teams`, json("POST", body)),
     disconnectTeams: (canvasId: string) => request<Canvas>(`/canvases/${canvasId}/teams`, json("DELETE")),
-    /** Posts with Graph access token (ChannelMessage.Send); AppAtlas still uses the ID token. */
+    /** Joined teams for the channel picker (Graph token; not stored). */
+    listJoinedTeams: async () => {
+      const graph = await getGraphAccessToken(instance, accounts);
+      return request<{ items: Array<{ id: string; displayName: string }> }>("/teams", {
+        headers: { "X-Graph-Access-Token": graph },
+      });
+    },
+    listTeamChannels: async (teamId: string) => {
+      const graph = await getGraphAccessToken(instance, accounts);
+      return request<{ items: Array<{ id: string; displayName: string }> }>(
+        `/teams/${encodeURIComponent(teamId)}/channels`,
+        { headers: { "X-Graph-Access-Token": graph } },
+      );
+    },
+    /** Posts with Graph access token; AppAtlas still uses the ID token. */
     sendTeamsMessage: async (
       canvasId: string,
       body: { text: string; subject?: string; replyToId?: string; issueKey?: string },

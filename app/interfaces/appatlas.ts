@@ -157,6 +157,15 @@ export type CanvasEdge = {
 
 export type CanvasTestData = { nodeId: string; path: string; field: string; value: string };
 
+/** Teams channel linked on a canvas (owner picks team + channel). */
+export type CanvasTeams = {
+  teamId: string;
+  channelId: string;
+  teamName: string | null;
+  channelName: string | null;
+  connectedAt: number;
+};
+
 export type CanvasSummary = {
   id: string;
   name: string;
@@ -176,6 +185,8 @@ export type CanvasSummary = {
   pageObjects: number;
   thumbnailUrl: string | null;
   jiraProjectKey: string | null;
+  /** Linked Teams channel (if any). */
+  teams?: CanvasTeams | null;
   createdAt: number;
   updatedAt: number;
 };
@@ -295,15 +306,6 @@ export type AtlasConfig = {
   provider: string;
   capacity: Capacity;
   presets: { devices: Preset[]; networks: Preset[] };
-};
-
-/** Preconfigured Teams channel on a canvas (Phase 1). */
-export type CanvasTeams = {
-  teamId: string;
-  channelId: string;
-  teamName: string | null;
-  channelName: string | null;
-  connectedAt: number;
 };
 
 /** GitHub repo linked for CI/CD canvas trial. Secret masked after connect. */

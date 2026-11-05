@@ -1,9 +1,7 @@
-# App Atlas: SIT Testing + Teams clarifications
+# App Atlas: SIT Testing + Teams
 
-Implemented on **`aihub_frontend_projects`** (this repo), on the App Atlas page  
-(`/app-atlas?projectId=…`) — not on `ai-accelerators-fe`.
-
-Matches the SIT Testing UI/UX brief and the Teams/clarifications architecture.
+Implemented on **`aihub_frontend_projects`** / **`aihub-frontend-sit`**, on the App Atlas page  
+(`/app-atlas?projectId=…`).
 
 ## SIT Testing
 
@@ -11,26 +9,37 @@ Matches the SIT Testing UI/UX brief and the Teams/clarifications architecture.
 | --- | --- |
 | Top nav | **SIT Testing** between API Testing and Coverage |
 | Explorer | Under the selected canvas, **below API Testing** (or below screens if no Swagger): “SIT Testing · Jira → cases + data” |
-| Centre | Epic → expandable tickets, **one ticket** select, **Generate Test Cases + Test Data**, spreadsheet sheets (Test Cases / Test Data / Traceability placeholder), shared **Confirmed ID** UUID |
+| Centre | Tickets, generate / workbook sheets, Coverage test depth + Priority/Severity |
 
-API (App Atlas backend): `GET /sit/tickets`, `POST /sit/generate`, workbooks. Stub generator until `SIT_GENERATE_URL` / Hugging Face.
+## Microsoft Teams
 
-## Requirement clarifications → Teams
+Two steps (same Entra / Microsoft account as AI Hub; not a second Teams login):
 
-| Placement | Behaviour |
+| Where | What |
 | --- | --- |
-| Connect apps modal | **Microsoft Teams** enabled (same Entra sign-in). **Link channel** stores `teamId` / `channelId` on the canvas |
-| Jira ticket panel | **Post to Teams** on ready clarification questions |
+| **Integrations → Connect Teams** | One-time account connect. Requests Graph scopes and stores provider `teams` for the user. |
+| **Canvas → Connect apps → Microsoft Teams** | Canvas **owner** picks a **team** then a **channel** from lists (no raw IDs). Stores link on the canvas. |
+| **Jira ticket panel** | **Post to Teams** on clarification questions (uses linked channel). |
 
-Tokens: App Atlas ID token for API; Graph `ChannelMessage.Send` only when linking/posting — not a second Teams login.
+### Graph scopes (Entra admin)
 
-## Files
+On the AI Hub app registration, add delegated scopes and **Grant admin consent**:
 
-- `app/components/app-atlas/sit-testing-view.tsx`
-- `app/components/app-atlas/atlas-workspace.tsx`, `explorer.tsx`, `connect-apps-modal.tsx`, `jira-panel.tsx`
-- `app/services/appatlas.ts`, `app/interfaces/appatlas.ts`
-- `app/lib/msal.ts`, `app/lib/auth-client.ts`
+- `User.Read` (login)
+- `Team.ReadBasic.All` (list teams)
+- `Channel.ReadBasic.All` (list channels)
+- `ChannelMessage.Send` (post)
 
-## Entra admin
+No bot, no client secret, no inbound webhook for this phase.
 
-On the AI Hub app registration: Graph delegated **`ChannelMessage.Send`** + **Grant admin consent**.
+### APIs
+
+- `GET /teams` + `X-Graph-Access-Token` → joined teams
+- `GET /teams/:teamId/channels` + token → channels
+- `POST/DELETE /canvases/:id/teams` → link / unlink (owner only)
+- `POST /canvases/:id/teams/messages` → send
+
+## Ship order
+
+1. **ai-hub-dev** first  
+2. Promote to SIT / prod after Entra consent on those app registrations and a smoke test of Connect → picker → Post

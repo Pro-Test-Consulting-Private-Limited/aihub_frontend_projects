@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useMsal } from "@azure/msal-react";
 import { getFreshIdToken } from "@/app/lib/auth-client";
 
-export type IntegrationProvider = "jira" | "github" | "swagger";
+export type IntegrationProvider = "jira" | "github" | "swagger" | "teams";
 
 export type StoredIntegration = {
   provider: IntegrationProvider;
@@ -29,6 +29,11 @@ export type SwaggerStatus = {
   specUrl: string | null;
 };
 
+export type TeamsStatus = {
+  connected: boolean;
+  label: string | null;
+};
+
 const EMPTY_JIRA: JiraStatus = {
   connected: false,
   siteName: null,
@@ -46,11 +51,17 @@ const EMPTY_SWAGGER: SwaggerStatus = {
   specUrl: null,
 };
 
+const EMPTY_TEAMS: TeamsStatus = {
+  connected: false,
+  label: null,
+};
+
 export function useIntegrationStatus() {
   const { instance, accounts } = useMsal();
   const [jira, setJira] = useState<JiraStatus>(EMPTY_JIRA);
   const [github, setGithub] = useState<GitHubStatus>(EMPTY_GITHUB);
   const [swagger, setSwagger] = useState<SwaggerStatus>(EMPTY_SWAGGER);
+  const [teams, setTeams] = useState<TeamsStatus>(EMPTY_TEAMS);
   const [stored, setStored] = useState<StoredIntegration[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -91,6 +102,7 @@ export function useIntegrationStatus() {
       const dbJira = dbIntegrations.find((i) => i.provider === "jira");
       const dbGithub = dbIntegrations.find((i) => i.provider === "github");
       const dbSwagger = dbIntegrations.find((i) => i.provider === "swagger");
+      const dbTeams = dbIntegrations.find((i) => i.provider === "teams");
 
       setJira({
         connected: Boolean(cookieJira.connected || dbJira),
@@ -125,6 +137,13 @@ export function useIntegrationStatus() {
             ? dbSwagger.meta.specUrl
             : null) ||
           null,
+      });
+
+      setTeams({
+        connected: Boolean(dbTeams),
+        label:
+          (typeof dbTeams?.meta?.label === "string" ? dbTeams.meta.label : null) ||
+          (dbTeams ? "Microsoft Teams" : null),
       });
     } catch (err) {
       console.error("Failed to load integration status", err);
@@ -183,9 +202,11 @@ export function useIntegrationStatus() {
         throw new Error(data.error || "Failed to disconnect");
       }
 
-      await fetch(`/api/auth/${provider}/disconnect`, { method: "POST" }).catch(
-        () => undefined,
-      );
+      if (provider !== "teams") {
+        await fetch(`/api/auth/${provider}/disconnect`, { method: "POST" }).catch(
+          () => undefined,
+        );
+      }
 
       await refresh();
     },
@@ -196,6 +217,7 @@ export function useIntegrationStatus() {
     jira,
     github,
     swagger,
+    teams,
     swaggerConnected: swagger.connected,
     stored,
     loading,

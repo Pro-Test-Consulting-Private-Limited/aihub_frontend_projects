@@ -62,7 +62,7 @@ export async function getFreshIdToken(
   }
 }
 
-/** Graph access token for Teams posting (same MSAL account as app sign-in). */
+/** Graph access token for Teams discover + post (same MSAL account as app sign-in). */
 export async function getGraphAccessToken(
   instance: IPublicClientApplication,
   accounts: AccountInfo[],
@@ -75,7 +75,7 @@ export async function getGraphAccessToken(
   } catch (err) {
     if (err instanceof InteractionRequiredAuthError) {
       await instance.acquireTokenRedirect({ ...graphTeamsRequest, account });
-      throw new Error("Redirecting to allow posting to Teams (same Microsoft account)");
+      throw new Error("Redirecting to allow Microsoft Teams access (same Microsoft account)");
     }
     throw err;
   }

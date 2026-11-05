@@ -14,8 +14,10 @@ import {
   useIntegrationStatus,
 } from "@/app/hooks/use-integration-status";
 import ConnectIntegrationModal from "@/app/components/connect-integration-modal";
+import { useMsal } from "@azure/msal-react";
+import { getGraphAccessToken } from "@/app/lib/auth-client";
 
-type LiveProvider = "jira" | "github" | "swagger";
+type LiveProvider = "jira" | "github" | "swagger" | "teams";
 
 interface IntegrationTool {
   id: string;
@@ -179,10 +181,11 @@ const CATEGORIES: IntegrationCategory[] = [
         id: "teams",
         name: "Microsoft Teams",
         status: "disconnected",
-        description: "Failure alerts and daily summaries posted to a Teams channel.",
+        description: "Connect once with your Microsoft account. Then link a team and channel on each canvas.",
         buttons: ["Connect Teams"],
         Icon: FaMicrosoft,
         color: "#6264A7",
+        provider: "teams",
       },
       {
         id: "slack",
@@ -200,16 +203,18 @@ const CATEGORIES: IntegrationCategory[] = [
 function IntegrationsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { instance, accounts } = useMsal();
   const {
     jira,
     github,
     swagger,
+    teams,
     refresh,
     saveProviders,
     disconnectProvider,
   } = useIntegrationStatus();
   const [busy, setBusy] = useState<string | null>(null);
-  const [connectProvider, setConnectProvider] = useState<LiveProvider | null>(null);
+  const [connectProvider, setConnectProvider] = useState<Exclude<LiveProvider, "teams"> | null>(null);
   const handledCallback = useRef(false);
 
   useEffect(() => {
@@ -279,6 +284,17 @@ function IntegrationsContent() {
       };
     }
 
+    if (tool.provider === "teams") {
+      return {
+        ...tool,
+        status: teams.connected ? "connected" : "disconnected",
+        description: teams.connected
+          ? `${teams.label || "Microsoft Teams"} ready. Link a channel on each canvas in Connect apps.`
+          : tool.description,
+        buttons: teams.connected ? ["Disconnect Teams"] : ["Connect Teams"],
+      };
+    }
+
     return tool;
   };
 
@@ -305,6 +321,20 @@ function IntegrationsContent() {
         await disconnectProvider(tool.provider);
       } catch {
         toast.error(`Could not disconnect ${tool.name}. Please try again.`);
+      } finally {
+        setBusy(null);
+      }
+      return;
+    }
+
+    if (tool.provider === "teams" && label.startsWith("Connect")) {
+      setBusy("teams");
+      try {
+        await getGraphAccessToken(instance, accounts);
+        await saveProviders([{ provider: "teams", meta: { label: "Microsoft Teams" } }]);
+        toast.success("Microsoft Teams connected");
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Could not connect Teams. Check Entra admin consent.");
       } finally {
         setBusy(null);
       }
@@ -362,7 +392,7 @@ function IntegrationsContent() {
                 const isBusy = busy === tool.id || busy === tool.provider;
                 const isGreenCard =
                   tool.status === "connected" &&
-                  (tool.id === "jira" || tool.id === "github" || tool.id === "swagger");
+                  (tool.id === "jira" || tool.id === "github" || tool.id === "swagger" || tool.id === "teams");
                 return (
                   <div
                     key={tool.id}
