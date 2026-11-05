@@ -341,7 +341,7 @@ function IntegrationsContent() {
       return;
     }
 
-    if (tool.provider && label.startsWith("Connect")) {
+    if (tool.provider && tool.provider !== "teams" && label.startsWith("Connect")) {
       setConnectProvider(tool.provider);
       return;
     }
