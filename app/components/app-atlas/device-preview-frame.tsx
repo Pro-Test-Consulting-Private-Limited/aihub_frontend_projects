@@ -15,9 +15,12 @@ type Props = {
   rotating?: boolean;
   motionOk?: boolean;
   onSizeChange: (width: number, height: number) => void;
+  /** Optional live page preview inside the frame (falls back to W×H label). */
+  children?: React.ReactNode;
+  appUrl?: string;
 };
 
-const BOX_MIN_H = 360;
+const BOX_MIN_H = 260;
 const BOX_PAD = 16;
 
 export function DevicePreviewFrame({
@@ -31,6 +34,8 @@ export function DevicePreviewFrame({
   rotating,
   motionOk,
   onSizeChange,
+  children,
+  appUrl,
 }: Props) {
   const boxRef = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ w: 280, h: BOX_MIN_H });
@@ -133,7 +138,7 @@ export function DevicePreviewFrame({
   return (
     <div
       ref={boxRef}
-      className="relative flex w-full min-h-[360px] flex-1 flex-col items-center justify-center overflow-hidden rounded-[12px] border border-[#E5E7EB] bg-[#F7F7FA] p-4 dark:border-[#2a2a2a] dark:bg-[#0a0a0a]"
+      className="relative flex w-full min-h-[260px] flex-1 flex-col items-center justify-center overflow-hidden rounded-[12px] border border-[#E5E7EB] bg-[#F7F7FA] p-3 dark:border-[#2a2a2a] dark:bg-[#0a0a0a]"
     >
       <div
         className={`relative bg-[#111] text-white shadow-lg dark:bg-[#000] ${
@@ -161,15 +166,29 @@ export function DevicePreviewFrame({
           />
         )}
         {frameKind === "phone" && (
-          <div className="absolute left-1/2 top-1.5 h-1.5 w-14 -translate-x-1/2 rounded-full bg-[#222]" aria-hidden />
+          <div className="absolute left-1/2 top-1.5 z-[2] h-1.5 w-14 -translate-x-1/2 rounded-full bg-[#222]" aria-hidden />
         )}
-        <div className="relative z-[1] flex h-full flex-col items-center justify-center gap-1 p-3 text-center">
-          <div className="font-mono text-[12px] font-semibold tracking-wide">
-            {width} × {height}
+        <div className="relative z-[1] flex h-full min-h-0 flex-col overflow-hidden rounded-[inherit] bg-white text-[#1F1F1F]">
+          <div className="flex shrink-0 items-center gap-1.5 border-b border-[#E5E7EB] bg-[#F3F4F6] px-2 py-1">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#F87171]" aria-hidden />
+            <span className="h-1.5 w-1.5 rounded-full bg-[#FBBF24]" aria-hidden />
+            <span className="h-1.5 w-1.5 rounded-full bg-[#34D399]" aria-hidden />
+            <div className="min-w-0 flex-1 truncate rounded bg-white px-1.5 py-0.5 text-[10px] text-[#374151]" title={appUrl}>
+              {appUrl || `${width} × ${height}`}
+            </div>
           </div>
-          <div className="text-[11px] text-white/70">
-            {orientation === "portrait" ? "Portrait" : "Landscape"}
-            {dpr !== 1 ? ` · ${dpr}× DPR` : ""}
+          <div className="relative min-h-0 flex-1 overflow-hidden">
+            {children ?? (
+              <div className="flex h-full flex-col items-center justify-center gap-1 bg-[#111] p-3 text-center text-white">
+                <div className="font-mono text-[12px] font-semibold tracking-wide">
+                  {width} × {height}
+                </div>
+                <div className="text-[11px] text-white/70">
+                  {orientation === "portrait" ? "Portrait" : "Landscape"}
+                  {dpr !== 1 ? ` · ${dpr}× DPR` : ""}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

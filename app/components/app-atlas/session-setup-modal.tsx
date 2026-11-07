@@ -13,9 +13,13 @@ import {
   TbAntennaBars5,
   TbAntennaBarsOff,
   TbGauge,
+  TbBookmark,
+  TbCopy,
+  TbExternalLink,
   TbRefresh,
   TbRotate,
   TbWifiOff,
+  TbWorld,
   TbX,
 } from "react-icons/tb";
 import type { AtlasConfig } from "@/app/interfaces/appatlas";
@@ -67,6 +71,7 @@ import {
 } from "@/app/lib/session-setup-selection";
 import type { AtlasClient } from "@/app/services/appatlas";
 import { DevicePreviewFrame } from "./device-preview-frame";
+import { LiveUrlPreview } from "./live-url-preview";
 import { fieldInput, fieldLabel, outlineButton, primaryButton } from "./modal";
 
 type CategoryTab = DeviceTab;
@@ -627,56 +632,97 @@ export function SessionSetupModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="flex max-h-[min(920px,calc(100vh-1.5rem))] w-full max-w-[980px] flex-col overflow-hidden rounded-[16px] bg-white shadow-xl dark:bg-[#141414]"
+        className="flex max-h-[calc(100vh-48px)] w-full max-w-[1040px] flex-col overflow-hidden rounded-[16px] bg-white shadow-xl dark:bg-[#141414]"
       >
-        <div className="flex shrink-0 items-center justify-between border-b border-[#D9D9D9] px-5 py-3.5 dark:border-[#2a2a2a] sm:px-7">
-          <h2 id={titleId} className="text-[20px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">
-            Start recording
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={starting}
-            aria-label="Close"
-            className="rounded-md p-1 text-[#1F1F1F] transition-colors hover:bg-[#F3F4F6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8664F2] dark:text-[#ededed] dark:hover:bg-[#1f1f1f]"
-          >
-            <TbX size={20} />
-          </button>
+        <div className="flex shrink-0 flex-col gap-2 border-b border-[#D9D9D9] px-5 py-3 dark:border-[#2a2a2a] sm:px-6">
+          <div className="flex items-center justify-between gap-3">
+            <h2 id={titleId} className="text-[18px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">
+              Start recording
+            </h2>
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={starting}
+              aria-label="Close"
+              className="rounded-md p-1 text-[#1F1F1F] transition-colors hover:bg-[#F3F4F6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8664F2] dark:text-[#ededed] dark:hover:bg-[#1f1f1f]"
+            >
+              <TbX size={20} />
+            </button>
+          </div>
+          <div className="flex min-w-0 items-center gap-2 rounded-[10px] border border-[#E5E7EB] bg-[#F9FAFB] px-2.5 py-2 dark:border-[#2a2a2a] dark:bg-[#0a0a0a]">
+            <TbWorld size={18} className="shrink-0 text-[#8664F2]" />
+            <div className="min-w-0 flex-1 truncate text-[14px] text-[#1F1F1F] dark:text-[#ededed]" title={appUrl}>
+              {appUrl || "No application URL"}
+            </div>
+            <button
+              type="button"
+              className="rounded p-1.5 text-[#5E6066] hover:bg-white hover:text-[#8664F2] dark:hover:bg-[#1a1a1a]"
+              aria-label="Copy URL"
+              disabled={!appUrl}
+              onClick={() => void navigator.clipboard.writeText(appUrl)}
+            >
+              <TbCopy size={16} />
+            </button>
+            <a
+              href={appUrl || undefined}
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Open in new tab"
+              className={`rounded p-1.5 text-[#5E6066] hover:bg-white hover:text-[#8664F2] dark:hover:bg-[#1a1a1a] ${!appUrl ? "pointer-events-none opacity-40" : ""}`}
+            >
+              <TbExternalLink size={16} />
+            </a>
+          </div>
+          {presetMsg && (
+            <p className="rounded-[8px] border border-[#C4B5FD] bg-[#F5F0FF] px-2.5 py-1.5 text-[12px] text-[#5B3FD1]">
+              {presetMsg}
+            </p>
+          )}
+          {atLimit && (
+            <p className="rounded-[8px] border border-[#FCD34D] bg-[#FFFBEB] px-2.5 py-1.5 text-[12px] text-[#92400E]">
+              You have {USER_PRESET_MAX} presets (the limit). Delete one to save another.
+            </p>
+          )}
         </div>
 
         <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
-          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 sm:px-7">
-            <p className="text-[12.5px] text-[#5E6066] dark:text-[#9ca3af]">
-              Device and network for this session. Saved for the next Run. Presets follow your account.
-            </p>
-            <p className="mt-1 truncate font-mono text-[11.5px] text-[#7E7E7E]" title={appUrl}>
-              {appUrl || "No application URL"}
-            </p>
-            {showPrevNote && (
-              <p className="mt-2 rounded-[8px] border border-[#E5E7EB] bg-[#F9FAFB] px-2.5 py-1.5 text-[12px] text-[#5E6066] dark:border-[#2a2a2a] dark:bg-[#0a0a0a] dark:text-[#9ca3af]">
-                Previous recordings on this canvas used {previousViewport!.width} × {previousViewport!.height}.
-              </p>
-            )}
-            {presetMsg && (
-              <p className="mt-2 text-[12px] text-[#5E6066] dark:text-[#9ca3af]">{presetMsg}</p>
-            )}
-            {atLimit && (
-              <p className="mt-2 rounded-[8px] border border-[#FCD34D] bg-[#FFFBEB] px-2.5 py-1.5 text-[12px] text-[#92400E]">
-                You have {USER_PRESET_MAX} presets (the limit). Delete one to save another.
-              </p>
-            )}
-
-            <div className="mt-4 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
-              <div className="min-w-0 space-y-5">
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3 sm:overflow-hidden sm:px-6 [@media(max-height:760px)]:overflow-y-auto">
+            <div className="grid h-full grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.9fr)]">
+              <div className="min-w-0 space-y-3">
                 <section>
-                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-[14px] font-medium text-[#1F1F1F] dark:text-[#ededed]">Device</span>
+                  <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[13px] font-medium text-[#1F1F1F] dark:text-[#ededed]">Device</span>
+                      <div
+                        role="group"
+                        aria-label="Orientation"
+                        className="inline-flex rounded-[8px] border border-[#E5E7EB] p-0.5 dark:border-[#2a2a2a]"
+                      >
+                        {(["portrait", "landscape"] as const).map((o) => (
+                          <button
+                            key={o}
+                            type="button"
+                            aria-pressed={prefs.orientation === o}
+                            disabled={starting}
+                            onClick={() => onOrient(o)}
+                            className={`inline-flex items-center gap-1 rounded-[6px] px-2 py-0.5 text-[11px] font-medium ${
+                              prefs.orientation === o
+                                ? "bg-[#8664F2] text-white"
+                                : "text-[#5E6066] hover:bg-[#F3F4F6] dark:text-[#9ca3af]"
+                            }`}
+                          >
+                            <TbRotate size={12} className={o === "landscape" ? "rotate-90" : ""} />
+                            {o === "portrait" ? "Portrait" : "Landscape"}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                     <input
                       type="search"
                       value={search}
                       onChange={(e) => setSearch(e.target.value)}
-                      placeholder="Search presets…"
-                      className={`${fieldInput} !mt-0 max-w-[200px] !py-1.5 text-[12.5px]`}
+                      placeholder="Search…"
+                      className={`${fieldInput} !mt-0 max-w-[140px] !py-1 text-[12px]`}
                       aria-label="Search device presets"
                       disabled={starting}
                     />
@@ -870,96 +916,77 @@ export function SessionSetupModal({
                           </button>
                         ))}
                       </div>
-                      {savingKind === "device" ? (
-                        <InlineSaveName
-                          kind="device"
-                          disabled={starting}
-                          onCancel={() => setSavingKind(null)}
-                          onSave={(name) => createPreset("device", name)}
-                        />
-                      ) : (
-                        <button
-                          type="button"
-                          disabled={starting || atLimit}
-                          className="text-[12px] font-medium text-[#8664F2] underline-offset-2 hover:underline disabled:opacity-50"
-                          onClick={() => setSavingKind("device")}
-                        >
-                          Save as preset
-                        </button>
-                      )}
-                      <p className="text-[11px] text-[#7E7E7E]">
-                        Clamped {VIEWPORT.widthMin}–{VIEWPORT.widthMax} × {VIEWPORT.heightMin}–{VIEWPORT.heightMax}. Drag
-                        preview edges/corner to resize (Shift = free, no snap).
-                      </p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {savingKind === "device" ? (
+                          <InlineSaveName
+                            kind="device"
+                            disabled={starting}
+                            onCancel={() => setSavingKind(null)}
+                            onSave={(name) => createPreset("device", name)}
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={starting || atLimit}
+                            className={`${outlineButton} !inline-flex !items-center !gap-1.5 !px-3 !py-1.5 !text-[12px]`}
+                            onClick={() => setSavingKind("device")}
+                          >
+                            <TbBookmark size={14} />
+                            Save as preset
+                          </button>
+                        )}
+                      </div>
                     </div>
                   )}
                 </section>
 
                 <section>
-                  <span className="text-[14px] font-medium text-[#1F1F1F] dark:text-[#ededed]">Orientation</span>
-                  <div
-                    role="group"
-                    aria-label="Orientation"
-                    className="mt-2 inline-flex rounded-[10px] border border-[#E5E7EB] p-0.5 dark:border-[#2a2a2a]"
-                  >
-                    {(["portrait", "landscape"] as const).map((o) => (
-                      <button
-                        key={o}
-                        type="button"
-                        aria-pressed={prefs.orientation === o}
-                        disabled={starting}
-                        onClick={() => onOrient(o)}
-                        className={`inline-flex items-center gap-1.5 rounded-[8px] px-3 py-1.5 text-[12.5px] font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8664F2] ${
-                          prefs.orientation === o
-                            ? "bg-[#8664F2] text-white"
-                            : "text-[#5E6066] hover:bg-[#F3F4F6] dark:text-[#9ca3af] dark:hover:bg-[#1a1a1a]"
-                        }`}
-                      >
-                        <TbRotate
-                          size={14}
-                          className={`transition-transform duration-150 ${o === "landscape" ? "rotate-90" : ""} ${
-                            rotating && prefs.orientation === o && motionOk() ? "rotate-[180deg]" : ""
-                          }`}
-                        />
-                        {o === "portrait" ? "Portrait" : "Landscape"}
-                      </button>
-                    ))}
-                  </div>
-                </section>
-
-                <section>
-                  <span className="text-[14px] font-medium text-[#1F1F1F] dark:text-[#ededed]">Network</span>
-                  <div role="listbox" aria-label="Network profile" className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  <span className="text-[13px] font-medium text-[#1F1F1F] dark:text-[#ededed]">Network</span>
+                  <div role="listbox" aria-label="Network profile" className="mt-1.5 flex flex-wrap gap-1.5">
                     {NETWORK_CATALOG.map((n) => {
                       const selected = prefs.networkPreset === n.id && !selectedPresetId;
+                      const short =
+                        n.id === "none"
+                          ? "No throttle"
+                          : n.id === "slow-3g"
+                            ? "Slow 3G"
+                            : n.id === "fast-3g"
+                              ? "Fast 3G"
+                              : n.label;
+                      const tip =
+                        n.id === "none"
+                          ? "Full speed"
+                          : n.offline
+                            ? "No network"
+                            : `↓ ${formatRate(n.downloadKbps)} · ↑ ${formatRate(n.uploadKbps)} · ${n.latencyMs} ms`;
                       return (
                         <button
                           key={n.id}
                           type="button"
                           role="option"
+                          title={tip}
                           aria-selected={selected}
                           disabled={starting}
                           onClick={() => patchNetwork(n.id)}
-                          className={`${cardBase} ${selected ? cardSelected : cardIdle}`}
+                          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11.5px] font-medium ${
+                            selected
+                              ? "border-[#8664F2] bg-[#F5F0FF] text-[#8664F2]"
+                              : "border-[#E5E7EB] bg-white text-[#5E6066] hover:border-[#C4B5FD] dark:border-[#2a2a2a] dark:bg-[#0a0a0a]"
+                          }`}
                         >
-                          <div className="flex items-center justify-between gap-1">
-                            <NetworkIcon id={n.id} className="text-[#8664F2]" />
-                            <SignalBars strength={networkStrength(n.id)} />
-                          </div>
-                          <div className="mt-1.5 text-[12px] font-medium text-[#1F1F1F] dark:text-[#ededed]">
-                            {n.label}
-                          </div>
-                          <div className="mt-0.5 text-[10px] leading-snug text-[#7E7E7E]">
-                            {n.id === "none"
-                              ? "Full speed"
-                              : n.offline
-                                ? "No network"
-                                : `↓ ${formatRate(n.downloadKbps)} · ↑ ${formatRate(n.uploadKbps)} · ${n.latencyMs} ms`}
-                          </div>
+                          <NetworkIcon id={n.id} className="text-[#8664F2]" />
+                          {short}
                         </button>
                       );
                     })}
                   </div>
+                  <p className="mt-1 text-[11px] text-[#7E7E7E]">
+                    {prefs.networkPreset === "none"
+                      ? "Full speed"
+                      : prefs.networkPreset === "offline"
+                        ? "No network"
+                        : `↓ ${formatRate(prefs.downloadKbps)} · ↑ ${formatRate(prefs.uploadKbps)} · ${prefs.latencyMs} ms`}
+                  </p>
 
                   {(myNetworkPresets.length > 0 || mySetupPresets.length > 0) && (
                     <div className="mt-3">
@@ -1079,51 +1106,34 @@ export function SessionSetupModal({
                           />
                         </div>
                       </div>
-                      {savingKind === "network" ? (
-                        <InlineSaveName
-                          kind="network"
-                          disabled={starting}
-                          onCancel={() => setSavingKind(null)}
-                          onSave={(name) => createPreset("network", name)}
-                        />
-                      ) : (
-                        <button
-                          type="button"
-                          disabled={starting || atLimit}
-                          className="text-[12px] font-medium text-[#8664F2] underline-offset-2 hover:underline disabled:opacity-50"
-                          onClick={() => setSavingKind("network")}
-                        >
-                          Save as preset
-                        </button>
-                      )}
+                      <div className="flex flex-wrap items-center gap-2">
+                        {savingKind === "network" ? (
+                          <InlineSaveName
+                            kind="network"
+                            disabled={starting}
+                            onCancel={() => setSavingKind(null)}
+                            onSave={(name) => createPreset("network", name)}
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={starting || atLimit}
+                            className={`${outlineButton} !inline-flex !items-center !gap-1.5 !px-3 !py-1.5 !text-[12px]`}
+                            onClick={() => setSavingKind("network")}
+                          >
+                            <TbBookmark size={14} />
+                            Save as preset
+                          </button>
+                        )}
+                      </div>
                     </div>
                   )}
-
-                  <div className="mt-3">
-                    {savingKind === "setup" ? (
-                      <InlineSaveName
-                        kind="setup"
-                        disabled={starting}
-                        onCancel={() => setSavingKind(null)}
-                        onSave={(name) => createPreset("setup", name)}
-                      />
-                    ) : (
-                      <button
-                        type="button"
-                        disabled={starting || atLimit}
-                        className="text-[12px] font-medium text-[#8664F2] underline-offset-2 hover:underline disabled:opacity-50"
-                        onClick={() => setSavingKind("setup")}
-                      >
-                        Save current setup
-                      </button>
-                    )}
-                  </div>
                 </section>
 
                 {configError && <p className="text-[12px] text-[#B45309]">{configError}</p>}
               </div>
 
-              <div className="flex min-h-[360px] flex-col">
+              <div className="flex min-h-[280px] flex-col lg:min-h-0">
                 <DevicePreviewFrame
                   width={prefs.width}
                   height={prefs.height}
@@ -1135,23 +1145,63 @@ export function SessionSetupModal({
                   rotating={rotating}
                   motionOk={motionOk()}
                   onSizeChange={onWidthHeight}
-                />
-                <p className="mt-3 max-w-full truncate text-center text-[12px] text-[#5E6066] dark:text-[#9ca3af]">
-                  {summaryLine(prefs)}
-                </p>
+                  appUrl={appUrl}
+                >
+                  <LiveUrlPreview
+                    client={client}
+                    projectId={projectId}
+                    appUrl={appUrl}
+                    width={prefs.width}
+                    height={prefs.height}
+                    orientation={prefs.orientation}
+                    networkPreset={prefs.networkPreset}
+                    devicePreset={prefs.devicePreset}
+                    offline={prefs.networkPreset === "offline"}
+                    disabled={starting}
+                  />
+                </DevicePreviewFrame>
+                <div className="mt-2 flex flex-wrap justify-center gap-1">
+                  {(summaryLine(prefs).split(" · ") || []).map((chip) => (
+                    <span
+                      key={chip}
+                      className="rounded-full border border-[#E5E7EB] bg-[#F9FAFB] px-2 py-0.5 text-[11px] text-[#374151] dark:border-[#2a2a2a] dark:bg-[#141414] dark:text-[#d1d5db]"
+                    >
+                      {chip}
+                    </span>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-[#D9D9D9] bg-white px-5 py-3.5 dark:border-[#2a2a2a] dark:bg-[#141414] sm:px-7">
-            <button
-              type="button"
-              className="text-[13px] text-[#5E6066] underline-offset-2 hover:text-[#8664F2] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8664F2] disabled:opacity-50 dark:text-[#9ca3af]"
-              onClick={reset}
-              disabled={starting}
-            >
-              Reset to default
-            </button>
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-[#D9D9D9] bg-white px-5 py-3 dark:border-[#2a2a2a] dark:bg-[#141414] sm:px-6">
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                className="text-[13px] font-medium text-[#374151] underline-offset-2 hover:text-[#8664F2] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8664F2] disabled:opacity-50 dark:text-[#d1d5db]"
+                onClick={reset}
+                disabled={starting}
+              >
+                Reset to default
+              </button>
+              {savingKind === "setup" ? (
+                <InlineSaveName
+                  kind="setup"
+                  disabled={starting}
+                  onCancel={() => setSavingKind(null)}
+                  onSave={(name) => createPreset("setup", name)}
+                />
+              ) : (
+                <button
+                  type="button"
+                  disabled={starting || atLimit}
+                  className={`${outlineButton} !px-3 !py-1.5 !text-[13px]`}
+                  onClick={() => setSavingKind("setup")}
+                >
+                  Save current setup
+                </button>
+              )}
+            </div>
             <div className="flex gap-3">
               <button type="button" className={outlineButton} onClick={onClose} disabled={starting}>
                 Cancel

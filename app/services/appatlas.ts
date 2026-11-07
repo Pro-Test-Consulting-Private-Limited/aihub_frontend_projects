@@ -77,6 +77,30 @@ export function atlasClient({ instance, accounts }: Msal) {
     deleteRecordingPreset: (id: string) => request<void>(`/recording-presets/${id}`, json("DELETE")),
     setRecordingPresetDefault: (id: string) =>
       request<UserRecordingPreset>(`/recording-presets/${id}/default`, json("POST")),
+    /** Live Start-recording preview JPEG (project URL resolved server-side; never pass a client URL). */
+    previewScreenshot: async (body: {
+      projectId: string;
+      width: number;
+      height: number;
+      orientation: string;
+      network?: string;
+      devicePreset?: string;
+    }) => {
+      const token = await getFreshIdToken(instance, accounts);
+      const res = await fetch(`${APPATLAS_API}/preview`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new AtlasError((err as { error?: string }).error ?? res.statusText, res.status);
+      }
+      return res.blob();
+    },
     startSession: (body: StartSessionOptions) => request<SessionSnapshot>("/sessions", json("POST", body)),
     getSession: (id: string) => request<SessionSnapshot>(`/sessions/${id}`),
     finishSession: (id: string) => request<SessionSnapshot>(`/sessions/${id}/finish`, json("POST")),
