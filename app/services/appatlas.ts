@@ -85,6 +85,8 @@ export function atlasClient({ instance, accounts }: Msal) {
       orientation: string;
       network?: string;
       devicePreset?: string;
+      colorScheme?: string;
+      locale?: string;
     }) => {
       const token = await getFreshIdToken(instance, accounts);
       const res = await fetch(`${APPATLAS_API}/preview`, {

@@ -18,6 +18,8 @@ export function LiveUrlPreview({
   orientation,
   networkPreset,
   devicePreset,
+  colorScheme,
+  locale,
   offline,
   disabled,
   hasSelection,
@@ -30,6 +32,8 @@ export function LiveUrlPreview({
   orientation: Orientation;
   networkPreset: string;
   devicePreset: string;
+  colorScheme?: string;
+  locale?: string;
   offline?: boolean;
   disabled?: boolean;
   /** True when a device card is selected (catalog/custom/mine). */
@@ -100,6 +104,8 @@ export function LiveUrlPreview({
       orientation,
       network: networkPreset,
       devicePreset,
+      colorScheme,
+      locale,
     };
     console.info("[preview] POST /atlas-api/preview", body);
     try {
@@ -134,7 +140,7 @@ export function LiveUrlPreview({
     const t = window.setTimeout(() => void load(), 600);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, appUrl, width, height, orientation, networkPreset, devicePreset, offline, disabled, hasSelection]);
+  }, [projectId, appUrl, width, height, orientation, networkPreset, devicePreset, colorScheme, locale, offline, disabled, hasSelection]);
 
   useEffect(() => () => clearBlob(), []);
 

@@ -118,6 +118,19 @@ export type SessionSnapshot = {
   /** Who started the recording (from Microsoft Entra, or nginx basic auth when login is off). */
   owner?: { name: string; email: string };
   emulation: EmulationSummary;
+  health?: {
+    level: "ok" | "warn" | "bad";
+    consoleErrors: number;
+    consoleWarnings: number;
+    pageErrors: number;
+    failedRequests: number;
+    httpErrors: number;
+    brokenImages: number;
+    ttfbMs: number | null;
+    lcpMs: number | null;
+    cls: number | null;
+    a11yViolations: number;
+  };
 };
 
 export type Capacity = {

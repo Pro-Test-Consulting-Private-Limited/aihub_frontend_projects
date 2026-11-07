@@ -87,6 +87,15 @@ import {
   sizeFromResolution,
   thisWindowSize,
 } from "@/app/lib/viewport-resolution";
+import {
+  PERSONA_CITIES,
+  PERSONA_LOCALES,
+  loadPersona,
+  personaSummary,
+  personaToSessionFields,
+  savePersona,
+  type PersonaPrefs,
+} from "@/app/lib/persona";
 import type { AtlasClient } from "@/app/services/appatlas";
 import { DevicePreviewFrame } from "./device-preview-frame";
 import { LiveUrlPreview } from "./live-url-preview";
@@ -322,7 +331,7 @@ export function SessionSetupModal({
   client: AtlasClient;
   loadConfig: () => Promise<AtlasConfig>;
   starting: boolean;
-  onStart: (prefs: SessionEmulationPrefs) => void;
+  onStart: (prefs: SessionEmulationPrefs, personaFields?: Record<string, unknown>) => void;
   onClose: () => void;
 }) {
   const titleId = useId();
@@ -346,6 +355,9 @@ export function SessionSetupModal({
   const [sizeBy, setSizeBy] = useState<SizeByMode>("pixels");
   const [lockRatio, setLockRatio] = useState(false);
   const [sizeHint, setSizeHint] = useState<string | null>(null);
+  const [persona, setPersona] = useState(() => loadPersona());
+  const [personaOpen, setPersonaOpen] = useState(false);
+  const [personaClock, setPersonaClock] = useState("");
 
   const syncPresets = useCallback(
     (items: UserRecordingPreset[]) => {
@@ -656,8 +668,45 @@ export function SessionSetupModal({
     saveEmulationPrefs(next, projectId);
     rememberCanvasViewport(canvasId, next.width, next.height);
     setRecent(loadRecentDevices());
-    onStart(next);
+    savePersona(persona);
+    onStart(next, personaToSessionFields(persona));
   };
+
+  const updatePersona = (patch: Partial<PersonaPrefs>) => {
+    setPersona((p) => {
+      const next = { ...p, ...patch };
+      if (patch.locale) {
+        const loc = PERSONA_LOCALES.find((l) => l.id === patch.locale);
+        if (loc) next.timezoneId = loc.timezone;
+      }
+      if (patch.geoId) {
+        const city = PERSONA_CITIES.find((c) => c.id === patch.geoId);
+        if (city) next.timezoneId = city.timezone;
+      }
+      savePersona(next);
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    const tick = () => {
+      try {
+        setPersonaClock(
+          new Intl.DateTimeFormat(persona.locale || "en-US", {
+            timeZone: persona.timezoneId || "UTC",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          }).format(new Date()),
+        );
+      } catch {
+        setPersonaClock("");
+      }
+    };
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [persona.locale, persona.timezoneId]);
 
   const reset = () => {
     setSelectedPresetId(null);
@@ -1204,6 +1253,115 @@ export function SessionSetupModal({
                 </section>
 
                 <section>
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between gap-2 text-left"
+                    onClick={() => setPersonaOpen((o) => !o)}
+                    aria-expanded={personaOpen}
+                  >
+                    <span className="text-[13px] font-medium text-[#1F1F1F] dark:text-[#ededed]">Persona</span>
+                    <span className="truncate text-[11px] text-[#7E7E7E]">{personaSummary(persona)}</span>
+                  </button>
+                  {personaOpen && (
+                    <div className="mt-1.5 space-y-1.5 rounded-[10px] border border-[#E5E7EB] bg-[#FAFAFA] p-2 dark:border-[#2a2a2a] dark:bg-[#121212]">
+                      <div className="flex flex-wrap gap-1">
+                        {(["light", "dark", "no-preference"] as const).map((c) => (
+                          <button
+                            key={c}
+                            type="button"
+                            disabled={starting}
+                            onClick={() => updatePersona({ colorScheme: c })}
+                            className={`rounded-full border px-2 py-0.5 text-[11px] ${
+                              persona.colorScheme === c
+                                ? "border-[#8664F2] bg-[#F5F0FF] text-[#8664F2]"
+                                : "border-[#E5E7EB] bg-white text-[#5E6066] dark:border-[#2a2a2a] dark:bg-[#0a0a0a]"
+                            }`}
+                          >
+                            {c === "no-preference" ? "System" : c === "dark" ? "Dark" : "Light"}
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          disabled={starting}
+                          onClick={() => updatePersona({ reducedMotion: !persona.reducedMotion })}
+                          className={`rounded-full border px-2 py-0.5 text-[11px] ${
+                            persona.reducedMotion
+                              ? "border-[#8664F2] bg-[#F5F0FF] text-[#8664F2]"
+                              : "border-[#E5E7EB] bg-white text-[#5E6066] dark:border-[#2a2a2a]"
+                          }`}
+                        >
+                          Reduced motion
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {PERSONA_LOCALES.map((l) => (
+                          <button
+                            key={l.id}
+                            type="button"
+                            disabled={starting}
+                            title={l.label}
+                            onClick={() => updatePersona({ locale: l.id })}
+                            className={`rounded-full border px-2 py-0.5 text-[11px] ${
+                              persona.locale === l.id
+                                ? "border-[#8664F2] bg-[#F5F0FF] text-[#8664F2]"
+                                : "border-[#E5E7EB] bg-white text-[#5E6066] dark:border-[#2a2a2a]"
+                            }`}
+                          >
+                            {l.flag} {l.id}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#5E6066]">
+                        <span className="font-mono">{personaClock || "—"}</span>
+                        <span className="text-[#7E7E7E]">{persona.timezoneId}</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {PERSONA_CITIES.map((c) => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            disabled={starting}
+                            onClick={() => updatePersona({ geoId: persona.geoId === c.id ? null : c.id })}
+                            className={`rounded-full border px-2 py-0.5 text-[11px] ${
+                              persona.geoId === c.id
+                                ? "border-[#8664F2] bg-[#F5F0FF] text-[#8664F2]"
+                                : "border-[#E5E7EB] bg-white text-[#5E6066] dark:border-[#2a2a2a]"
+                            }`}
+                          >
+                            {c.label}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="flex flex-wrap gap-2 text-[11px] text-[#5E6066]">
+                        {(
+                          [
+                            ["permissionLocation", "Location"],
+                            ["permissionNotifications", "Notifications"],
+                            ["permissionCameraMic", "Camera/mic"],
+                          ] as const
+                        ).map(([key, label]) => (
+                          <label key={key} className="inline-flex items-center gap-1">
+                            {label}
+                            <select
+                              className="rounded border border-[#E5E7EB] bg-white px-1 py-0.5 dark:border-[#2a2a2a] dark:bg-[#0a0a0a]"
+                              value={persona[key]}
+                              disabled={starting}
+                              onChange={(e) =>
+                                updatePersona({ [key]: e.target.value as PersonaPrefs[typeof key] })
+                              }
+                            >
+                              <option value="ask">Ask</option>
+                              <option value="allow">Allow</option>
+                              <option value="deny">Deny</option>
+                            </select>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </section>
+
+                <section>
                   <span className="text-[13px] font-medium text-[#1F1F1F] dark:text-[#ededed]">Network</span>
                   <div role="listbox" aria-label="Network profile" className="mt-1.5 flex flex-wrap gap-1.5">
                     {NETWORK_CATALOG.map((n) => {
@@ -1421,6 +1579,8 @@ export function SessionSetupModal({
                     orientation={prefs.orientation}
                     networkPreset={prefs.networkPreset}
                     devicePreset={prefs.devicePreset}
+                    colorScheme={persona.colorScheme}
+                    locale={persona.locale}
                     offline={prefs.networkPreset === "offline"}
                     disabled={starting}
                     hasSelection={Boolean(selection)}

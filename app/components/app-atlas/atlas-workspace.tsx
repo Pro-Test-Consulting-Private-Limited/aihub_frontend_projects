@@ -26,6 +26,7 @@ import { JiraPanel } from "./jira-panel";
 import { SaveExecutionModal } from "./save-execution-modal";
 import { SessionSetupModal } from "./session-setup-modal";
 import { RecordingView } from "./recording-view";
+import { ReplayPlayer } from "./replay-player";
 import {
   emulationBodyFromPrefs,
   loadEmulationPrefs,
@@ -102,6 +103,7 @@ export default function AtlasWorkspace() {
   const [starting, setStarting] = useState(false);
   const [setupOpen, setSetupOpen] = useState(false);
   const [setupUrl, setSetupUrl] = useState<string | null>(null);
+  const [replayOpen, setReplayOpen] = useState(false);
 
   const [focusNodeId, setFocusNodeId] = useState<string | null>(null);
   const [panelNodeId, setPanelNodeId] = useState<string | null>(null);
@@ -265,7 +267,11 @@ export default function AtlasWorkspace() {
     setSetupOpen(true);
   };
 
-  const startSessionWithPrefs = async (prefs: SessionEmulationPrefs, url = setupUrl || appUrl) => {
+  const startSessionWithPrefs = async (
+    prefs: SessionEmulationPrefs,
+    url = setupUrl || appUrl,
+    personaFields?: Parameters<typeof emulationBodyFromPrefs>[1],
+  ) => {
     if (!url) return;
     setStarting(true);
     try {
@@ -274,7 +280,7 @@ export default function AtlasWorkspace() {
         await client.startSession({
           url,
           viewer,
-          ...emulationBodyFromPrefs(prefs),
+          ...emulationBodyFromPrefs(prefs, personaFields),
         }),
       );
       setSetupOpen(false);
@@ -545,10 +551,18 @@ export default function AtlasWorkspace() {
                 selectedNodeId={panelNodeId}
                 onSelectNode={setPanelNodeId}
               />
-              <div className="pointer-events-none absolute top-3 left-4 rounded-[8px] bg-white/90 px-3 py-1.5 text-[11px] text-[#5E6066] shadow-sm dark:bg-[#141414]/90 dark:text-[#9ca3af]">
+              <div className="absolute top-3 left-4 z-10 flex items-center gap-2 rounded-[8px] bg-white/90 px-3 py-1.5 text-[11px] text-[#5E6066] shadow-sm dark:bg-[#141414]/90 dark:text-[#9ca3af]">
                 <span className="font-medium text-[#1F1F1F] dark:text-[#ededed]">{canvas.name}</span> · {canvas.owner.name}
                 {!canvas.isMine && " · view only"}
+                <button
+                  type="button"
+                  className="pointer-events-auto font-medium text-[#8664F2] underline-offset-2 hover:underline"
+                  onClick={() => setReplayOpen(true)}
+                >
+                  Replay
+                </button>
               </div>
+              {replayOpen && <ReplayPlayer canvas={canvas} onClose={() => setReplayOpen(false)} />}
               {panelNodeId && (
                 <JiraPanel
                   key={panelNodeId}
@@ -618,7 +632,7 @@ export default function AtlasWorkspace() {
           client={client}
           loadConfig={() => client.getConfig()}
           starting={starting}
-          onStart={(prefs) => void startSessionWithPrefs(prefs)}
+          onStart={(prefs, personaFields) => void startSessionWithPrefs(prefs, setupUrl || appUrl, personaFields)}
           onClose={() => {
             if (starting) return;
             setSetupOpen(false);

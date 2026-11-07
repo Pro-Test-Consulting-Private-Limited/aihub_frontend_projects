@@ -29,6 +29,12 @@ export type StartSessionOptions = {
   offline?: boolean;
   /** Optional; custom sizes only. */
   deviceScaleFactor?: number;
+  locale?: string;
+  timezoneId?: string;
+  colorScheme?: "light" | "dark" | "no-preference";
+  reducedMotion?: "reduce" | "no-preference";
+  geolocation?: { latitude: number; longitude: number } | null;
+  permissions?: string[];
 };
 
 export type DeviceCategory = "phone" | "tablet" | "laptop" | "custom";
@@ -340,7 +346,10 @@ export function loadCanvasViewport(canvasId: string | null | undefined): { width
 }
 
 /** Build POST /sessions body fields from prefs (beyond url / viewer). Same contract as before. */
-export function emulationBodyFromPrefs(prefs: SessionEmulationPrefs): Omit<StartSessionOptions, "url" | "viewer"> {
+export function emulationBodyFromPrefs(
+  prefs: SessionEmulationPrefs,
+  personaFields?: Partial<StartSessionOptions>,
+): Omit<StartSessionOptions, "url" | "viewer"> {
   const normalized = normalizePrefs(prefs);
   const body: Omit<StartSessionOptions, "url" | "viewer"> = {
     devicePreset: normalized.devicePreset || "desktop",
@@ -361,6 +370,14 @@ export function emulationBodyFromPrefs(prefs: SessionEmulationPrefs): Omit<Start
   }
   if (normalized.networkPreset === "offline") {
     body.offline = true;
+  }
+  if (personaFields) {
+    if (personaFields.locale) body.locale = personaFields.locale;
+    if (personaFields.timezoneId) body.timezoneId = personaFields.timezoneId;
+    if (personaFields.colorScheme) body.colorScheme = personaFields.colorScheme;
+    if (personaFields.reducedMotion) body.reducedMotion = personaFields.reducedMotion;
+    if (personaFields.geolocation !== undefined) body.geolocation = personaFields.geolocation;
+    if (personaFields.permissions?.length) body.permissions = personaFields.permissions;
   }
   return body;
 }

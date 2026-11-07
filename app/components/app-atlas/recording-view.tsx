@@ -173,6 +173,28 @@ export function RecordingView({
             {snap.emulation?.streamScaled && (
               <ConfigChip label="Emulated, stream scaled" title="Remote display cannot fit viewport + chrome; page held via CDP" danger />
             )}
+            {snap.emulation?.locale && (
+              <ConfigChip label={snap.emulation.locale} title={`Locale · ${snap.emulation.timezoneId || ""}`} />
+            )}
+            {snap.emulation?.colorScheme && snap.emulation.colorScheme !== "no-preference" && (
+              <ConfigChip
+                label={snap.emulation.colorScheme === "dark" ? "Dark" : "Light"}
+                title="Color scheme"
+              />
+            )}
+            {snap.health && (
+              <ConfigChip
+                label={
+                  snap.health.level === "ok"
+                    ? "Health OK"
+                    : snap.health.level === "warn"
+                      ? "Health warn"
+                      : "Health issues"
+                }
+                title={`Errors ${snap.health.consoleErrors}/${snap.health.pageErrors} · HTTP ${snap.health.httpErrors} · a11y ${snap.health.a11yViolations} · LCP ${snap.health.lcpMs ?? "—"}ms`}
+                danger={snap.health.level !== "ok"}
+              />
+            )}
             <ConfigChip label={orientLabel} title={`Orientation: ${snap.emulation?.orientation ?? ""}`} />
             <ConfigChip
               label={netLabel}
