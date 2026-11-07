@@ -223,6 +223,7 @@ export default function AtlasWorkspace() {
   }, [visible, selectedId]);
 
   const startRecording = (snap: SessionSnapshot) => {
+    setExplorerOpen(false);
     localStorage.setItem(ACTIVE_SESSION_KEY, snap.id);
     setUnsaved(null);
     setRecording(snap);
@@ -473,7 +474,7 @@ export default function AtlasWorkspace() {
       )}
 
       <div className="flex min-h-0 flex-1">
-        {(tab === "canvas" || tab === "sit") && explorerOpen && (
+        {(tab === "canvas" || tab === "sit") && explorerOpen && !recording && (
           <Explorer
             canvases={visible}
             loading={canvasesLoading}
@@ -500,7 +501,7 @@ export default function AtlasWorkspace() {
             }}
           />
         )}
-        {(tab === "canvas" || tab === "sit") && !explorerOpen && (
+        {(tab === "canvas" || tab === "sit") && !explorerOpen && !recording && (
           <button
             type="button"
             onClick={() => setExplorerOpen(true)}

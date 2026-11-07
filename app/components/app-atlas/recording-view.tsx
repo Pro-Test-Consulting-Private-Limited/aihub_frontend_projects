@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { SessionSnapshot } from "@/app/interfaces/appatlas";
 import { deviceDisplayName, networkChipLabel, recordingCountsLine } from "@/app/lib/recording-labels";
-import { fitStreamScale } from "@/app/lib/stream-fit";
+import { MOBILE_BEZEL_INSET_PX, fitStreamScale } from "@/app/lib/stream-fit";
 import { atlasUrl, type AtlasClient } from "@/app/services/appatlas";
 import { outlineButton, primaryButton } from "./modal";
 
@@ -80,15 +80,27 @@ export function RecordingView({
   }, []);
 
   const vp = snap.emulation?.viewport;
+  const req = snap.emulation?.requestedViewport ?? vp;
   const vw = Math.max(1, vp?.width ?? 1280);
   const vh = Math.max(1, vp?.height ?? 800);
+  const rw = Math.max(1, req?.width ?? vw);
+  const rh = Math.max(1, req?.height ?? vh);
   const surface = snap.emulation?.streamSurface ?? {
     width: vw,
-    height: vh + FALLBACK_BROWSER_CHROME,
+    height: vh + (snap.emulation?.browserChromeHeight ?? FALLBACK_BROWSER_CHROME),
   };
   const sw = Math.max(1, surface.width);
   const sh = Math.max(1, surface.height);
-  const fitted = fitStreamScale(box.w, box.h, sw, sh, { maxUpscale: 1.5 });
+  const isMobileFrame = Boolean(snap.emulation?.isMobile);
+  const fitted = fitStreamScale(box.w, box.h, sw, sh, {
+    maxUpscale: 1.5,
+    inset: isMobileFrame ? MOBILE_BEZEL_INSET_PX : 0,
+  });
+  const viewportLimited =
+    Boolean(snap.emulation?.viewportLimited) || vw !== rw || vh !== rh;
+  const viewportWarning =
+    snap.emulation?.viewportWarning ||
+    (viewportLimited ? `Viewport limited to ${vw} × ${vh} by the remote display` : null);
 
   useEffect(() => {
     console.info("[stream-fit]", {
@@ -149,7 +161,15 @@ export function RecordingView({
               label={deviceLabel}
               title={`Preset: ${snap.emulation?.devicePreset ?? ""}\nDPR: ${snap.emulation?.deviceScaleFactor ?? 1}\nUA: ${snap.emulation?.userAgent ?? "default"}`}
             />
-            <ConfigChip label={`${vw} × ${vh}`} title="Viewport CSS pixels" />
+            <ConfigChip
+              label={`${vw} × ${vh}`}
+              title={
+                viewportLimited
+                  ? `Actual viewport (requested ${rw} × ${rh})`
+                  : "Actual page viewport (CSS pixels)"
+              }
+            />
+            {viewportWarning && <ConfigChip label={viewportWarning} title={viewportWarning} danger />}
             <ConfigChip label={orientLabel} title={`Orientation: ${snap.emulation?.orientation ?? ""}`} />
             <ConfigChip
               label={netLabel}
@@ -229,13 +249,16 @@ export function RecordingView({
           {viewer && viewer.kind !== "local" ? (
             <div
               className={`flex items-center justify-center ${
-                snap.emulation?.isMobile ? "rounded-[28px] border-[3px] border-[#333] bg-[#111] p-1.5 shadow-lg" : ""
+                isMobileFrame
+                  ? "rounded-[28px] border-[3px] border-[#333] bg-[#111] p-[6px] shadow-lg"
+                  : ""
               }`}
+              style={isMobileFrame ? { boxSizing: "border-box" } : undefined}
             >
               <iframe
                 src={atlasUrl(viewer.url)}
                 allow="autoplay; clipboard-read; clipboard-write; fullscreen"
-                className="rounded-[10px] border border-[#E6E1F5] bg-black dark:border-[#2a2a2a]"
+                className="block rounded-[10px] border-0 bg-black"
                 style={{
                   width: fitted.width,
                   height: fitted.height,

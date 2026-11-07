@@ -71,9 +71,15 @@ export type Viewer = { kind: "neko"; url: string } | { kind: "vnc"; url: string 
 
 export type EmulationSummary = {
   devicePreset: string;
+  /** Actual page CSS viewport after setup. */
   viewport: { width: number; height: number };
+  /** Preset / requested viewport (chips warn when this differs from viewport). */
+  requestedViewport?: { width: number; height: number };
   /** Remote desktop size (viewport + browser chrome) — prefer for the stream iframe. */
   streamSurface?: { width: number; height: number };
+  browserChromeHeight?: number;
+  viewportLimited?: boolean;
+  viewportWarning?: string | null;
   networkPreset: string;
   isMobile: boolean;
   hasTouch?: boolean;

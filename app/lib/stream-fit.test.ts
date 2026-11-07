@@ -30,4 +30,11 @@ describe("fitStreamScale", () => {
     expect(r.scale).toBeCloseTo(400 / 390, 5);
     expect(r.scale).toBeLessThanOrEqual(1.5);
   });
+
+  it("reserves symmetrical bezel inset so the frame is not clipped", () => {
+    const plain = fitStreamScale(400, 900, 390, 844);
+    const withBezel = fitStreamScale(400, 900, 390, 844, { inset: 9 });
+    expect(withBezel.width).toBeLessThan(plain.width);
+    expect(withBezel.width + 18).toBeLessThanOrEqual(400);
+  });
 });

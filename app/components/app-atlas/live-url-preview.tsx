@@ -2,10 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { TbRefresh } from "react-icons/tb";
+import { isNearWhiteImage } from "@/app/lib/preview-image";
 import type { AtlasClient } from "@/app/services/appatlas";
 import type { Orientation } from "@/app/lib/session-emulation";
 
-type Status = "idle" | "loading" | "ready" | "error" | "offline";
+/** idle → loading (shimmer) → ok | error. offline is a separate idle-like gate. */
+type Status = "idle" | "loading" | "ok" | "error" | "offline";
 
 export function LiveUrlPreview({
   client,
@@ -56,6 +58,7 @@ export function LiveUrlPreview({
   };
 
   const mapError = (msg: string) => {
+    if (/blank|near-white|near white/i.test(msg)) return "Page rendered blank";
     if (/timeout|504/i.test(msg)) return "Timed out";
     if (/unavailable|503|not configured|Executable/i.test(msg)) return "Preview service unavailable";
     if (/unreachable|502|404|no application/i.test(msg)) return "Site unreachable";
@@ -69,6 +72,8 @@ export function LiveUrlPreview({
     }
     if (!hasSelection) {
       setStatus("idle");
+      setSrc(null);
+      clearBlob();
       return;
     }
     if (!appUrl) {
@@ -86,6 +91,8 @@ export function LiveUrlPreview({
     const id = ++reqRef.current;
     setStatus("loading");
     setError(null);
+    setSrc(null);
+    clearBlob();
     const body = {
       projectId,
       width,
@@ -99,11 +106,16 @@ export function LiveUrlPreview({
       const blob = await client.previewScreenshot(body);
       console.info("[preview] response", { status: 200, bytes: blob.size, type: blob.type });
       if (id !== reqRef.current) return;
-      clearBlob();
+      if (await isNearWhiteImage(blob)) {
+        console.info("[preview] near-white frame rejected");
+        setError("Page rendered blank");
+        setStatus("error");
+        return;
+      }
       const url = URL.createObjectURL(blob);
       blobRef.current = url;
       setSrc(url);
-      setStatus("ready");
+      setStatus("ok");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Site unreachable";
       const statusCode = err && typeof err === "object" && "status" in err ? (err as { status: number }).status : "?";
@@ -142,7 +154,10 @@ export function LiveUrlPreview({
         <Placeholder host={host} title="Offline" body="Live preview is disabled for the Offline profile." />
       )}
       {status === "loading" && (
-        <div className="absolute inset-0 animate-pulse bg-gradient-to-br from-[#E5E7EB] via-[#F3F4F6] to-[#E5E7EB] dark:from-[#1a1a1a] dark:via-[#141414] dark:to-[#1a1a1a]">
+        <div
+          className="absolute inset-0 animate-pulse bg-gradient-to-br from-[#E5E7EB] via-[#F3F4F6] to-[#E5E7EB] dark:from-[#1a1a1a] dark:via-[#141414] dark:to-[#1a1a1a]"
+          data-preview-shimmer="true"
+        >
           <div className="flex h-full flex-col items-center justify-center gap-2 text-[12px] text-[#5E6066]">
             {host && <span className="font-medium text-[#1F1F1F] dark:text-[#ededed]">{host}</span>}
             <span>Loading preview…</span>
@@ -153,11 +168,11 @@ export function LiveUrlPreview({
         <Placeholder
           host={host}
           title={error || "Site unreachable"}
-          body="Could not render the project URL."
+          body={error === "Page rendered blank" ? "The page painted a blank frame." : "Could not render the project URL."}
           action={{ label: "Retry", onClick: () => void load() }}
         />
       )}
-      {status === "ready" && src && (
+      {status === "ok" && src && (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={src} alt="" className="h-full w-full object-cover object-top" />
       )}
