@@ -604,6 +604,8 @@ export default function AtlasWorkspace() {
       {setupOpen && (
         <SessionSetupModal
           appUrl={setupUrl || appUrl}
+          projectId={project?.id ?? projectId}
+          canvasId={selectedId}
           loadConfig={() => client.getConfig()}
           starting={starting}
           onStart={(prefs) => void startSessionWithPrefs(prefs)}
