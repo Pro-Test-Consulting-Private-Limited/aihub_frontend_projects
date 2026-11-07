@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   TbDeviceDesktop,
   TbDeviceMobile,
   TbDeviceTablet,
+  TbDots,
   TbMaximize,
   TbAntennaBars1,
   TbAntennaBars2,
@@ -20,7 +21,6 @@ import {
 import type { AtlasConfig } from "@/app/interfaces/appatlas";
 import {
   BREAKPOINT_CHIPS,
-  DEFAULT_EMULATION_PREFS,
   DEVICE_CATALOG,
   NETWORK_CATALOG,
   VIEWPORT,
@@ -35,20 +35,37 @@ import {
   selectDevicePreset,
   setCustomSize,
   setOrientation,
-  snapWidth,
   summaryLine,
   type DeviceCategory,
   type Orientation,
   type SessionEmulationPrefs,
 } from "@/app/lib/session-emulation";
+import {
+  USER_PRESET_MAX,
+  applyUserPreset,
+  devicePayloadFromPrefs,
+  loadPresetCache,
+  nameTaken,
+  networkPayloadFromPrefs,
+  resolveResetPrefs,
+  savePresetCache,
+  setupPayloadFromPrefs,
+  type PresetKind,
+  type UserRecordingPreset,
+} from "@/app/lib/user-recording-presets";
+import type { AtlasClient } from "@/app/services/appatlas";
+import { DevicePreviewFrame } from "./device-preview-frame";
 import { fieldInput, fieldLabel, outlineButton, primaryButton } from "./modal";
 
-const CATEGORIES: { id: DeviceCategory | "recent"; label: string }[] = [
+type CategoryTab = DeviceCategory | "recent" | "mine";
+
+const CATEGORIES: { id: CategoryTab; label: string }[] = [
   { id: "recent", label: "Recent" },
   { id: "phone", label: "Phone" },
   { id: "tablet", label: "Tablet" },
   { id: "laptop", label: "Laptop / Desktop" },
   { id: "custom", label: "Custom" },
+  { id: "mine", label: "My presets" },
 ];
 
 const motionOk = () =>
@@ -107,10 +124,157 @@ const cardIdle =
 const cardSelected =
   "border-[#8664F2] bg-[#F5F0FF] shadow-[0_0_0_1px_#8664F2] dark:border-[#8664F2] dark:bg-[#1a1430]";
 
+function InlineSaveName({
+  kind,
+  disabled,
+  onSave,
+  onCancel,
+}: {
+  kind: PresetKind;
+  disabled?: boolean;
+  onSave: (name: string) => void | Promise<void>;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    ref.current?.focus();
+  }, []);
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-2">
+      <input
+        ref={ref}
+        type="text"
+        maxLength={64}
+        placeholder={`Name this ${kind}…`}
+        className={`${fieldInput} !mt-0 max-w-[220px] !py-1.5 text-[12.5px]`}
+        value={name}
+        disabled={disabled}
+        onChange={(e) => {
+          setName(e.target.value);
+          setErr(null);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            e.preventDefault();
+            onCancel();
+          }
+          if (e.key === "Enter") {
+            e.preventDefault();
+            const trimmed = name.trim();
+            if (!trimmed) {
+              setErr("Enter a name");
+              return;
+            }
+            void Promise.resolve(onSave(trimmed)).catch((ex) =>
+              setErr(ex instanceof Error ? ex.message : "Could not save"),
+            );
+          }
+        }}
+        aria-label={`Preset name for ${kind}`}
+      />
+      <button
+        type="button"
+        className="text-[12px] font-medium text-[#8664F2]"
+        disabled={disabled}
+        onClick={() => {
+          const trimmed = name.trim();
+          if (!trimmed) {
+            setErr("Enter a name");
+            return;
+          }
+          void Promise.resolve(onSave(trimmed)).catch((ex) =>
+            setErr(ex instanceof Error ? ex.message : "Could not save"),
+          );
+        }}
+      >
+        Save
+      </button>
+      <button type="button" className="text-[12px] text-[#7E7E7E]" disabled={disabled} onClick={onCancel}>
+        Cancel
+      </button>
+      {err && <span className="w-full text-[11px] text-[#B91C1C]">{err}</span>}
+    </div>
+  );
+}
+
+function PresetMenu({
+  disabled,
+  onRename,
+  onDelete,
+  onDefault,
+}: {
+  disabled?: boolean;
+  onRename: () => void;
+  onDelete: () => void;
+  onDefault: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative shrink-0">
+      <button
+        type="button"
+        disabled={disabled}
+        aria-label="Preset actions"
+        className="rounded p-0.5 text-[#7E7E7E] opacity-0 transition-opacity hover:bg-[#F3F4F6] hover:text-[#8664F2] group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8664F2] dark:hover:bg-[#1a1a1a]"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+      >
+        <TbDots size={14} />
+      </button>
+      {open && (
+        <>
+          <button type="button" className="fixed inset-0 z-10 cursor-default" aria-label="Close menu" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 z-20 mt-1 min-w-[140px] rounded-[8px] border border-[#E5E7EB] bg-white py-1 text-[12px] shadow-lg dark:border-[#2a2a2a] dark:bg-[#141414]">
+            <button
+              type="button"
+              className="block w-full px-3 py-1.5 text-left hover:bg-[#F5F0FF] dark:hover:bg-[#1a1430]"
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpen(false);
+                onDefault();
+              }}
+            >
+              Set as my default
+            </button>
+            <button
+              type="button"
+              className="block w-full px-3 py-1.5 text-left hover:bg-[#F5F0FF] dark:hover:bg-[#1a1430]"
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpen(false);
+                onRename();
+              }}
+            >
+              Rename
+            </button>
+            <button
+              type="button"
+              className="block w-full px-3 py-1.5 text-left text-[#B91C1C] hover:bg-[#FEF2F2]"
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpen(false);
+                onDelete();
+              }}
+            >
+              Delete
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function SessionSetupModal({
   appUrl,
   projectId,
   canvasId,
+  userId,
+  client,
   loadConfig,
   starting,
   onStart,
@@ -119,6 +283,8 @@ export function SessionSetupModal({
   appUrl: string;
   projectId?: string | null;
   canvasId?: string | null;
+  userId: string;
+  client: AtlasClient;
   loadConfig: () => Promise<AtlasConfig>;
   starting: boolean;
   onStart: (prefs: SessionEmulationPrefs) => void;
@@ -127,7 +293,7 @@ export function SessionSetupModal({
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
   const [prefs, setPrefs] = useState<SessionEmulationPrefs>(() => loadEmulationPrefs(projectId));
-  const [category, setCategory] = useState<DeviceCategory | "recent">(() => {
+  const [category, setCategory] = useState<CategoryTab>(() => {
     const d = deviceById(loadEmulationPrefs(projectId).devicePreset);
     return d?.category ?? "laptop";
   });
@@ -137,20 +303,48 @@ export function SessionSetupModal({
   const [recent, setRecent] = useState<string[]>([]);
   const [previousViewport, setPreviousViewport] = useState<{ width: number; height: number } | null>(null);
   const [rotating, setRotating] = useState(false);
-  const dragRef = useRef<{ startX: number; startW: number; startH: number; shift: boolean } | null>(null);
+  const [presets, setPresets] = useState<UserRecordingPreset[]>(() => loadPresetCache(userId));
+  const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
+  const [savingKind, setSavingKind] = useState<PresetKind | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [presetMsg, setPresetMsg] = useState<string | null>(null);
+
+  const syncPresets = useCallback(
+    (items: UserRecordingPreset[]) => {
+      setPresets(items);
+      savePresetCache(userId, items);
+    },
+    [userId],
+  );
 
   useEffect(() => {
     setPrefs(loadEmulationPrefs(projectId));
     setRecent(loadRecentDevices());
     setPreviousViewport(loadCanvasViewport(canvasId));
-  }, [projectId, canvasId]);
+    setPresets(loadPresetCache(userId));
+  }, [projectId, canvasId, userId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    client
+      .listRecordingPresets()
+      .then((items) => {
+        if (!cancelled) syncPresets(items);
+      })
+      .catch(() => {
+        /* offline / no DB — keep localStorage cache */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, syncPresets]);
 
   useEffect(() => {
     let cancelled = false;
     loadConfig()
       .then((cfg) => {
         if (cancelled) return;
-        // Config currently only returns id/label; catalog sizes stay local (same as BE resolve).
         if (!cfg.presets?.devices?.length) setConfigError("Using built-in device list.");
       })
       .catch((err) => {
@@ -161,7 +355,6 @@ export function SessionSetupModal({
     };
   }, [loadConfig]);
 
-  // Focus trap + Esc
   useEffect(() => {
     const root = dialogRef.current;
     if (!root) return;
@@ -177,6 +370,11 @@ export function SessionSetupModal({
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && !starting) {
+        if (savingKind || renamingId) {
+          setSavingKind(null);
+          setRenamingId(null);
+          return;
+        }
         e.preventDefault();
         onClose();
         return;
@@ -195,7 +393,11 @@ export function SessionSetupModal({
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose, starting]);
+  }, [onClose, starting, savingKind, renamingId]);
+
+  const myDevicePresets = useMemo(() => presets.filter((p) => p.kind === "device"), [presets]);
+  const myNetworkPresets = useMemo(() => presets.filter((p) => p.kind === "network"), [presets]);
+  const mySetupPresets = useMemo(() => presets.filter((p) => p.kind === "setup"), [presets]);
 
   const devicesInTab = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -203,6 +405,8 @@ export function SessionSetupModal({
     if (category === "recent") {
       const ids = recent.length ? recent : ["desktop", "iphone-14", "pixel-7"];
       list = ids.map((id) => deviceById(id)).filter(Boolean) as typeof DEVICE_CATALOG;
+    } else if (category === "mine") {
+      list = [];
     } else {
       list = DEVICE_CATALOG.filter((d) => d.category === category);
     }
@@ -213,9 +417,11 @@ export function SessionSetupModal({
   const entry = deviceById(prefs.devicePreset);
   const isCustom = prefs.devicePreset === "custom" || deviceEdit;
   const dpr = entry?.dpr ?? 1;
+  const atLimit = presets.length >= USER_PRESET_MAX;
 
   const patchNetwork = (networkPreset: string) => {
     const net = networkById(networkPreset);
+    setSelectedPresetId(null);
     setPrefs((p) =>
       normalizePrefs({
         ...p,
@@ -228,10 +434,18 @@ export function SessionSetupModal({
   };
 
   const chooseDevice = (id: string) => {
+    setSelectedPresetId(null);
     setDeviceEdit(id === "custom");
     setPrefs((p) => selectDevicePreset(p, id));
     const d = deviceById(id);
     if (d && d.category !== "custom") setCategory(d.category);
+  };
+
+  const chooseUserPreset = (preset: UserRecordingPreset) => {
+    setSelectedPresetId(preset.id);
+    setDeviceEdit(preset.kind !== "network");
+    setPrefs((p) => applyUserPreset(p, preset));
+    if (preset.kind === "device" || preset.kind === "setup") setCategory("mine");
   };
 
   const onOrient = (orientation: Orientation) => {
@@ -239,45 +453,109 @@ export function SessionSetupModal({
       setRotating(true);
       window.setTimeout(() => setRotating(false), 180);
     }
+    setSelectedPresetId(null);
     setPrefs((p) => setOrientation(p, orientation));
   };
 
   const onWidthHeight = (width: number, height: number) => {
+    setSelectedPresetId(null);
     setDeviceEdit(true);
     setPrefs((p) => setCustomSize(p, width, height));
   };
 
-  const onResizePointerDown = (e: React.PointerEvent) => {
-    if (!isCustom || starting) return;
-    e.preventDefault();
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    dragRef.current = {
-      startX: e.clientX,
-      startW: prefs.width,
-      startH: prefs.height,
-      shift: e.shiftKey,
-    };
+  const createPreset = async (kind: PresetKind, name: string) => {
+    if (atLimit) {
+      setPresetMsg(`You can save up to ${USER_PRESET_MAX} presets. Delete one to add another.`);
+      return;
+    }
+    if (nameTaken(presets, kind, name)) {
+      throw new Error(`A ${kind} preset named “${name}” already exists`);
+    }
+    const payload =
+      kind === "device"
+        ? devicePayloadFromPrefs(prefs)
+        : kind === "network"
+          ? networkPayloadFromPrefs(prefs)
+          : setupPayloadFromPrefs(prefs);
+    try {
+      const created = await client.createRecordingPreset({ kind, name, payload });
+      syncPresets([...presets, created]);
+      setSelectedPresetId(created.id);
+      setSavingKind(null);
+      setPresetMsg(null);
+      if (kind === "device") setCategory("mine");
+    } catch (err) {
+      // Fallback: local-only cache when API unavailable
+      if (err instanceof Error && /fetch|Network|503|Failed/i.test(err.message)) {
+        const local: UserRecordingPreset = {
+          id: `local-${Date.now()}`,
+          kind,
+          name,
+          payload,
+          isDefault: false,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        syncPresets([...presets, local]);
+        setSelectedPresetId(local.id);
+        setSavingKind(null);
+        setPresetMsg("Saved locally (server unavailable).");
+        return;
+      }
+      throw err;
+    }
   };
 
-  const onResizePointerMove = (e: React.PointerEvent) => {
-    const drag = dragRef.current;
-    if (!drag) return;
-    const dx = e.clientX - drag.startX;
-    const scale = 2.2;
-    let nextW = drag.startW + dx * scale;
-    if (!drag.shift && !e.shiftKey) nextW = snapWidth(nextW);
-    const ratio = drag.startH / drag.startW;
-    const nextH = nextW * ratio;
-    onWidthHeight(nextW, nextH);
+  const renamePreset = async (id: string, name: string) => {
+    const cur = presets.find((p) => p.id === id);
+    if (!cur) return;
+    if (nameTaken(presets, cur.kind, name, id)) throw new Error(`A ${cur.kind} preset named “${name}” already exists`);
+    try {
+      const updated = await client.updateRecordingPreset(id, { name });
+      syncPresets(presets.map((p) => (p.id === id ? updated : p)));
+    } catch {
+      syncPresets(presets.map((p) => (p.id === id ? { ...p, name, updatedAt: new Date().toISOString() } : p)));
+    }
+    setRenamingId(null);
   };
 
-  const onResizePointerUp = () => {
-    dragRef.current = null;
+  const deletePreset = async (id: string) => {
+    if (!window.confirm("Delete this preset?")) return;
+    try {
+      await client.deleteRecordingPreset(id);
+    } catch {
+      /* local fallback */
+    }
+    syncPresets(presets.filter((p) => p.id !== id));
+    if (selectedPresetId === id) setSelectedPresetId(null);
+  };
+
+  const setDefaultPreset = async (id: string) => {
+    try {
+      const updated = await client.setRecordingPresetDefault(id);
+      syncPresets(
+        presets.map((p) =>
+          p.kind === updated.kind ? { ...p, isDefault: p.id === id } : p,
+        ),
+      );
+    } catch {
+      const cur = presets.find((p) => p.id === id);
+      if (!cur) return;
+      syncPresets(
+        presets.map((p) => (p.kind === cur.kind ? { ...p, isDefault: p.id === id } : p)),
+      );
+    }
+    setPresetMsg("Default updated.");
   };
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    const next = normalizePrefs(prefs);
+    let next = normalizePrefs(prefs);
+    if (selectedPresetId) {
+      const preset = presets.find((p) => p.id === selectedPresetId);
+      if (preset) next = applyUserPreset(next, preset);
+    }
+    next = normalizePrefs(next);
     saveEmulationPrefs(next, projectId);
     rememberCanvasViewport(canvasId, next.width, next.height);
     setRecent(loadRecentDevices());
@@ -286,22 +564,15 @@ export function SessionSetupModal({
 
   const reset = () => {
     setDeviceEdit(false);
-    setPrefs(normalizePrefs(DEFAULT_EMULATION_PREFS));
-    setCategory("laptop");
+    setSelectedPresetId(null);
+    setPrefs(resolveResetPrefs(presets));
+    const d = deviceById(resolveResetPrefs(presets).devicePreset);
+    setCategory(d?.category === "custom" ? "mine" : d?.category ?? "laptop");
   };
 
   const showPrevNote =
     previousViewport &&
     (previousViewport.width !== prefs.width || previousViewport.height !== prefs.height);
-
-  const previewMax = 280;
-  const aspect = prefs.width / Math.max(prefs.height, 1);
-  let frameW = previewMax;
-  let frameH = previewMax / aspect;
-  if (frameH > previewMax) {
-    frameH = previewMax;
-    frameW = previewMax * aspect;
-  }
 
   const frameKind: DeviceCategory = entry?.category ?? "custom";
 
@@ -336,7 +607,7 @@ export function SessionSetupModal({
         <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
           <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 sm:px-7">
             <p className="text-[12.5px] text-[#5E6066] dark:text-[#9ca3af]">
-              Device and network for this session. Saved for the next Run.
+              Device and network for this session. Saved for the next Run. Presets follow your account.
             </p>
             <p className="mt-1 truncate font-mono text-[11.5px] text-[#7E7E7E]" title={appUrl}>
               {appUrl || "No application URL"}
@@ -346,9 +617,16 @@ export function SessionSetupModal({
                 Previous recordings on this canvas used {previousViewport!.width} × {previousViewport!.height}.
               </p>
             )}
+            {presetMsg && (
+              <p className="mt-2 text-[12px] text-[#5E6066] dark:text-[#9ca3af]">{presetMsg}</p>
+            )}
+            {atLimit && (
+              <p className="mt-2 rounded-[8px] border border-[#FCD34D] bg-[#FFFBEB] px-2.5 py-1.5 text-[12px] text-[#92400E]">
+                You have {USER_PRESET_MAX} presets (the limit). Delete one to save another.
+              </p>
+            )}
 
             <div className="mt-4 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
-              {/* Left: controls */}
               <div className="min-w-0 space-y-5">
                 <section>
                   <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -363,11 +641,7 @@ export function SessionSetupModal({
                       disabled={starting}
                     />
                   </div>
-                  <div
-                    role="tablist"
-                    aria-label="Device category"
-                    className="mb-2 flex flex-wrap gap-1"
-                  >
+                  <div role="tablist" aria-label="Device category" className="mb-2 flex flex-wrap gap-1">
                     {CATEGORIES.map((c) => (
                       <button
                         key={c.id}
@@ -386,38 +660,97 @@ export function SessionSetupModal({
                       </button>
                     ))}
                   </div>
-                  <div
-                    role="listbox"
-                    aria-label="Device presets"
-                    className="grid grid-cols-2 gap-2 sm:grid-cols-3"
-                  >
-                    {devicesInTab.map((d) => {
-                      const selected = prefs.devicePreset === d.id && !deviceEdit;
-                      return (
-                        <button
-                          key={d.id}
-                          type="button"
-                          role="option"
-                          aria-selected={selected}
-                          disabled={starting}
-                          onClick={() => chooseDevice(d.id)}
-                          className={`${cardBase} ${selected ? cardSelected : cardIdle}`}
-                        >
-                          <div className="flex items-start gap-2">
-                            <DeviceIcon category={d.category} className="mt-0.5 shrink-0 text-[#8664F2]" />
-                            <div className="min-w-0">
-                              <div className="truncate text-[12.5px] font-medium text-[#1F1F1F] dark:text-[#ededed]">
-                                {d.label}
+                  <div role="listbox" aria-label="Device presets" className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {category === "mine"
+                      ? myDevicePresets
+                          .filter((p) => {
+                            const q = search.trim().toLowerCase();
+                            return !q || p.name.toLowerCase().includes(q);
+                          })
+                          .map((p) => {
+                            const d = p.payload as { width: number; height: number };
+                            const selected = selectedPresetId === p.id;
+                            return (
+                              <div key={p.id} className={`group relative ${cardBase} ${selected ? cardSelected : cardIdle}`}>
+                                <button
+                                  type="button"
+                                  role="option"
+                                  aria-selected={selected}
+                                  disabled={starting}
+                                  className="w-full text-left"
+                                  onClick={() => chooseUserPreset(p)}
+                                >
+                                  <div className="truncate text-[12.5px] font-medium text-[#1F1F1F] dark:text-[#ededed]">
+                                    {p.name}
+                                    {p.isDefault ? " · default" : ""}
+                                  </div>
+                                  <div className="font-mono text-[10.5px] text-[#7E7E7E]">
+                                    {d.width} × {d.height}
+                                  </div>
+                                </button>
+                                {renamingId === p.id ? (
+                                  <input
+                                    autoFocus
+                                    className={`${fieldInput} !mt-1 !py-1 text-[12px]`}
+                                    value={renameValue}
+                                    onChange={(e) => setRenameValue(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Escape") setRenamingId(null);
+                                      if (e.key === "Enter") void renamePreset(p.id, renameValue.trim());
+                                    }}
+                                    onBlur={() => {
+                                      if (renameValue.trim()) void renamePreset(p.id, renameValue.trim());
+                                      else setRenamingId(null);
+                                    }}
+                                  />
+                                ) : (
+                                  <div className="absolute right-1 top-1">
+                                    <PresetMenu
+                                      disabled={starting}
+                                      onRename={() => {
+                                        setRenamingId(p.id);
+                                        setRenameValue(p.name);
+                                      }}
+                                      onDelete={() => void deletePreset(p.id)}
+                                      onDefault={() => void setDefaultPreset(p.id)}
+                                    />
+                                  </div>
+                                )}
                               </div>
-                              <div className="font-mono text-[10.5px] text-[#7E7E7E]">
-                                {d.width} × {d.height}
+                            );
+                          })
+                      : devicesInTab.map((d) => {
+                          const selected = prefs.devicePreset === d.id && !deviceEdit && !selectedPresetId;
+                          const sizeLabel =
+                            d.id === "custom" ? `${prefs.width} × ${prefs.height}` : `${d.width} × ${d.height}`;
+                          return (
+                            <button
+                              key={d.id}
+                              type="button"
+                              role="option"
+                              aria-selected={selected}
+                              disabled={starting}
+                              onClick={() => chooseDevice(d.id)}
+                              className={`${cardBase} ${selected || (d.id === "custom" && isCustom && !selectedPresetId) ? cardSelected : cardIdle}`}
+                            >
+                              <div className="flex items-start gap-2">
+                                <DeviceIcon category={d.category} className="mt-0.5 shrink-0 text-[#8664F2]" />
+                                <div className="min-w-0">
+                                  <div className="truncate text-[12.5px] font-medium text-[#1F1F1F] dark:text-[#ededed]">
+                                    {d.label}
+                                  </div>
+                                  <div className="font-mono text-[10.5px] text-[#7E7E7E]">{sizeLabel}</div>
+                                </div>
                               </div>
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })}
-                    {devicesInTab.length === 0 && (
+                            </button>
+                          );
+                        })}
+                    {category === "mine" && myDevicePresets.length === 0 && (
+                      <p className="col-span-full text-[12px] text-[#7E7E7E]">
+                        No saved device presets yet. Customize a size and use Save as preset.
+                      </p>
+                    )}
+                    {category !== "mine" && devicesInTab.length === 0 && (
                       <p className="col-span-full text-[12px] text-[#7E7E7E]">No presets match.</p>
                     )}
                   </div>
@@ -498,9 +831,26 @@ export function SessionSetupModal({
                           </button>
                         ))}
                       </div>
+                      {savingKind === "device" ? (
+                        <InlineSaveName
+                          kind="device"
+                          disabled={starting}
+                          onCancel={() => setSavingKind(null)}
+                          onSave={(name) => createPreset("device", name)}
+                        />
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={starting || atLimit}
+                          className="text-[12px] font-medium text-[#8664F2] underline-offset-2 hover:underline disabled:opacity-50"
+                          onClick={() => setSavingKind("device")}
+                        >
+                          Save as preset
+                        </button>
+                      )}
                       <p className="text-[11px] text-[#7E7E7E]">
                         Clamped {VIEWPORT.widthMin}–{VIEWPORT.widthMax} × {VIEWPORT.heightMin}–{VIEWPORT.heightMax}. Drag
-                        the preview corner to resize (Shift = no snap).
+                        preview edges/corner to resize (Shift = free, no snap).
                       </p>
                     </div>
                   )}
@@ -542,7 +892,7 @@ export function SessionSetupModal({
                   <span className="text-[14px] font-medium text-[#1F1F1F] dark:text-[#ededed]">Network</span>
                   <div role="listbox" aria-label="Network profile" className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
                     {NETWORK_CATALOG.map((n) => {
-                      const selected = prefs.networkPreset === n.id;
+                      const selected = prefs.networkPreset === n.id && !selectedPresetId;
                       return (
                         <button
                           key={n.id}
@@ -572,6 +922,63 @@ export function SessionSetupModal({
                     })}
                   </div>
 
+                  {(myNetworkPresets.length > 0 || mySetupPresets.length > 0) && (
+                    <div className="mt-3">
+                      <div className="mb-1.5 text-[12px] font-medium text-[#5E6066] dark:text-[#9ca3af]">
+                        My profiles
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {[...myNetworkPresets, ...mySetupPresets].map((p) => (
+                          <div
+                            key={p.id}
+                            className={`group relative inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11.5px] ${
+                              selectedPresetId === p.id
+                                ? "border-[#8664F2] bg-[#F5F0FF] text-[#8664F2]"
+                                : "border-[#E5E7EB] bg-white text-[#5E6066] dark:border-[#2a2a2a] dark:bg-[#0a0a0a]"
+                            }`}
+                          >
+                            <button
+                              type="button"
+                              disabled={starting}
+                              onClick={() => chooseUserPreset(p)}
+                              className="max-w-[140px] truncate"
+                            >
+                              {p.name}
+                              {p.kind === "setup" ? " · setup" : ""}
+                              {p.isDefault ? " ★" : ""}
+                            </button>
+                            <PresetMenu
+                              disabled={starting}
+                              onRename={() => {
+                                setRenamingId(p.id);
+                                setRenameValue(p.name);
+                              }}
+                              onDelete={() => void deletePreset(p.id)}
+                              onDefault={() => void setDefaultPreset(p.id)}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                      {renamingId &&
+                        [...myNetworkPresets, ...mySetupPresets].some((p) => p.id === renamingId) && (
+                          <input
+                            autoFocus
+                            className={`${fieldInput} mt-2 max-w-[220px] !py-1 text-[12px]`}
+                            value={renameValue}
+                            onChange={(e) => setRenameValue(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Escape") setRenamingId(null);
+                              if (e.key === "Enter") void renamePreset(renamingId, renameValue.trim());
+                            }}
+                            onBlur={() => {
+                              if (renameValue.trim()) void renamePreset(renamingId, renameValue.trim());
+                              else setRenamingId(null);
+                            }}
+                          />
+                        )}
+                    </div>
+                  )}
+
                   {prefs.networkPreset === "offline" && (
                     <p className="mt-2 rounded-[8px] border border-[#FCD34D] bg-[#FFFBEB] px-2.5 py-1.5 text-[12px] text-[#92400E] dark:border-[#854d0e] dark:bg-[#1c1408] dark:text-[#FCD34D]">
                       Pages will not load while offline. Use it only to record offline behaviour.
@@ -579,122 +986,117 @@ export function SessionSetupModal({
                   )}
 
                   {prefs.networkPreset === "custom" && (
-                    <div className="mt-2 grid grid-cols-3 gap-2">
-                      <div>
-                        <label className={fieldLabel} htmlFor="down-kbps">
-                          Down (kbps)
-                        </label>
-                        <input
-                          id="down-kbps"
-                          type="number"
-                          min={0}
-                          max={100000}
-                          className={fieldInput}
-                          value={prefs.downloadKbps}
-                          onChange={(e) =>
-                            setPrefs((p) => normalizePrefs({ ...p, downloadKbps: Number(e.target.value) || 0 }))
-                          }
-                          disabled={starting}
-                        />
+                    <div className="mt-2 space-y-2">
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <label className={fieldLabel} htmlFor="down-kbps">
+                            Down (kbps)
+                          </label>
+                          <input
+                            id="down-kbps"
+                            type="number"
+                            min={0}
+                            max={100000}
+                            className={fieldInput}
+                            value={prefs.downloadKbps}
+                            onChange={(e) =>
+                              setPrefs((p) => normalizePrefs({ ...p, downloadKbps: Number(e.target.value) || 0 }))
+                            }
+                            disabled={starting}
+                          />
+                        </div>
+                        <div>
+                          <label className={fieldLabel} htmlFor="up-kbps">
+                            Up (kbps)
+                          </label>
+                          <input
+                            id="up-kbps"
+                            type="number"
+                            min={0}
+                            max={100000}
+                            className={fieldInput}
+                            value={prefs.uploadKbps}
+                            onChange={(e) =>
+                              setPrefs((p) => normalizePrefs({ ...p, uploadKbps: Number(e.target.value) || 0 }))
+                            }
+                            disabled={starting}
+                          />
+                        </div>
+                        <div>
+                          <label className={fieldLabel} htmlFor="latency">
+                            Latency (ms)
+                          </label>
+                          <input
+                            id="latency"
+                            type="number"
+                            min={0}
+                            max={60000}
+                            className={fieldInput}
+                            value={prefs.latencyMs}
+                            onChange={(e) =>
+                              setPrefs((p) => normalizePrefs({ ...p, latencyMs: Number(e.target.value) || 0 }))
+                            }
+                            disabled={starting}
+                          />
+                        </div>
                       </div>
-                      <div>
-                        <label className={fieldLabel} htmlFor="up-kbps">
-                          Up (kbps)
-                        </label>
-                        <input
-                          id="up-kbps"
-                          type="number"
-                          min={0}
-                          max={100000}
-                          className={fieldInput}
-                          value={prefs.uploadKbps}
-                          onChange={(e) =>
-                            setPrefs((p) => normalizePrefs({ ...p, uploadKbps: Number(e.target.value) || 0 }))
-                          }
+                      {savingKind === "network" ? (
+                        <InlineSaveName
+                          kind="network"
                           disabled={starting}
+                          onCancel={() => setSavingKind(null)}
+                          onSave={(name) => createPreset("network", name)}
                         />
-                      </div>
-                      <div>
-                        <label className={fieldLabel} htmlFor="latency">
-                          Latency (ms)
-                        </label>
-                        <input
-                          id="latency"
-                          type="number"
-                          min={0}
-                          max={60000}
-                          className={fieldInput}
-                          value={prefs.latencyMs}
-                          onChange={(e) =>
-                            setPrefs((p) => normalizePrefs({ ...p, latencyMs: Number(e.target.value) || 0 }))
-                          }
-                          disabled={starting}
-                        />
-                      </div>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={starting || atLimit}
+                          className="text-[12px] font-medium text-[#8664F2] underline-offset-2 hover:underline disabled:opacity-50"
+                          onClick={() => setSavingKind("network")}
+                        >
+                          Save as preset
+                        </button>
+                      )}
                     </div>
                   )}
+
+                  <div className="mt-3">
+                    {savingKind === "setup" ? (
+                      <InlineSaveName
+                        kind="setup"
+                        disabled={starting}
+                        onCancel={() => setSavingKind(null)}
+                        onSave={(name) => createPreset("setup", name)}
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={starting || atLimit}
+                        className="text-[12px] font-medium text-[#8664F2] underline-offset-2 hover:underline disabled:opacity-50"
+                        onClick={() => setSavingKind("setup")}
+                      >
+                        Save current setup
+                      </button>
+                    )}
+                  </div>
                 </section>
 
                 {configError && <p className="text-[12px] text-[#B45309]">{configError}</p>}
               </div>
 
-              {/* Right: live preview */}
-              <div className="flex min-h-[300px] flex-col items-center justify-center rounded-[12px] border border-[#E5E7EB] bg-[#F7F7FA] p-4 dark:border-[#2a2a2a] dark:bg-[#0a0a0a]">
-                <div
-                  className={`relative bg-[#111] text-white shadow-lg transition-transform duration-150 ease-out dark:bg-[#000] ${
-                    rotating && motionOk() ? "scale-[0.97]" : "scale-100"
-                  } ${
-                    frameKind === "phone"
-                      ? "rounded-[28px] border-[3px] border-[#333]"
-                      : frameKind === "tablet"
-                        ? "rounded-[16px] border-2 border-[#444]"
-                        : frameKind === "laptop"
-                          ? "rounded-t-[8px] border border-[#555]"
-                          : "rounded-[8px] border-2 border-dashed border-[#8664F2]"
-                  }`}
-                  style={{ width: frameW, height: frameH }}
-                >
-                  {frameKind === "phone" && (
-                    <div className="absolute left-1/2 top-1.5 h-1.5 w-14 -translate-x-1/2 rounded-full bg-[#222]" aria-hidden />
-                  )}
-                  <div className="flex h-full flex-col items-center justify-center gap-1 p-3 text-center">
-                    <div className="font-mono text-[12px] font-semibold tracking-wide">
-                      {prefs.width} × {prefs.height}
-                    </div>
-                    <div className="text-[11px] text-white/70">
-                      {prefs.orientation === "portrait" ? "Portrait" : "Landscape"}
-                      {dpr !== 1 ? ` · ${dpr}× DPR` : ""}
-                    </div>
-                  </div>
-                  {isCustom && (
-                    <div
-                      role="slider"
-                      aria-label="Resize custom viewport"
-                      aria-valuemin={VIEWPORT.widthMin}
-                      aria-valuemax={VIEWPORT.widthMax}
-                      aria-valuenow={prefs.width}
-                      tabIndex={0}
-                      className="absolute bottom-0 right-0 h-4 w-4 cursor-se-resize rounded-tl bg-[#8664F2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
-                      onPointerDown={onResizePointerDown}
-                      onPointerMove={onResizePointerMove}
-                      onPointerUp={onResizePointerUp}
-                      onPointerCancel={onResizePointerUp}
-                      onKeyDown={(e) => {
-                        if (e.key === "ArrowRight" || e.key === "ArrowUp") {
-                          e.preventDefault();
-                          onWidthHeight(prefs.width + (e.shiftKey ? 1 : 10), prefs.height + (e.shiftKey ? 1 : 10));
-                        }
-                        if (e.key === "ArrowLeft" || e.key === "ArrowDown") {
-                          e.preventDefault();
-                          onWidthHeight(prefs.width - (e.shiftKey ? 1 : 10), prefs.height - (e.shiftKey ? 1 : 10));
-                        }
-                      }}
-                    />
-                  )}
-                </div>
-                {frameKind === "laptop" && (
-                  <div className="h-2 w-[min(100%,calc(100%+24px))] rounded-b-[6px] bg-[#333]" aria-hidden />
-                )}
+              <div className="flex min-h-[360px] flex-col">
+                <DevicePreviewFrame
+                  width={prefs.width}
+                  height={prefs.height}
+                  orientation={prefs.orientation}
+                  dpr={dpr}
+                  frameKind={isCustom ? "custom" : frameKind}
+                  editable={isCustom}
+                  disabled={starting}
+                  rotating={rotating}
+                  motionOk={motionOk()}
+                  onSizeChange={onWidthHeight}
+                />
                 <p className="mt-3 max-w-full truncate text-center text-[12px] text-[#5E6066] dark:text-[#9ca3af]">
                   {summaryLine(prefs)}
                 </p>
@@ -702,7 +1104,6 @@ export function SessionSetupModal({
             </div>
           </div>
 
-          {/* Sticky footer — outside scroll so dropdowns never cover it */}
           <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-[#D9D9D9] bg-white px-5 py-3.5 dark:border-[#2a2a2a] dark:bg-[#141414] sm:px-7">
             <button
               type="button"

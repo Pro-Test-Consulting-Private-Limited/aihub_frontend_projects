@@ -17,6 +17,15 @@ import type {
   TicketNote,
 } from "@/app/interfaces/appatlas";
 import type { StartSessionOptions } from "@/app/lib/session-emulation";
+import type {
+  DevicePresetPayload,
+  NetworkPresetPayload,
+  PresetKind,
+  SetupPresetPayload,
+  UserRecordingPreset,
+} from "@/app/lib/user-recording-presets";
+
+type PresetPayload = DevicePresetPayload | NetworkPresetPayload | SetupPresetPayload;
 
 const BUILD_APPATLAS_API = (
   process.env.NEXT_PUBLIC_APPATLAS_API || "https://ai-hub.protestcorp.com/atlas-api"
@@ -59,6 +68,15 @@ export function atlasClient({ instance, accounts }: Msal) {
 
   return {
     getConfig: () => request<AtlasConfig>("/config"),
+    listRecordingPresets: () =>
+      request<{ items: UserRecordingPreset[] }>("/recording-presets").then((r) => r.items),
+    createRecordingPreset: (body: { kind: PresetKind; name: string; payload: PresetPayload }) =>
+      request<UserRecordingPreset>("/recording-presets", json("POST", body)),
+    updateRecordingPreset: (id: string, body: { name?: string; payload?: PresetPayload }) =>
+      request<UserRecordingPreset>(`/recording-presets/${id}`, json("PATCH", body)),
+    deleteRecordingPreset: (id: string) => request<void>(`/recording-presets/${id}`, json("DELETE")),
+    setRecordingPresetDefault: (id: string) =>
+      request<UserRecordingPreset>(`/recording-presets/${id}/default`, json("POST")),
     startSession: (body: StartSessionOptions) => request<SessionSnapshot>("/sessions", json("POST", body)),
     getSession: (id: string) => request<SessionSnapshot>(`/sessions/${id}`),
     finishSession: (id: string) => request<SessionSnapshot>(`/sessions/${id}/finish`, json("POST")),

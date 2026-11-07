@@ -7,8 +7,6 @@ import { outlineButton, primaryButton } from "./modal";
 
 const DONE: SessionSnapshot["status"][] = ["finished", "expired", "error"];
 
-/** Remote screen sizes set in the backend deploy: neko 1600x900, noVNC 1280x800. */
-const SCREEN_RATIO: Record<string, number> = { neko: 16 / 9, vnc: 16 / 10 };
 /** Atlas header + recording bar + padding above and below the viewer. */
 const VIEWER_CHROME_PX = 150;
 
@@ -88,6 +86,12 @@ export function RecordingView({
   const countdown = `${Math.floor(left / 60000)}:${String(Math.floor((left % 60000) / 1000)).padStart(2, "0")}`;
   const viewer = snap.viewer;
 
+  // Size the stream surface to the chosen session viewport (not the neko/vnc desktop ratio).
+  const vp = snap.emulation?.viewport;
+  const vw = Math.max(1, vp?.width ?? 1280);
+  const vh = Math.max(1, vp?.height ?? 800);
+  const aspect = vw / vh;
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between gap-4 border-b border-[#EEE] bg-white px-5 py-2.5 dark:border-[#1a1a1a] dark:bg-[#0a0a0a]">
@@ -100,7 +104,8 @@ export function RecordingView({
             </span>
           </div>
           <div className="truncate text-[11px] text-[#7E7E7E]">
-            {snap.currentUrl || snap.startUrl} · {snap.nodes.length} screens · {snap.edges.length} actions · {snap.eventCount} events
+            {snap.currentUrl || snap.startUrl} · {snap.nodes.length} screens · {snap.edges.length} actions · {snap.eventCount}{" "}
+            events · {vw}×{vh}
           </div>
         </div>
         <div className="flex shrink-0 gap-3">
@@ -131,15 +136,16 @@ export function RecordingView({
       )}
 
       <div className="flex min-h-0 flex-1 gap-4 p-4">
-        <div className="flex min-w-0 flex-1 items-start justify-center overflow-auto">
+        <div className="flex min-w-0 flex-1 items-center justify-center overflow-auto bg-[#0a0a0a]/[0.03] dark:bg-black/20">
           {viewer && viewer.kind !== "local" ? (
             <iframe
               src={atlasUrl(viewer.url)}
               allow="autoplay; clipboard-read; clipboard-write; fullscreen"
               className="rounded-[10px] border border-[#E6E1F5] bg-black dark:border-[#2a2a2a]"
               style={{
-                aspectRatio: SCREEN_RATIO[viewer.kind] ?? 16 / 9,
-                width: `min(100%, calc((100vh - ${VIEWER_CHROME_PX}px) * ${SCREEN_RATIO[viewer.kind] ?? 16 / 9}))`,
+                aspectRatio: `${vw} / ${vh}`,
+                width: `min(100%, calc((100vh - ${VIEWER_CHROME_PX}px) * ${aspect}))`,
+                maxHeight: `calc(100vh - ${VIEWER_CHROME_PX}px)`,
               }}
               title="Remote browser"
             />

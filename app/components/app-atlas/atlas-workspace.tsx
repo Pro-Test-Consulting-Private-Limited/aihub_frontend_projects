@@ -606,6 +606,8 @@ export default function AtlasWorkspace() {
           appUrl={setupUrl || appUrl}
           projectId={project?.id ?? projectId}
           canvasId={selectedId}
+          userId={accounts[0]?.localAccountId || accounts[0]?.homeAccountId || accounts[0]?.username || "anonymous"}
+          client={client}
           loadConfig={() => client.getConfig()}
           starting={starting}
           onStart={(prefs) => void startSessionWithPrefs(prefs)}
