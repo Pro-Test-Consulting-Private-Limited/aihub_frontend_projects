@@ -58,6 +58,37 @@ describe("applyResizeDelta", () => {
     expect(r.width).toBe(500);
     expect(r.height).toBe(1000);
   });
+
+  it("keeps aspect on edge drag when lockRatio (keepAspect) is on", () => {
+    const r = applyResizeDelta({
+      startW: 1280,
+      startH: 720,
+      dxScreen: 160,
+      dyScreen: 0,
+      scale: 1,
+      edge: "right",
+      shift: false,
+      keepAspect: true,
+    });
+    expect(r.width).toBe(1440);
+    expect(r.height).toBe(810);
+  });
+
+  it("Shift unlocks aspect on edge drag", () => {
+    // Frame passes keepAspect=false when Shift is held.
+    const r = applyResizeDelta({
+      startW: 1280,
+      startH: 720,
+      dxScreen: 160,
+      dyScreen: 0,
+      scale: 1,
+      edge: "right",
+      shift: true,
+      keepAspect: false,
+    });
+    expect(r.width).toBe(1440);
+    expect(r.height).toBe(720);
+  });
 });
 
 describe("fitScale", () => {

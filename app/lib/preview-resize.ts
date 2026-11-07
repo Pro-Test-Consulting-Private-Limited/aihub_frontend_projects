@@ -35,7 +35,7 @@ export function applyResizeDelta(opts: {
     height = opts.startH + dy;
     if (opts.keepAspect) width = height / ratio;
   } else {
-    // corner: primary axis is X; keep aspect unless shift (then free both)
+    // corner: primary axis is X; keep aspect when keepAspect (lock or default corner)
     if (opts.shift || !opts.keepAspect) {
       width = opts.startW + dx;
       height = opts.startH + dy;

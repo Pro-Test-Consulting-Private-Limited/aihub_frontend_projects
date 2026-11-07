@@ -170,6 +170,9 @@ export function RecordingView({
               }
             />
             {viewportWarning && <ConfigChip label={viewportWarning} title={viewportWarning} danger />}
+            {snap.emulation?.streamScaled && (
+              <ConfigChip label="Emulated, stream scaled" title="Remote display cannot fit viewport + chrome; page held via CDP" danger />
+            )}
             <ConfigChip label={orientLabel} title={`Orientation: ${snap.emulation?.orientation ?? ""}`} />
             <ConfigChip
               label={netLabel}

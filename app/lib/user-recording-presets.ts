@@ -13,6 +13,8 @@ export type DevicePresetPayload = {
   width: number;
   height: number;
   orientation: Orientation;
+  /** Optional; older presets omit this. */
+  deviceScaleFactor?: number;
 };
 
 export type NetworkPresetPayload = {
@@ -69,11 +71,15 @@ function isPreset(x: unknown): x is UserRecordingPreset {
 }
 
 export function devicePayloadFromPrefs(prefs: SessionEmulationPrefs): DevicePresetPayload {
-  return {
+  const payload: DevicePresetPayload = {
     width: prefs.width,
     height: prefs.height,
     orientation: prefs.orientation,
   };
+  if (prefs.deviceScaleFactor && prefs.deviceScaleFactor !== 1) {
+    payload.deviceScaleFactor = prefs.deviceScaleFactor;
+  }
+  return payload;
 }
 
 export function networkPayloadFromPrefs(prefs: SessionEmulationPrefs): NetworkPresetPayload {
@@ -105,6 +111,7 @@ export function applyUserPreset(
       width: d.width,
       height: d.height,
       orientation: d.orientation,
+      deviceScaleFactor: d.deviceScaleFactor ?? 1,
     });
   }
   if (preset.kind === "network") {
@@ -124,6 +131,7 @@ export function applyUserPreset(
     width: s.device.width,
     height: s.device.height,
     orientation: s.device.orientation,
+    deviceScaleFactor: s.device.deviceScaleFactor ?? 1,
     networkPreset: s.network.offline ? "offline" : "custom",
     downloadKbps: s.network.downloadKbps,
     uploadKbps: s.network.uploadKbps,

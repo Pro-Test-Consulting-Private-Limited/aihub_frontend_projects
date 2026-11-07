@@ -11,6 +11,8 @@ export type SessionEmulationPrefs = {
   latencyMs: number;
   downloadKbps: number;
   uploadKbps: number;
+  /** Custom pixel density (1 / 2 / 3). Catalog devices keep their own DPR. */
+  deviceScaleFactor?: number;
 };
 
 export type StartSessionOptions = {
@@ -25,6 +27,8 @@ export type StartSessionOptions = {
   downloadKbps?: number;
   uploadKbps?: number;
   offline?: boolean;
+  /** Optional; custom sizes only. */
+  deviceScaleFactor?: number;
 };
 
 export type DeviceCategory = "phone" | "tablet" | "laptop" | "custom";
@@ -187,6 +191,11 @@ export function normalizePrefs(raw: Partial<SessionEmulationPrefs>): SessionEmul
   // After applying orientation, force the label to match the geometry.
   const geoOrientation = orientationFromSize(sized.width, sized.height);
 
+  const dpr =
+    entry?.id === "custom"
+      ? clampInt(raw.deviceScaleFactor, 1, 3, 1)
+      : entry?.dpr ?? 1;
+
   return {
     devicePreset,
     networkPreset,
@@ -196,6 +205,7 @@ export function normalizePrefs(raw: Partial<SessionEmulationPrefs>): SessionEmul
     latencyMs: clampInt(raw.latencyMs, 0, NETWORK_LIMITS.latencyMax, DEFAULT_EMULATION_PREFS.latencyMs),
     downloadKbps: clampInt(raw.downloadKbps, 0, NETWORK_LIMITS.kbpsMax, DEFAULT_EMULATION_PREFS.downloadKbps),
     uploadKbps: clampInt(raw.uploadKbps, 0, NETWORK_LIMITS.kbpsMax, DEFAULT_EMULATION_PREFS.uploadKbps),
+    deviceScaleFactor: entry?.id === "custom" ? dpr : undefined,
   };
 }
 
@@ -340,6 +350,9 @@ export function emulationBodyFromPrefs(prefs: SessionEmulationPrefs): Omit<Start
   if (normalized.devicePreset === "custom") {
     body.width = normalized.width;
     body.height = normalized.height;
+    if (normalized.deviceScaleFactor && normalized.deviceScaleFactor !== 1) {
+      body.deviceScaleFactor = normalized.deviceScaleFactor;
+    }
   }
   if (normalized.networkPreset === "custom") {
     body.latencyMs = normalized.latencyMs;

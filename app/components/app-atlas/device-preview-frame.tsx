@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { applyResizeDelta, fitScale, type ResizeEdge } from "@/app/lib/preview-resize";
 import { VIEWPORT, type DeviceCategory } from "@/app/lib/session-emulation";
+import { ratioLabel } from "@/app/lib/viewport-ratio";
 
 type Props = {
   width: number;
@@ -14,8 +15,10 @@ type Props = {
   disabled?: boolean;
   rotating?: boolean;
   motionOk?: boolean;
+  /** When true, drag-resize keeps aspect; Shift temporarily unlocks. */
+  lockRatio?: boolean;
+  ratioText?: string;
   onSizeChange: (width: number, height: number) => void;
-  /** Optional live page preview inside the frame (falls back to W×H label). */
   children?: React.ReactNode;
   appUrl?: string;
 };
@@ -33,6 +36,8 @@ export function DevicePreviewFrame({
   disabled,
   rotating,
   motionOk,
+  lockRatio,
+  ratioText,
   onSizeChange,
   children,
   appUrl,
@@ -73,6 +78,8 @@ export function DevicePreviewFrame({
   const scale = frozenScale ?? fit.scale;
   const frameW = width * scale;
   const frameH = height * scale;
+  const isMobileChrome = frameKind === "phone" || frameKind === "tablet";
+  const shownRatio = ratioText || ratioLabel(width, height);
 
   const endDrag = () => {
     dragRef.current = null;
@@ -107,6 +114,9 @@ export function DevicePreviewFrame({
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== e.pointerId) return;
     e.preventDefault();
+    const shift = drag.shift || e.shiftKey;
+    // Lock on → keep aspect for all edges; Shift unlocks. Corner always kept aspect unless shift or unlock.
+    const keepAspect = shift ? false : Boolean(lockRatio) || drag.edge === "corner";
     const next = applyResizeDelta({
       startW: drag.startW,
       startH: drag.startH,
@@ -114,8 +124,8 @@ export function DevicePreviewFrame({
       dyScreen: e.clientY - drag.startY,
       scale: drag.scale,
       edge: drag.edge,
-      shift: drag.shift || e.shiftKey,
-      keepAspect: drag.edge === "corner",
+      shift,
+      keepAspect,
     });
     onSizeChange(next.width, next.height);
     setTip({ x: e.clientX, y: e.clientY, label: `${next.width} × ${next.height}` });
@@ -134,6 +144,9 @@ export function DevicePreviewFrame({
 
   const handleClass =
     "absolute z-10 touch-none bg-[#8664F2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white";
+
+  const now = new Date();
+  const timeLabel = `${now.getHours() % 12 || 12}:${String(now.getMinutes()).padStart(2, "0")}`;
 
   return (
     <div
@@ -166,17 +179,39 @@ export function DevicePreviewFrame({
           />
         )}
         {frameKind === "phone" && (
-          <div className="absolute left-1/2 top-1.5 z-[2] h-1.5 w-14 -translate-x-1/2 rounded-full bg-[#222]" aria-hidden />
+          <div className="absolute left-1/2 top-1.5 z-[3] h-1.5 w-14 -translate-x-1/2 rounded-full bg-[#222]" aria-hidden />
         )}
         <div className="relative z-[1] flex h-full min-h-0 flex-col overflow-hidden rounded-[inherit] bg-white text-[#1F1F1F]">
-          <div className="flex shrink-0 items-center gap-1.5 border-b border-[#E5E7EB] bg-[#F3F4F6] px-2 py-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#F87171]" aria-hidden />
-            <span className="h-1.5 w-1.5 rounded-full bg-[#FBBF24]" aria-hidden />
-            <span className="h-1.5 w-1.5 rounded-full bg-[#34D399]" aria-hidden />
-            <div className="min-w-0 flex-1 truncate rounded bg-white px-1.5 py-0.5 text-[10px] text-[#374151]" title={appUrl}>
-              {appUrl || `${width} × ${height}`}
+          {isMobileChrome ? (
+            <div className="relative shrink-0 border-b border-[#E5E7EB] bg-[#F8FAFC] pt-1 dark:border-[#2a2a2a] dark:bg-[#141414]">
+              <div className="flex items-center justify-between px-3 pb-0.5 text-[9px] font-medium text-[#1F1F1F] dark:text-[#ededed]">
+                <span>{timeLabel}</span>
+                <span className="flex items-center gap-1 text-[#5E6066]" aria-hidden>
+                  <span className="inline-block h-1.5 w-2.5 rounded-[1px] border border-current" />
+                  <span className="inline-block h-2 w-3 rounded-[2px] border border-current">
+                    <span className="ml-px mt-px block h-1 w-1.5 bg-current" />
+                  </span>
+                </span>
+              </div>
+              <div className="px-3 pb-1.5 pt-0.5">
+                <div
+                  className="truncate rounded-full bg-white px-2.5 py-0.5 text-center text-[9px] text-[#374151] shadow-sm ring-1 ring-[#E5E7EB] dark:bg-[#0a0a0a] dark:text-[#d1d5db] dark:ring-[#2a2a2a]"
+                  title={appUrl}
+                >
+                  {appUrl ? appUrl.replace(/^https?:\/\//, "") : `${width} × ${height}`}
+                </div>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="flex shrink-0 items-center gap-1.5 border-b border-[#E5E7EB] bg-[#F3F4F6] px-2 py-1 dark:border-[#2a2a2a] dark:bg-[#1a1a1a]">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#F87171]" aria-hidden />
+              <span className="h-1.5 w-1.5 rounded-full bg-[#FBBF24]" aria-hidden />
+              <span className="h-1.5 w-1.5 rounded-full bg-[#34D399]" aria-hidden />
+              <div className="min-w-0 flex-1 truncate rounded bg-white px-1.5 py-0.5 text-[10px] text-[#374151] dark:bg-[#0a0a0a] dark:text-[#d1d5db]" title={appUrl}>
+                {appUrl || `${width} × ${height}`}
+              </div>
+            </div>
+          )}
           <div className="relative min-h-0 flex-1 overflow-hidden">
             {children ?? (
               <div className="flex h-full flex-col items-center justify-center gap-1 bg-[#111] p-3 text-center text-white">
@@ -189,6 +224,9 @@ export function DevicePreviewFrame({
                 </div>
               </div>
             )}
+            <div className="pointer-events-none absolute bottom-1 left-1 rounded bg-black/55 px-1.5 py-0.5 font-mono text-[9px] text-white">
+              {shownRatio}
+            </div>
           </div>
         </div>
 

@@ -80,6 +80,7 @@ export type EmulationSummary = {
   browserChromeHeight?: number;
   viewportLimited?: boolean;
   viewportWarning?: string | null;
+  streamScaled?: boolean;
   networkPreset: string;
   isMobile: boolean;
   hasTouch?: boolean;

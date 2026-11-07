@@ -16,6 +16,8 @@ import {
   TbBookmark,
   TbCopy,
   TbExternalLink,
+  TbLock,
+  TbLockOpen,
   TbRefresh,
   TbRotate,
   TbWifiOff,
@@ -68,6 +70,23 @@ import {
   type DeviceSelection,
   type DeviceTab,
 } from "@/app/lib/session-setup-selection";
+import {
+  RATIO_CHIPS,
+  applyLockedDimension,
+  loadLockRatio,
+  ratioLabel,
+  saveLockRatio,
+  sizeFromRatio,
+  type SizeByMode,
+} from "@/app/lib/viewport-ratio";
+import {
+  RESOLUTION_PRESETS,
+  myScreenSize,
+  needsStreamEmulation,
+  sizeDisplayLabel,
+  sizeFromResolution,
+  thisWindowSize,
+} from "@/app/lib/viewport-resolution";
 import type { AtlasClient } from "@/app/services/appatlas";
 import { DevicePreviewFrame } from "./device-preview-frame";
 import { LiveUrlPreview } from "./live-url-preview";
@@ -324,6 +343,9 @@ export function SessionSetupModal({
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [presetMsg, setPresetMsg] = useState<string | null>(null);
+  const [sizeBy, setSizeBy] = useState<SizeByMode>("pixels");
+  const [lockRatio, setLockRatio] = useState(false);
+  const [sizeHint, setSizeHint] = useState<string | null>(null);
 
   const syncPresets = useCallback(
     (items: UserRecordingPreset[]) => {
@@ -342,6 +364,9 @@ export function SessionSetupModal({
     setRecent(loadRecentDevices());
     setPreviousViewport(loadCanvasViewport(canvasId));
     setPresets(loadPresetCache(userId));
+    setLockRatio(loadLockRatio());
+    setSizeBy("pixels");
+    setSizeHint(null);
   }, [projectId, canvasId, userId]);
 
   useEffect(() => {
@@ -464,7 +489,7 @@ export function SessionSetupModal({
 
   const entry = deviceById(prefs.devicePreset);
   const isCustom = showCustomPanel(selection);
-  const dpr = entry?.dpr ?? 1;
+  const dpr = isCustom ? prefs.deviceScaleFactor ?? 1 : entry?.dpr ?? 1;
   const atLimit = presets.length >= USER_PRESET_MAX;
 
   const applySelection = (sel: DeviceSelection, nextPrefs: SessionEmulationPrefs) => {
@@ -513,11 +538,38 @@ export function SessionSetupModal({
     setPrefs((p) => setOrientation(p, orientation));
   };
 
-  const onWidthHeight = (width: number, height: number) => {
+  const onWidthHeight = (width: number, height: number, opts?: { fromLock?: boolean }) => {
     setSelectedPresetId(null);
-    const next = setCustomSize(prefs, width, height);
+    let w = width;
+    let h = height;
+    if (lockRatio && !opts?.fromLock) {
+      const onlyW = width !== prefs.width && height === prefs.height;
+      const onlyH = height !== prefs.height && width === prefs.width;
+      if (onlyW || onlyH) {
+        const locked = applyLockedDimension(
+          { width: prefs.width, height: prefs.height },
+          onlyW ? { width } : { height },
+        );
+        w = locked.width;
+        h = locked.height;
+        setSizeHint(locked.limited ? "Limited by min/max size" : null);
+      } else {
+        setSizeHint(null);
+      }
+    } else {
+      setSizeHint(null);
+    }
+    const next = setCustomSize(prefs, w, h);
     const sel = selectionAfterSizeEdit(next.width, next.height, next.orientation);
     applySelection(sel, sel.kind === "catalog" ? selectDevicePreset(next, sel.id) : next);
+  };
+
+  const toggleLockRatio = () => {
+    setLockRatio((on) => {
+      const next = !on;
+      saveLockRatio(next);
+      return next;
+    });
   };
 
   const createPreset = async (kind: PresetKind, name: string) => {
@@ -770,7 +822,7 @@ export function SessionSetupModal({
                                     {p.isDefault ? " · default" : ""}
                                   </div>
                                   <div className="font-mono text-[10.5px] text-[#7E7E7E]">
-                                    {d.width} × {d.height}
+                                    {sizeDisplayLabel(d.width, d.height)}
                                   </div>
                                 </button>
                                 {renamingId === p.id ? (
@@ -807,7 +859,9 @@ export function SessionSetupModal({
                       : devicesInTab.map((d) => {
                           const selected = isCardSelected(selection, d.id) && !selectedPresetId;
                           const sizeLabel =
-                            d.id === "custom" ? `${prefs.width} × ${prefs.height}` : `${d.width} × ${d.height}`;
+                            d.id === "custom"
+                              ? sizeDisplayLabel(prefs.width, prefs.height)
+                              : sizeDisplayLabel(d.width, d.height);
                           return (
                             <button
                               key={d.id}
@@ -860,61 +914,271 @@ export function SessionSetupModal({
                   )}
 
                   {isCustom && (
-                    <div className="mt-3 space-y-2 rounded-[10px] border border-dashed border-[#C4B5FD] bg-[#FAFAFF] p-3 dark:border-[#5b4a9a] dark:bg-[#12101a]">
-                      <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
-                        <div>
-                          <label className={fieldLabel} htmlFor="viewport-w">
-                            Width (px)
-                          </label>
-                          <input
-                            id="viewport-w"
-                            type="number"
-                            min={VIEWPORT.widthMin}
-                            max={VIEWPORT.widthMax}
-                            className={fieldInput}
-                            value={prefs.width}
-                            onChange={(e) => onWidthHeight(Number(e.target.value) || VIEWPORT.widthMin, prefs.height)}
-                            disabled={starting}
-                          />
+                    <div className="mt-2 space-y-1.5 rounded-[10px] border border-dashed border-[#C4B5FD] bg-[#FAFAFF] p-2.5 dark:border-[#5b4a9a] dark:bg-[#12101a]">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <div
+                          role="tablist"
+                          aria-label="Size by"
+                          className="inline-flex rounded-full border border-[#E5E7EB] bg-white p-0.5 dark:border-[#2a2a2a] dark:bg-[#0a0a0a]"
+                        >
+                          {(
+                            [
+                              ["pixels", "Pixels"],
+                              ["ratio", "Ratio"],
+                              ["resolution", "Resolution"],
+                            ] as const
+                          ).map(([id, label]) => (
+                            <button
+                              key={id}
+                              type="button"
+                              role="tab"
+                              aria-selected={sizeBy === id}
+                              disabled={starting}
+                              onClick={() => setSizeBy(id)}
+                              className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors ${
+                                sizeBy === id
+                                  ? "bg-[#8664F2] text-white"
+                                  : "text-[#5E6066] hover:text-[#8664F2] dark:text-[#9ca3af]"
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          ))}
                         </div>
                         <button
                           type="button"
-                          className="mb-1 rounded-md border border-[#E5E7EB] p-2 text-[#8664F2] transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8664F2] dark:border-[#2a2a2a] dark:hover:bg-[#1a1a1a]"
-                          aria-label="Swap width and height"
+                          title={lockRatio ? "Unlock ratio" : "Lock ratio"}
+                          aria-pressed={lockRatio}
                           disabled={starting}
-                          onClick={() => onWidthHeight(prefs.height, prefs.width)}
+                          onClick={toggleLockRatio}
+                          className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] ${
+                            lockRatio
+                              ? "border-[#8664F2] bg-[#F5F0FF] text-[#8664F2]"
+                              : "border-[#E5E7EB] bg-white text-[#5E6066] dark:border-[#2a2a2a] dark:bg-[#0a0a0a]"
+                          }`}
                         >
-                          <TbRefresh size={16} className={rotating && motionOk() ? "animate-spin" : ""} />
+                          {lockRatio ? <TbLock size={12} /> : <TbLockOpen size={12} />}
+                          Lock
                         </button>
-                        <div>
-                          <label className={fieldLabel} htmlFor="viewport-h">
-                            Height (px)
-                          </label>
-                          <input
-                            id="viewport-h"
-                            type="number"
-                            min={VIEWPORT.heightMin}
-                            max={VIEWPORT.heightMax}
-                            className={fieldInput}
-                            value={prefs.height}
-                            onChange={(e) => onWidthHeight(prefs.width, Number(e.target.value) || VIEWPORT.heightMin)}
-                            disabled={starting}
-                          />
-                        </div>
+                        <span className="font-mono text-[11px] text-[#7E7E7E]">{ratioLabel(prefs.width, prefs.height)}</span>
+                        {needsStreamEmulation(prefs.width, prefs.height) && (
+                          <span className="rounded-full border border-[#FCD34D] bg-[#FFFBEB] px-2 py-0.5 text-[10px] font-medium text-[#92400E]">
+                            Emulated, stream scaled
+                          </span>
+                        )}
                       </div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {BREAKPOINT_CHIPS.map((w) => (
+
+                      {sizeBy === "pixels" && (
+                        <>
+                          <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
+                            <div>
+                              <label className={fieldLabel} htmlFor="viewport-w">
+                                Width (px)
+                              </label>
+                              <input
+                                id="viewport-w"
+                                type="number"
+                                min={VIEWPORT.widthMin}
+                                max={VIEWPORT.widthMax}
+                                className={fieldInput}
+                                value={prefs.width}
+                                onChange={(e) => onWidthHeight(Number(e.target.value) || VIEWPORT.widthMin, prefs.height)}
+                                disabled={starting}
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              className="mb-1 rounded-md border border-[#E5E7EB] p-2 text-[#8664F2] transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8664F2] dark:border-[#2a2a2a] dark:hover:bg-[#1a1a1a]"
+                              aria-label="Swap width and height"
+                              disabled={starting}
+                              onClick={() => onWidthHeight(prefs.height, prefs.width, { fromLock: true })}
+                            >
+                              <TbRefresh size={16} className={rotating && motionOk() ? "animate-spin" : ""} />
+                            </button>
+                            <div>
+                              <label className={fieldLabel} htmlFor="viewport-h">
+                                Height (px)
+                              </label>
+                              <input
+                                id="viewport-h"
+                                type="number"
+                                min={VIEWPORT.heightMin}
+                                max={VIEWPORT.heightMax}
+                                className={fieldInput}
+                                value={prefs.height}
+                                onChange={(e) => onWidthHeight(prefs.width, Number(e.target.value) || VIEWPORT.heightMin)}
+                                disabled={starting}
+                              />
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {BREAKPOINT_CHIPS.map((w) => (
+                              <button
+                                key={w}
+                                type="button"
+                                disabled={starting}
+                                onClick={() => {
+                                  if (lockRatio) {
+                                    const locked = applyLockedDimension(
+                                      { width: prefs.width, height: prefs.height },
+                                      { width: w },
+                                    );
+                                    onWidthHeight(locked.width, locked.height, { fromLock: true });
+                                    setSizeHint(locked.limited ? "Limited by min/max size" : null);
+                                  } else {
+                                    onWidthHeight(w, Math.round(w * (prefs.height / prefs.width)), { fromLock: true });
+                                  }
+                                }}
+                                className="rounded-full border border-[#E5E7EB] bg-white px-2 py-0.5 font-mono text-[11px] text-[#5E6066] transition-colors hover:border-[#8664F2] hover:text-[#8664F2] dark:border-[#2a2a2a] dark:bg-[#0a0a0a] dark:text-[#9ca3af]"
+                              >
+                                {w}
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+
+                      {sizeBy === "ratio" && (
+                        <div className="space-y-1.5">
+                          <div className="flex flex-wrap gap-1">
+                            {RATIO_CHIPS.map((chip) => {
+                              const sized = sizeFromRatio(prefs.width, chip, prefs.orientation);
+                              const active =
+                                Math.abs(prefs.width / prefs.height - sized.width / sized.height) < 0.02;
+                              return (
+                                <button
+                                  key={chip.id}
+                                  type="button"
+                                  disabled={starting}
+                                  onClick={() => {
+                                    const r = sizeFromRatio(prefs.width, chip, prefs.orientation);
+                                    onWidthHeight(r.width, r.height, { fromLock: true });
+                                    setSizeHint(r.limited ? "Limited by min/max size" : null);
+                                  }}
+                                  className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+                                    active
+                                      ? "border-[#8664F2] bg-[#F5F0FF] text-[#8664F2]"
+                                      : "border-[#E5E7EB] bg-white text-[#5E6066] dark:border-[#2a2a2a] dark:bg-[#0a0a0a] dark:text-[#9ca3af]"
+                                  }`}
+                                >
+                                  {chip.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <label className="flex items-center gap-2 text-[11px] text-[#5E6066]">
+                            <span className="shrink-0">Width</span>
+                            <input
+                              type="range"
+                              min={VIEWPORT.widthMin}
+                              max={VIEWPORT.widthMax}
+                              value={prefs.width}
+                              disabled={starting}
+                              onChange={(e) => {
+                                const chip =
+                                  RATIO_CHIPS.find((c) => {
+                                    const r = sizeFromRatio(prefs.width, c, prefs.orientation);
+                                    return Math.abs(prefs.width / prefs.height - r.width / r.height) < 0.02;
+                                  }) ?? RATIO_CHIPS[0];
+                                const r = sizeFromRatio(Number(e.target.value), chip, prefs.orientation);
+                                onWidthHeight(r.width, r.height, { fromLock: true });
+                                setSizeHint(r.limited ? "Limited by min/max size" : null);
+                              }}
+                              className="min-w-0 flex-1"
+                            />
+                            <span className="w-10 shrink-0 font-mono text-right">{prefs.width}</span>
+                          </label>
+                        </div>
+                      )}
+
+                      {sizeBy === "resolution" && (
+                        <div className="flex flex-wrap gap-1">
+                          {RESOLUTION_PRESETS.map((p) => {
+                            const sized = sizeFromResolution(p, prefs.orientation);
+                            const active = prefs.width === sized.width && prefs.height === sized.height;
+                            return (
+                              <button
+                                key={p.id}
+                                type="button"
+                                disabled={starting}
+                                title={`${sized.width} × ${sized.height}`}
+                                onClick={() => {
+                                  onWidthHeight(sized.width, sized.height, { fromLock: true });
+                                  setSizeHint(null);
+                                }}
+                                className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+                                  active
+                                    ? "border-[#8664F2] bg-[#F5F0FF] text-[#8664F2]"
+                                    : "border-[#E5E7EB] bg-white text-[#5E6066] dark:border-[#2a2a2a] dark:bg-[#0a0a0a] dark:text-[#9ca3af]"
+                                }`}
+                              >
+                                {p.label}
+                              </button>
+                            );
+                          })}
                           <button
-                            key={w}
                             type="button"
                             disabled={starting}
-                            onClick={() => onWidthHeight(w, Math.round(w * (prefs.height / prefs.width)))}
-                            className="rounded-full border border-[#E5E7EB] bg-white px-2 py-0.5 font-mono text-[11px] text-[#5E6066] transition-colors hover:border-[#8664F2] hover:text-[#8664F2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8664F2] dark:border-[#2a2a2a] dark:bg-[#0a0a0a] dark:text-[#9ca3af]"
+                            onClick={() => {
+                              const s = myScreenSize();
+                              const sized =
+                                prefs.orientation === "portrait" && s.width > s.height
+                                  ? { width: s.height, height: s.width }
+                                  : prefs.orientation === "landscape" && s.height > s.width
+                                    ? { width: s.height, height: s.width }
+                                    : s;
+                              onWidthHeight(sized.width, sized.height, { fromLock: true });
+                            }}
+                            className="rounded-full border border-[#E5E7EB] bg-white px-2 py-0.5 text-[11px] font-medium text-[#5E6066] dark:border-[#2a2a2a] dark:bg-[#0a0a0a] dark:text-[#9ca3af]"
                           >
-                            {w}
+                            My screen
+                          </button>
+                          <button
+                            type="button"
+                            disabled={starting}
+                            onClick={() => {
+                              const s = thisWindowSize();
+                              const sized =
+                                prefs.orientation === "portrait" && s.width > s.height
+                                  ? { width: s.height, height: s.width }
+                                  : prefs.orientation === "landscape" && s.height > s.width
+                                    ? { width: s.height, height: s.width }
+                                    : s;
+                              onWidthHeight(sized.width, sized.height, { fromLock: true });
+                            }}
+                            className="rounded-full border border-[#E5E7EB] bg-white px-2 py-0.5 text-[11px] font-medium text-[#5E6066] dark:border-[#2a2a2a] dark:bg-[#0a0a0a] dark:text-[#9ca3af]"
+                          >
+                            This window
+                          </button>
+                        </div>
+                      )}
+
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-[11px] text-[#7E7E7E]">Density</span>
+                        {[1, 2, 3].map((d) => (
+                          <button
+                            key={d}
+                            type="button"
+                            disabled={starting}
+                            onClick={() =>
+                              setPrefs((p) => normalizePrefs({ ...p, devicePreset: "custom", deviceScaleFactor: d }))
+                            }
+                            className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+                              (prefs.deviceScaleFactor ?? 1) === d
+                                ? "border-[#8664F2] bg-[#F5F0FF] text-[#8664F2]"
+                                : "border-[#E5E7EB] bg-white text-[#5E6066] dark:border-[#2a2a2a] dark:bg-[#0a0a0a]"
+                            }`}
+                          >
+                            {d}x
                           </button>
                         ))}
+                        {(prefs.deviceScaleFactor ?? 1) > 1 && (
+                          <span className="text-[10px] text-[#7E7E7E]">2x/3x make screenshots larger</span>
+                        )}
                       </div>
+
+                      {sizeHint && <p className="text-[11px] text-[#B45309]">{sizeHint}</p>}
+
                       <div className="flex flex-wrap items-center gap-2">
                         {savingKind === "device" ? (
                           <InlineSaveName
@@ -1143,6 +1407,8 @@ export function SessionSetupModal({
                   disabled={starting}
                   rotating={rotating}
                   motionOk={motionOk()}
+                  lockRatio={lockRatio}
+                  ratioText={ratioLabel(prefs.width, prefs.height)}
                   onSizeChange={onWidthHeight}
                   appUrl={appUrl}
                 >
@@ -1163,13 +1429,20 @@ export function SessionSetupModal({
                 <div className="mt-2 flex flex-wrap justify-center gap-1">
                   {[
                     deviceById(prefs.devicePreset)?.label ?? (prefs.devicePreset === "custom" ? "Custom" : prefs.devicePreset),
+                    sizeDisplayLabel(prefs.width, prefs.height),
                     `${prefs.width} × ${prefs.height}`,
                     prefs.orientation === "portrait" ? "Portrait" : "Landscape",
                     networkById(prefs.networkPreset)?.label ?? prefs.networkPreset,
+                    ...(needsStreamEmulation(prefs.width, prefs.height) ? ["Emulated, stream scaled"] : []),
+                    ...(isCustom && (prefs.deviceScaleFactor ?? 1) > 1 ? [`${prefs.deviceScaleFactor}x dens.`] : []),
                   ].map((chip) => (
                     <span
                       key={chip}
-                      className="rounded-full border border-[#E5E7EB] bg-[#F9FAFB] px-2 py-0.5 text-[11px] text-[#374151] dark:border-[#2a2a2a] dark:bg-[#141414] dark:text-[#d1d5db]"
+                      className={`rounded-full border px-2 py-0.5 text-[11px] ${
+                        chip === "Emulated, stream scaled"
+                          ? "border-[#FCD34D] bg-[#FFFBEB] text-[#92400E]"
+                          : "border-[#E5E7EB] bg-[#F9FAFB] text-[#374151] dark:border-[#2a2a2a] dark:bg-[#141414] dark:text-[#d1d5db]"
+                      }`}
                     >
                       {chip}
                     </span>
