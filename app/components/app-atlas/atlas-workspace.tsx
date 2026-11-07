@@ -24,7 +24,13 @@ import { Explorer } from "./explorer";
 import { ConnectAppsModal } from "./connect-apps-modal";
 import { JiraPanel } from "./jira-panel";
 import { SaveExecutionModal } from "./save-execution-modal";
+import { SessionSetupModal } from "./session-setup-modal";
 import { RecordingView } from "./recording-view";
+import {
+  emulationBodyFromPrefs,
+  loadEmulationPrefs,
+  type SessionEmulationPrefs,
+} from "@/app/lib/session-emulation";
 import { ApiTestingView } from "./api-testing-view";
 import { SitTestingView } from "./sit-testing-view";
 import { CoverageOverview } from "./coverage-overview";
@@ -94,6 +100,8 @@ export default function AtlasWorkspace() {
   const [unsaved, setUnsaved] = useState<SessionSnapshot | null>(null);
   const [saveOpen, setSaveOpen] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [setupOpen, setSetupOpen] = useState(false);
+  const [setupUrl, setSetupUrl] = useState<string | null>(null);
 
   const [focusNodeId, setFocusNodeId] = useState<string | null>(null);
   const [panelNodeId, setPanelNodeId] = useState<string | null>(null);
@@ -250,28 +258,44 @@ export default function AtlasWorkspace() {
     };
   }, [accounts.length, client]);
 
-  const startSession = async () => {
-    if (!appUrl) return;
+  const openSessionSetup = (url?: string) => {
+    if (!(url || appUrl)) return;
+    setSetupUrl(url || appUrl);
+    setSetupOpen(true);
+  };
+
+  const startSessionWithPrefs = async (prefs: SessionEmulationPrefs, url = setupUrl || appUrl) => {
+    if (!url) return;
     setStarting(true);
     try {
       const viewer = localStorage.getItem(VIEWER_PREF_KEY) === "vnc" ? "vnc" : "auto";
-      startRecording(await client.startSession({ url: appUrl, devicePreset: "desktop", networkPreset: "none", viewer }));
+      startRecording(
+        await client.startSession({
+          url,
+          viewer,
+          ...emulationBodyFromPrefs(prefs),
+        }),
+      );
+      setSetupOpen(false);
+      setSetupUrl(null);
     } catch (err) {
       setNotice(err instanceof Error ? err.message : "Could not start the browser.");
     } finally {
       setStarting(false);
     }
   };
-  const runQuick = () => void startSession();
+
+  const runQuick = () => openSessionSetup();
 
   const switchViewer = async (to: "vnc" | "auto") => {
     if (!recording) return;
     if (to === "vnc") localStorage.setItem(VIEWER_PREF_KEY, "vnc");
     else localStorage.removeItem(VIEWER_PREF_KEY);
+    const resumeUrl = recording.startUrl || appUrl;
     await client.discardSession(recording.id).catch(() => undefined);
     localStorage.removeItem(ACTIVE_SESSION_KEY);
     setRecording(null);
-    await startSession();
+    await startSessionWithPrefs(loadEmulationPrefs(), resumeUrl);
   };
 
   const onRecordingDone = useCallback((snap: SessionSnapshot) => {
@@ -577,6 +601,19 @@ export default function AtlasWorkspace() {
       </div>
 
       {saveOpen && unsaved && <SaveExecutionModal onSave={save} onClose={() => setSaveOpen(false)} />}
+      {setupOpen && (
+        <SessionSetupModal
+          appUrl={setupUrl || appUrl}
+          loadConfig={() => client.getConfig()}
+          starting={starting}
+          onStart={(prefs) => void startSessionWithPrefs(prefs)}
+          onClose={() => {
+            if (starting) return;
+            setSetupOpen(false);
+            setSetupUrl(null);
+          }}
+        />
+      )}
       {connectFor && (
         <ConnectAppsModal
           client={client}

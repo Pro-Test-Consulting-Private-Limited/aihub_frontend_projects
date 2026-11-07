@@ -4,6 +4,7 @@ import type { IPublicClientApplication, AccountInfo } from "@azure/msal-browser"
 import { getFreshIdToken, getGraphAccessToken } from "@/app/lib/auth-client";
 import { siteOrigin } from "@/app/config/urls";
 import type {
+  AtlasConfig,
   Canvas,
   CanvasClarifications,
   CanvasTeams,
@@ -15,6 +16,7 @@ import type {
   SitWorkbook,
   TicketNote,
 } from "@/app/interfaces/appatlas";
+import type { StartSessionOptions } from "@/app/lib/session-emulation";
 
 const BUILD_APPATLAS_API = (
   process.env.NEXT_PUBLIC_APPATLAS_API || "https://ai-hub.protestcorp.com/atlas-api"
@@ -56,8 +58,8 @@ export function atlasClient({ instance, accounts }: Msal) {
   });
 
   return {
-    startSession: (body: { url: string; devicePreset: string; networkPreset: string; viewer?: "auto" | "vnc" }) =>
-      request<SessionSnapshot>("/sessions", json("POST", body)),
+    getConfig: () => request<AtlasConfig>("/config"),
+    startSession: (body: StartSessionOptions) => request<SessionSnapshot>("/sessions", json("POST", body)),
     getSession: (id: string) => request<SessionSnapshot>(`/sessions/${id}`),
     finishSession: (id: string) => request<SessionSnapshot>(`/sessions/${id}/finish`, json("POST")),
     discardSession: (id: string) => request<void>(`/sessions/${id}`, json("DELETE")),

@@ -68,7 +68,7 @@ export function Explorer(props: Props) {
           <button type="button" className={iconButton} title={props.canSave ? "Save execution" : "Nothing to save"} onClick={props.onSave} disabled={!props.canSave}>
             <TbDeviceFloppy size={16} />
           </button>
-          <button type="button" className={iconButton} title="Run AppAtlas (desktop, no throttling)" onClick={props.onRun} disabled={!props.canStart}>
+          <button type="button" className={iconButton} title="Run AppAtlas (choose device / network)" onClick={props.onRun} disabled={!props.canStart}>
             <TbPlayerPlay size={15} />
           </button>
           <button type="button" className={iconButton} title="Hide explorer" onClick={props.onCollapse}>
