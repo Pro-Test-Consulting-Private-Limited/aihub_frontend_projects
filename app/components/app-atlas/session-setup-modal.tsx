@@ -39,7 +39,6 @@ import {
   selectDevicePreset,
   setCustomSize,
   setOrientation,
-  summaryLine,
   type DeviceCategory,
   type Orientation,
   type SessionEmulationPrefs,
@@ -932,7 +931,7 @@ export function SessionSetupModal({
                             onClick={() => setSavingKind("device")}
                           >
                             <TbBookmark size={14} />
-                            Save as preset
+                            Save device preset
                           </button>
                         )}
                       </div>
@@ -1122,7 +1121,7 @@ export function SessionSetupModal({
                             onClick={() => setSavingKind("network")}
                           >
                             <TbBookmark size={14} />
-                            Save as preset
+                            Save network preset
                           </button>
                         )}
                       </div>
@@ -1158,10 +1157,16 @@ export function SessionSetupModal({
                     devicePreset={prefs.devicePreset}
                     offline={prefs.networkPreset === "offline"}
                     disabled={starting}
+                    hasSelection={Boolean(selection)}
                   />
                 </DevicePreviewFrame>
                 <div className="mt-2 flex flex-wrap justify-center gap-1">
-                  {(summaryLine(prefs).split(" · ") || []).map((chip) => (
+                  {[
+                    deviceById(prefs.devicePreset)?.label ?? (prefs.devicePreset === "custom" ? "Custom" : prefs.devicePreset),
+                    `${prefs.width} × ${prefs.height}`,
+                    prefs.orientation === "portrait" ? "Portrait" : "Landscape",
+                    networkById(prefs.networkPreset)?.label ?? prefs.networkPreset,
+                  ].map((chip) => (
                     <span
                       key={chip}
                       className="rounded-full border border-[#E5E7EB] bg-[#F9FAFB] px-2 py-0.5 text-[11px] text-[#374151] dark:border-[#2a2a2a] dark:bg-[#141414] dark:text-[#d1d5db]"

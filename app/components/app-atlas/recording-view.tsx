@@ -2,14 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { SessionSnapshot } from "@/app/interfaces/appatlas";
+import { deviceDisplayName, networkChipLabel, recordingCountsLine } from "@/app/lib/recording-labels";
+import { fitStreamScale } from "@/app/lib/stream-fit";
 import { atlasUrl, type AtlasClient } from "@/app/services/appatlas";
 import { outlineButton, primaryButton } from "./modal";
 
 const DONE: SessionSnapshot["status"][] = ["finished", "expired", "error"];
-
-/** Atlas header + recording bar + padding above and below the viewer. */
-const VIEWER_CHROME_PX = 150;
-/** Matches backend BROWSER_CHROME_HEIGHT when streamSurface is absent. */
 const FALLBACK_BROWSER_CHROME = 88;
 
 export function RecordingView({
@@ -31,6 +29,8 @@ export function RecordingView({
   const [now, setNow] = useState(() => Date.now());
   const [busy, setBusy] = useState<"finish" | "discard" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [box, setBox] = useState({ w: 800, h: 500 });
+  const containerRef = useRef<HTMLDivElement>(null);
   const latest = useRef(initial);
   const finishedRef = useRef(onFinished);
   finishedRef.current = onFinished;
@@ -66,6 +66,40 @@ export function RecordingView({
     return () => window.removeEventListener("beforeunload", warn);
   }, []);
 
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const measure = () => {
+      const r = el.getBoundingClientRect();
+      setBox({ w: Math.max(1, r.width), h: Math.max(1, r.height) });
+    };
+    measure();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
+    ro?.observe(el);
+    return () => ro?.disconnect();
+  }, []);
+
+  const vp = snap.emulation?.viewport;
+  const vw = Math.max(1, vp?.width ?? 1280);
+  const vh = Math.max(1, vp?.height ?? 800);
+  const surface = snap.emulation?.streamSurface ?? {
+    width: vw,
+    height: vh + FALLBACK_BROWSER_CHROME,
+  };
+  const sw = Math.max(1, surface.width);
+  const sh = Math.max(1, surface.height);
+  const fitted = fitStreamScale(box.w, box.h, sw, sh, { maxUpscale: 1.5 });
+
+  useEffect(() => {
+    console.info("[stream-fit]", {
+      container: box,
+      streamNative: { w: sw, h: sh },
+      viewport: { w: vw, h: vh },
+      scale: fitted.scale,
+      sized: { w: fitted.width, h: fitted.height },
+    });
+  }, [box, sw, sh, vw, vh, fitted.scale, fitted.width, fitted.height]);
+
   const finish = async () => {
     setBusy("finish");
     setError(null);
@@ -90,26 +124,14 @@ export function RecordingView({
   const countdown = `${Math.floor(left / 60000)}:${String(Math.floor((left % 60000) / 1000)).padStart(2, "0")}`;
   const viewer = snap.viewer;
 
-  const vp = snap.emulation?.viewport;
-  const vw = Math.max(1, vp?.width ?? 1280);
-  const vh = Math.max(1, vp?.height ?? 800);
-  // Stream surface = remote desktop (viewport + chrome). Prefer that so the iframe matches Xvfb.
-  const surface = snap.emulation?.streamSurface ?? {
-    width: vw,
-    height: vh + FALLBACK_BROWSER_CHROME,
-  };
-  const sw = Math.max(1, surface.width);
-  const sh = Math.max(1, surface.height);
-  const aspect = sw / sh;
-
-  const deviceLabel =
-    snap.emulation?.devicePreset === "custom"
-      ? "Custom"
-      : snap.emulation?.devicePreset?.replace(/-/g, " ") ?? "Device";
+  const deviceLabel = deviceDisplayName(snap.emulation?.devicePreset ?? "desktop");
   const orientLabel = snap.emulation?.orientation === "portrait" ? "Portrait" : "Landscape";
-  const netLabel = snap.emulation?.offline
-    ? "Offline"
-    : (snap.emulation?.networkPreset ?? "none").replace(/-/g, " ");
+  const netLabel = networkChipLabel({
+    devicePreset: snap.emulation?.devicePreset ?? "desktop",
+    networkPreset: snap.emulation?.networkPreset ?? "none",
+    offline: snap.emulation?.offline,
+    network: snap.emulation?.network,
+  });
 
   return (
     <div className="flex h-full flex-col">
@@ -144,7 +166,7 @@ export function RecordingView({
               {snap.currentUrl || snap.startUrl}
             </span>
             <span className="text-[#7E7E7E]">
-              · {snap.nodes.length} screens · {snap.edges.length} actions · {snap.eventCount} events
+              · {recordingCountsLine(snap.nodes.length, snap.edges.length, snap.eventCount)}
             </span>
             {onEditSetup && (
               <button
@@ -203,11 +225,11 @@ export function RecordingView({
         )}
 
       <div className="flex min-h-0 flex-1 gap-4 p-4">
-        <div className="flex min-w-0 flex-1 items-center justify-center overflow-auto">
+        <div ref={containerRef} className="flex min-w-0 flex-1 items-center justify-center overflow-hidden">
           {viewer && viewer.kind !== "local" ? (
             <div
               className={`flex items-center justify-center ${
-                snap.emulation?.isMobile ? "rounded-[28px] border-[3px] border-[#333] bg-[#111] p-2 shadow-lg" : ""
+                snap.emulation?.isMobile ? "rounded-[28px] border-[3px] border-[#333] bg-[#111] p-1.5 shadow-lg" : ""
               }`}
             >
               <iframe
@@ -215,9 +237,8 @@ export function RecordingView({
                 allow="autoplay; clipboard-read; clipboard-write; fullscreen"
                 className="rounded-[10px] border border-[#E6E1F5] bg-black dark:border-[#2a2a2a]"
                 style={{
-                  aspectRatio: `${sw} / ${sh}`,
-                  width: `min(100%, calc((100vh - ${VIEWER_CHROME_PX}px) * ${aspect}))`,
-                  maxHeight: `calc(100vh - ${VIEWER_CHROME_PX}px)`,
+                  width: fitted.width,
+                  height: fitted.height,
                 }}
                 title="Remote browser"
               />
@@ -244,7 +265,9 @@ export function RecordingView({
               <img src={atlasUrl(n.shotUrl)} alt="" loading="lazy" className="h-[90px] w-full object-cover object-top" />
               <div className="px-2 py-1.5">
                 <div className="truncate text-[11px] font-medium text-[#1F1F1F] dark:text-[#ededed]">{n.path}</div>
-                <div className="text-[10px] text-[#7E7E7E]">{n.states.length} states</div>
+                <div className="text-[10px] text-[#7E7E7E]">
+                  {n.states.length} {n.states.length === 1 ? "state" : "states"}
+                </div>
               </div>
             </div>
           ))}
@@ -258,7 +281,7 @@ function ConfigChip({ label, title, danger }: { label: string; title?: string; d
   return (
     <span
       title={title}
-      className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium capitalize ${
+      className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${
         danger
           ? "border-[#FCD34D] bg-[#FFFBEB] text-[#92400E]"
           : "border-[#E5E7EB] bg-[#F9FAFB] text-[#374151] dark:border-[#2a2a2a] dark:bg-[#141414] dark:text-[#d1d5db]"
