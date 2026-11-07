@@ -149,3 +149,27 @@ export function nameTaken(presets: UserRecordingPreset[], kind: PresetKind, name
     (p) => p.kind === kind && p.id !== exceptId && p.name.trim().toLowerCase() === needle,
   );
 }
+
+export const PRESET_SAVE_SOFT_FAIL =
+  "Could not save to your account. Saved on this browser and will sync later";
+
+export function isLocalPresetId(id: string): boolean {
+  return id.startsWith("local-");
+}
+
+export function makeLocalPreset(
+  kind: PresetKind,
+  name: string,
+  payload: DevicePresetPayload | NetworkPresetPayload | SetupPresetPayload,
+): UserRecordingPreset {
+  const now = new Date().toISOString();
+  return {
+    id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    kind,
+    name,
+    payload,
+    isDefault: false,
+    createdAt: now,
+    updatedAt: now,
+  };
+}

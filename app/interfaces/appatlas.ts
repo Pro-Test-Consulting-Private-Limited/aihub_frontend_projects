@@ -72,14 +72,24 @@ export type Viewer = { kind: "neko"; url: string } | { kind: "vnc"; url: string 
 export type EmulationSummary = {
   devicePreset: string;
   viewport: { width: number; height: number };
+  /** Remote desktop size (viewport + browser chrome) — prefer for the stream iframe. */
+  streamSurface?: { width: number; height: number };
   networkPreset: string;
   isMobile: boolean;
+  hasTouch?: boolean;
+  deviceScaleFactor?: number;
+  userAgent?: string;
   locale?: string;
   timezoneId?: string;
   colorScheme?: string;
   orientation?: string;
   offline: boolean;
   cpuThrottlingRate?: number;
+  network?: {
+    latencyMs: number;
+    downloadKbps: number;
+    uploadKbps: number;
+  } | null;
 };
 
 export type SessionSnapshot = {

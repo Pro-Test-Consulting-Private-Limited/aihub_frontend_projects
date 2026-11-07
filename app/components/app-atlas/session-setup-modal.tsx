@@ -41,10 +41,13 @@ import {
   type SessionEmulationPrefs,
 } from "@/app/lib/session-emulation";
 import {
+  PRESET_SAVE_SOFT_FAIL,
   USER_PRESET_MAX,
   applyUserPreset,
   devicePayloadFromPrefs,
+  isLocalPresetId,
   loadPresetCache,
+  makeLocalPreset,
   nameTaken,
   networkPayloadFromPrefs,
   resolveResetPrefs,
@@ -53,11 +56,20 @@ import {
   type PresetKind,
   type UserRecordingPreset,
 } from "@/app/lib/user-recording-presets";
+import {
+  isCardSelected,
+  selectionAfterSizeEdit,
+  selectionFromPrefs,
+  showCustomPanel,
+  tabForSelection,
+  type DeviceSelection,
+  type DeviceTab,
+} from "@/app/lib/session-setup-selection";
 import type { AtlasClient } from "@/app/services/appatlas";
 import { DevicePreviewFrame } from "./device-preview-frame";
 import { fieldInput, fieldLabel, outlineButton, primaryButton } from "./modal";
 
-type CategoryTab = DeviceCategory | "recent" | "mine";
+type CategoryTab = DeviceTab;
 
 const CATEGORIES: { id: CategoryTab; label: string }[] = [
   { id: "recent", label: "Recent" },
@@ -293,12 +305,11 @@ export function SessionSetupModal({
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
   const [prefs, setPrefs] = useState<SessionEmulationPrefs>(() => loadEmulationPrefs(projectId));
-  const [category, setCategory] = useState<CategoryTab>(() => {
-    const d = deviceById(loadEmulationPrefs(projectId).devicePreset);
-    return d?.category ?? "laptop";
-  });
+  const [selection, setSelection] = useState<DeviceSelection>(() => selectionFromPrefs(loadEmulationPrefs(projectId)));
+  const [category, setCategory] = useState<CategoryTab>(() =>
+    tabForSelection(selectionFromPrefs(loadEmulationPrefs(projectId)), loadEmulationPrefs(projectId)),
+  );
   const [search, setSearch] = useState("");
-  const [deviceEdit, setDeviceEdit] = useState(false);
   const [configError, setConfigError] = useState<string | null>(null);
   const [recent, setRecent] = useState<string[]>([]);
   const [previousViewport, setPreviousViewport] = useState<{ width: number; height: number } | null>(null);
@@ -319,7 +330,11 @@ export function SessionSetupModal({
   );
 
   useEffect(() => {
-    setPrefs(loadEmulationPrefs(projectId));
+    const loaded = loadEmulationPrefs(projectId);
+    const sel = selectionFromPrefs(loaded);
+    setPrefs(loaded);
+    setSelection(sel);
+    setCategory(tabForSelection(sel, loaded));
     setRecent(loadRecentDevices());
     setPreviousViewport(loadCanvasViewport(canvasId));
     setPresets(loadPresetCache(userId));
@@ -327,18 +342,47 @@ export function SessionSetupModal({
 
   useEffect(() => {
     let cancelled = false;
-    client
-      .listRecordingPresets()
-      .then((items) => {
-        if (!cancelled) syncPresets(items);
-      })
-      .catch(() => {
-        /* offline / no DB — keep localStorage cache */
-      });
+    const syncFromServer = async () => {
+      const cached = loadPresetCache(userId);
+      // Retry local-only presets from a previous soft-fail.
+      let working = cached;
+      for (const local of cached.filter((p) => isLocalPresetId(p.id))) {
+        try {
+          const created = await client.createRecordingPreset({
+            kind: local.kind,
+            name: local.name,
+            payload: local.payload,
+          });
+          working = working.map((p) => (p.id === local.id ? created : p));
+          if (local.isDefault) {
+            try {
+              await client.setRecordingPresetDefault(created.id);
+              working = working.map((p) =>
+                p.kind === created.kind ? { ...p, isDefault: p.id === created.id } : p,
+              );
+            } catch {
+              /* keep local default flag */
+            }
+          }
+        } catch {
+          break;
+        }
+      }
+      if (cancelled) return;
+      try {
+        const items = await client.listRecordingPresets();
+        if (cancelled) return;
+        const stillLocal = working.filter((p) => isLocalPresetId(p.id));
+        syncPresets([...items, ...stillLocal]);
+      } catch {
+        if (!cancelled) syncPresets(working);
+      }
+    };
+    void syncFromServer();
     return () => {
       cancelled = true;
     };
-  }, [client, syncPresets]);
+  }, [client, syncPresets, userId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -415,9 +459,15 @@ export function SessionSetupModal({
   }, [category, recent, search]);
 
   const entry = deviceById(prefs.devicePreset);
-  const isCustom = prefs.devicePreset === "custom" || deviceEdit;
+  const isCustom = showCustomPanel(selection);
   const dpr = entry?.dpr ?? 1;
   const atLimit = presets.length >= USER_PRESET_MAX;
+
+  const applySelection = (sel: DeviceSelection, nextPrefs: SessionEmulationPrefs) => {
+    setSelection(sel);
+    setCategory(tabForSelection(sel, nextPrefs));
+    setPrefs(nextPrefs);
+  };
 
   const patchNetwork = (networkPreset: string) => {
     const net = networkById(networkPreset);
@@ -435,17 +485,19 @@ export function SessionSetupModal({
 
   const chooseDevice = (id: string) => {
     setSelectedPresetId(null);
-    setDeviceEdit(id === "custom");
-    setPrefs((p) => selectDevicePreset(p, id));
-    const d = deviceById(id);
-    if (d && d.category !== "custom") setCategory(d.category);
+    const sel: DeviceSelection = id === "custom" ? { kind: "custom" } : { kind: "catalog", id };
+    const next = selectDevicePreset(prefs, id);
+    applySelection(sel, next);
   };
 
   const chooseUserPreset = (preset: UserRecordingPreset) => {
     setSelectedPresetId(preset.id);
-    setDeviceEdit(preset.kind !== "network");
-    setPrefs((p) => applyUserPreset(p, preset));
-    if (preset.kind === "device" || preset.kind === "setup") setCategory("mine");
+    const next = applyUserPreset(prefs, preset);
+    if (preset.kind === "device" || preset.kind === "setup") {
+      applySelection({ kind: "mine", presetId: preset.id }, next);
+    } else {
+      setPrefs(next);
+    }
   };
 
   const onOrient = (orientation: Orientation) => {
@@ -459,8 +511,9 @@ export function SessionSetupModal({
 
   const onWidthHeight = (width: number, height: number) => {
     setSelectedPresetId(null);
-    setDeviceEdit(true);
-    setPrefs((p) => setCustomSize(p, width, height));
+    const next = setCustomSize(prefs, width, height);
+    const sel = selectionAfterSizeEdit(next.width, next.height, next.orientation);
+    applySelection(sel, sel.kind === "catalog" ? selectDevicePreset(next, sel.id) : next);
   };
 
   const createPreset = async (kind: PresetKind, name: string) => {
@@ -482,27 +535,15 @@ export function SessionSetupModal({
       syncPresets([...presets, created]);
       setSelectedPresetId(created.id);
       setSavingKind(null);
-      setPresetMsg(null);
-      if (kind === "device") setCategory("mine");
-    } catch (err) {
-      // Fallback: local-only cache when API unavailable
-      if (err instanceof Error && /fetch|Network|503|Failed/i.test(err.message)) {
-        const local: UserRecordingPreset = {
-          id: `local-${Date.now()}`,
-          kind,
-          name,
-          payload,
-          isDefault: false,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        syncPresets([...presets, local]);
-        setSelectedPresetId(local.id);
-        setSavingKind(null);
-        setPresetMsg("Saved locally (server unavailable).");
-        return;
-      }
-      throw err;
+      setPresetMsg("Saved to My presets");
+      if (kind === "device") applySelection({ kind: "mine", presetId: created.id }, prefs);
+    } catch {
+      const local = makeLocalPreset(kind, name, payload);
+      syncPresets([...presets, local]);
+      setSelectedPresetId(local.id);
+      setSavingKind(null);
+      setPresetMsg(PRESET_SAVE_SOFT_FAIL);
+      if (kind === "device") applySelection({ kind: "mine", presetId: local.id }, prefs);
     }
   };
 
@@ -563,11 +604,10 @@ export function SessionSetupModal({
   };
 
   const reset = () => {
-    setDeviceEdit(false);
     setSelectedPresetId(null);
-    setPrefs(resolveResetPrefs(presets));
-    const d = deviceById(resolveResetPrefs(presets).devicePreset);
-    setCategory(d?.category === "custom" ? "mine" : d?.category ?? "laptop");
+    const next = resolveResetPrefs(presets);
+    const sel = selectionFromPrefs(next);
+    applySelection(sel, next);
   };
 
   const showPrevNote =
@@ -720,7 +760,7 @@ export function SessionSetupModal({
                             );
                           })
                       : devicesInTab.map((d) => {
-                          const selected = prefs.devicePreset === d.id && !deviceEdit && !selectedPresetId;
+                          const selected = isCardSelected(selection, d.id) && !selectedPresetId;
                           const sizeLabel =
                             d.id === "custom" ? `${prefs.width} × ${prefs.height}` : `${d.width} × ${d.height}`;
                           return (
@@ -731,7 +771,7 @@ export function SessionSetupModal({
                               aria-selected={selected}
                               disabled={starting}
                               onClick={() => chooseDevice(d.id)}
-                              className={`${cardBase} ${selected || (d.id === "custom" && isCustom && !selectedPresetId) ? cardSelected : cardIdle}`}
+                              className={`${cardBase} ${selected ? cardSelected : cardIdle}`}
                             >
                               <div className="flex items-start gap-2">
                                 <DeviceIcon category={d.category} className="mt-0.5 shrink-0 text-[#8664F2]" />
@@ -764,9 +804,8 @@ export function SessionSetupModal({
                         type="button"
                         className="ml-2 text-[#8664F2] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8664F2]"
                         onClick={() => {
-                          setDeviceEdit(true);
-                          setPrefs((p) => setCustomSize(p, p.width, p.height));
-                          setCategory("custom");
+                          const next = setCustomSize(prefs, prefs.width, prefs.height);
+                          applySelection({ kind: "custom" }, next);
                         }}
                         disabled={starting}
                       >

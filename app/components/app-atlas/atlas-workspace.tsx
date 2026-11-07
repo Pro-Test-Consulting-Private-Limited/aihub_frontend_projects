@@ -519,7 +519,14 @@ export default function AtlasWorkspace() {
           ) : tab !== "canvas" ? (
             <EmptyState title={`${tabLabel} is coming soon`} body="This part of AppAtlas isn't available yet. Use Canvas to record and map your app." />
           ) : recording ? (
-            <RecordingView key={recording.id} client={client} initial={recording} onFinished={onRecordingDone} onSwitchViewer={switchViewer} onDiscarded={() => {
+            <RecordingView
+              key={recording.id}
+              client={client}
+              initial={recording}
+              onFinished={onRecordingDone}
+              onSwitchViewer={switchViewer}
+              onEditSetup={() => setSetupOpen(true)}
+              onDiscarded={() => {
                 localStorage.removeItem(ACTIVE_SESSION_KEY);
                 setRecording(null);
               }}
