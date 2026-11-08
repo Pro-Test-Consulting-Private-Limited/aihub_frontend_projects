@@ -27,6 +27,7 @@ import { SaveExecutionModal } from "./save-execution-modal";
 import { SessionSetupModal } from "./session-setup-modal";
 import { RecordingView } from "./recording-view";
 import { ReplayPlayer } from "./replay-player";
+import { PerformanceView } from "./performance-view";
 import {
   emulationBodyFromPrefs,
   loadEmulationPrefs,
@@ -523,6 +524,8 @@ export default function AtlasWorkspace() {
             <SitTestingView client={client} canvasId={canvas?.id ?? null} canvasName={canvas?.name} />
           ) : tab === "coverage" ? (
             <CoverageOverview client={client} canvasId={canvas?.id ?? null} />
+          ) : tab === "performance" ? (
+            <PerformanceView canvas={canvas} />
           ) : tab !== "canvas" ? (
             <EmptyState title={`${tabLabel} is coming soon`} body="This part of AppAtlas isn't available yet. Use Canvas to record and map your app." />
           ) : recording ? (

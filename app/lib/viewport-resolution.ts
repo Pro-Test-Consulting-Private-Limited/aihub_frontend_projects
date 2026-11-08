@@ -58,14 +58,28 @@ export function resolutionNameForSize(width: number, height: number): string | n
   return null;
 }
 
-/** Friendly label for recent / My presets chips. */
+/** Always "W × H"; optional secondary ratio (e.g. for card subtitles). */
+export function sizePrimaryLabel(width: number, height: number): string {
+  return `${Math.round(width)} × ${Math.round(height)}`;
+}
+
+/** Card / chip subtitle: "390 × 844 · 9:19.5" (or resolution name when exact). */
+export function sizeCardSubtitle(width: number, height: number): string {
+  const res = resolutionNameForSize(width, height);
+  const primary = sizePrimaryLabel(width, height);
+  if (res) return `${primary} · ${res}`;
+  const ratio = ratioLabel(width, height);
+  if (!ratio.startsWith("about ")) return `${primary} · ${ratio}`;
+  return primary;
+}
+
+/** Friendly short label for recent / My presets (resolution name or ratio, else W×H). */
 export function sizeDisplayLabel(width: number, height: number): string {
   const res = resolutionNameForSize(width, height);
   if (res) return res;
-  // Prefer snapped named ratios (16:10) over reduced gcd (8:5).
   const label = ratioLabel(width, height);
   if (!label.startsWith("about ")) return label;
-  return `${width} × ${height}`;
+  return sizePrimaryLabel(width, height);
 }
 
 export function myScreenSize(): { width: number; height: number } {

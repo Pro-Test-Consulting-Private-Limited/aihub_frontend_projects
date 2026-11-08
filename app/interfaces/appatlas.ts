@@ -155,6 +155,33 @@ export type CanvasState = {
   pageObjectCount: number;
 };
 
+export type SessionHealthSummary = {
+  level: "ok" | "warn" | "bad";
+  consoleErrors: number;
+  consoleWarnings: number;
+  pageErrors: number;
+  failedRequests: number;
+  httpErrors: number;
+  brokenImages: number;
+  ttfbMs: number | null;
+  lcpMs: number | null;
+  cls: number | null;
+  a11yViolations: number;
+  a11ySummary?: string[];
+  slowestRequestMs?: number | null;
+  slowestRequestUrl?: string | null;
+};
+
+export type ReplayTimelineEvent = {
+  at: number;
+  kind: string;
+  label: string;
+  x?: number;
+  y?: number;
+  sensitive?: boolean;
+  box?: { x: number; y: number; w: number; h: number };
+};
+
 export type CanvasNode = {
   id: string;
   title: string;
@@ -170,6 +197,7 @@ export type CanvasNode = {
   /** Unique across all states of the page. */
   pageObjects: CanvasPageObject[];
   arrivedVia?: { summary: string; elementLabel: string; navType: NavType; fromPath: string };
+  health?: SessionHealthSummary;
 };
 
 export type CanvasEdge = {
@@ -215,6 +243,15 @@ export type Canvas = CanvasSummary & {
   nodes: CanvasNode[];
   edges: CanvasEdge[];
   testData: CanvasTestData[];
+  replay?: {
+    mp4Url?: string;
+    gifUrl?: string;
+    durationSec?: number;
+    frameCount?: number;
+    error?: string;
+    limitedMessage?: string;
+  };
+  timeline?: ReplayTimelineEvent[];
   jira: JiraMapping | null;
   /** One entry per Jira ticket mapped to a screen; filled in the background after connecting Jira. */
   clarifications?: CanvasClarification[];
@@ -322,6 +359,8 @@ export type AtlasConfig = {
   provider: string;
   capacity: Capacity;
   presets: { devices: Preset[]; networks: Preset[] };
+  features?: { persona: boolean; replay: boolean; health: boolean };
+  featureDefaults?: { persona: boolean; replay: boolean; health: boolean };
 };
 
 /** Preconfigured Teams channel on a canvas (Phase 1). */

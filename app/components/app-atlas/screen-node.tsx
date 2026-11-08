@@ -1,7 +1,7 @@
 "use client";
 
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
-import type { CanvasNode, PageObjectType } from "@/app/interfaces/appatlas";
+import type { CanvasNode, PageObjectType, SessionHealthSummary } from "@/app/interfaces/appatlas";
 import { atlasUrl } from "@/app/services/appatlas";
 import { PAGE_OBJECT_STYLES } from "./legend";
 
@@ -37,6 +37,7 @@ export function ScreenNode({ data }: NodeProps<AtlasScreenNode>) {
           {screen.path}
         </div>
         <div className="ml-2 flex shrink-0 items-center gap-1">
+          {screen.health && <HealthBadge health={screen.health} />}
           <span className="rounded-[4px] bg-[#F3F4F6] dark:bg-[#2a2a2a] px-1.5 py-0.5 text-[9px] text-[#5E6066] dark:text-[#9ca3af]">
             States · {screen.stateCount}
           </span>
@@ -88,4 +89,27 @@ export function ScreenNode({ data }: NodeProps<AtlasScreenNode>) {
 
 function chipClass(type: PageObjectType) {
   return PAGE_OBJECT_STYLES[type]?.chip ?? PAGE_OBJECT_STYLES.other.chip;
+}
+
+function HealthBadge({ health }: { health: SessionHealthSummary }) {
+  const color =
+    health.level === "ok" ? "bg-[#22C55E]" : health.level === "warn" ? "bg-[#F59E0B]" : "bg-[#EF4444]";
+  const issues = health.consoleErrors + health.pageErrors + health.httpErrors + health.a11yViolations + health.brokenImages;
+  const title = [
+    `Health: ${health.level}`,
+    `console errors ${health.consoleErrors}`,
+    `page errors ${health.pageErrors}`,
+    `HTTP ${health.httpErrors}`,
+    `a11y ${health.a11yViolations}`,
+    `broken images ${health.brokenImages}`,
+  ].join(" · ");
+  return (
+    <span
+      title={title}
+      className={`inline-flex items-center gap-1 rounded-[4px] px-1.5 py-0.5 text-[9px] font-medium text-white ${color}`}
+    >
+      <span className="h-1.5 w-1.5 rounded-full bg-white/90" />
+      {issues}
+    </span>
+  );
 }

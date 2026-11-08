@@ -67,7 +67,19 @@ export function atlasClient({ instance, accounts }: Msal) {
   });
 
   return {
-    getConfig: () => request<AtlasConfig>("/config"),
+    getConfig: (projectId?: string) =>
+      request<AtlasConfig>(projectId ? `/config?projectId=${encodeURIComponent(projectId)}` : "/config"),
+    getProjectFeatures: (projectId: string) =>
+      request<{
+        projectId: string;
+        features: { persona: boolean; replay: boolean; health: boolean };
+        defaults: { persona: boolean; replay: boolean; health: boolean };
+      }>(`/project-features/${encodeURIComponent(projectId)}`),
+    setProjectFeatures: (projectId: string, body: Partial<{ persona: boolean; replay: boolean; health: boolean }>) =>
+      request<{ projectId: string; features: { persona: boolean; replay: boolean; health: boolean } }>(
+        `/project-features/${encodeURIComponent(projectId)}`,
+        json("PUT", body),
+      ),
     listRecordingPresets: () =>
       request<{ items: UserRecordingPreset[] }>("/recording-presets").then((r) => r.items),
     createRecordingPreset: (body: { kind: PresetKind; name: string; payload: PresetPayload }) =>

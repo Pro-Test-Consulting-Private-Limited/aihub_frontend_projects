@@ -7,7 +7,13 @@ import {
   ratioLabel,
   sizeFromRatio,
 } from "./viewport-ratio";
-import { clampScreenSize, resolutionNameForSize, sizeFromResolution, sizeDisplayLabel } from "./viewport-resolution";
+import {
+  clampScreenSize,
+  resolutionNameForSize,
+  sizeCardSubtitle,
+  sizeFromResolution,
+  sizePrimaryLabel,
+} from "./viewport-resolution";
 import { RESOLUTION_PRESETS } from "./viewport-resolution";
 
 describe("gcd / ratioLabel", () => {
@@ -63,10 +69,12 @@ describe("resolution presets", () => {
     expect(sizeFromResolution(p, "portrait")).toEqual({ width: 1080, height: 1920 });
   });
 
-  it("names matching sizes", () => {
+  it("names matching sizes and card subtitles", () => {
     expect(resolutionNameForSize(1920, 1080)).toBe("1080p Full HD");
     expect(resolutionNameForSize(1080, 1920)).toBe("1080p Full HD");
-    expect(sizeDisplayLabel(1280, 800)).toBe("16:10");
+    expect(sizePrimaryLabel(390, 844)).toBe("390 × 844");
+    expect(sizeCardSubtitle(390, 844)).toMatch(/^390 × 844/);
+    expect(sizeCardSubtitle(1280, 800)).toBe("1280 × 800 · 16:10");
   });
 
   it("clamps My screen / This window", () => {

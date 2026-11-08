@@ -224,10 +224,14 @@ export function selectDevicePreset(
   if (entry.id === "custom") {
     return setCustomSize(prefs, prefs.width, prefs.height);
   }
+  // Always take W×H from the catalog entry (ignore previous device's dimensions).
   const orientation = orientationFromSize(entry.width, entry.height);
   return normalizePrefs({
-    ...prefs,
     devicePreset: entry.id,
+    networkPreset: prefs.networkPreset,
+    latencyMs: prefs.latencyMs,
+    downloadKbps: prefs.downloadKbps,
+    uploadKbps: prefs.uploadKbps,
     width: entry.width,
     height: entry.height,
     orientation,

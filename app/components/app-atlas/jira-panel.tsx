@@ -14,6 +14,7 @@ import {
   TbX,
 } from "react-icons/tb";
 import type { Canvas, CanvasClarification, JiraIssue, JiraNodeMatch, TicketNote } from "@/app/interfaces/appatlas";
+import { HealthPanel } from "./health-panel";
 
 type Bucket = "Epic" | "Story" | "Bug" | "Task";
 
@@ -72,6 +73,7 @@ export function JiraPanel({
   const node = canvas.nodes.find((n) => n.id === nodeId);
   const mapping = canvas.jira;
   const [filter, setFilter] = useState<Bucket | null>(null);
+  const [drawerTab, setDrawerTab] = useState<"requirements" | "health">("requirements");
   const clarifications = useMemo(
     () => new Map((canvas.clarifications ?? []).map((c) => [c.issueKey, c])),
     [canvas.clarifications],
@@ -129,63 +131,89 @@ export function JiraPanel({
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-3">
-        <div className="mb-3 flex items-center gap-2 text-[15px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">
-          <SiJira size={16} color="#2684FF" /> Jira Tickets
-          {mapping && <span className="text-[11px] font-normal text-[#7E7E7E]">· {mapping.projectKey}</span>}
-        </div>
-
-        {!mapping ? (
-          <div className="mt-8 text-center text-[13px] text-[#5E6066] dark:text-[#9ca3af]">
-            <p>Connect this canvas to Jira to see which epics, stories, tasks and bugs this screen covers.</p>
-            {onConnect && (
-              <button
-                type="button"
-                onClick={onConnect}
-                className="mx-auto mt-4 flex items-center gap-2 rounded-[8px] border border-[#C9B8F7] bg-[#F4EFFE] px-4 py-2 text-[13px] font-medium text-[#8664F2] hover:bg-[#EDE4FD]"
-              >
-                <TbLink size={15} /> Connect
-              </button>
-            )}
-          </div>
-        ) : (
-          <>
-            <div className="mb-3 grid grid-cols-4 gap-2">
-              {BUCKETS.map((b) => (
-                <button
-                  key={b.id}
-                  type="button"
-                  onClick={() => setFilter(filter === b.id ? null : b.id)}
-                  className={`flex items-center justify-center gap-1.5 rounded-[8px] border px-1 py-1.5 text-[11.5px] ${
-                    filter === b.id
-                      ? "border-[#8664F2] bg-[#F4EFFE] text-[#5B3FD1]"
-                      : "border-[#E5E7EB] text-[#1F1F1F] hover:border-[#C9B8F7] dark:border-[#2a2a2a] dark:text-[#ededed]"
-                  }`}
-                >
-                  <span className={`flex h-[18px] w-[18px] items-center justify-center rounded-[4px] ${b.tint}`}>{b.icon}</span>
-                  {b.id} {counts[b.id]}
-                </button>
-              ))}
-            </div>
-
-            {shown.length === 0 && (
-              <div className="mt-6 text-center text-[12.5px] text-[#7E7E7E]">
-                {tickets.length ? `No ${filter?.toLowerCase()} tickets on this screen.` : "No Jira tickets matched this screen."}
-              </div>
-            )}
-            {shown.map((t) => (
-              <TicketCard
-                key={t.issue.key}
-                ticket={t}
-                clarification={t.match ? clarifications.get(t.issue.key) : undefined}
-                editable={editable}
-                onSaveNote={onSaveNote}
-                onPostToTeams={onPostToTeams}
-              />
-            ))}
-          </>
-        )}
+      <div className="flex gap-1 border-b border-[#EEE] px-3 pt-2 dark:border-[#1a1a1a]">
+        {(
+          [
+            { id: "requirements" as const, label: "Requirements" },
+            { id: "health" as const, label: "Health" },
+          ] as const
+        ).map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setDrawerTab(t.id)}
+            className={`rounded-t-[6px] px-3 py-1.5 text-[12px] font-medium ${
+              drawerTab === t.id
+                ? "bg-[#F4EFFE] text-[#5B3FD1]"
+                : "text-[#7E7E7E] hover:text-[#1F1F1F] dark:hover:text-white"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
+
+      {drawerTab === "health" ? (
+        <div className="flex-1 overflow-y-auto">{node ? <HealthPanel node={node} /> : null}</div>
+      ) : (
+        <div className="flex-1 overflow-y-auto px-4 py-3">
+          <div className="mb-3 flex items-center gap-2 text-[15px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">
+            <SiJira size={16} color="#2684FF" /> Jira Tickets
+            {mapping && <span className="text-[11px] font-normal text-[#7E7E7E]">· {mapping.projectKey}</span>}
+          </div>
+
+          {!mapping ? (
+            <div className="mt-8 text-center text-[13px] text-[#5E6066] dark:text-[#9ca3af]">
+              <p>Connect this canvas to Jira to see which epics, stories, tasks and bugs this screen covers.</p>
+              {onConnect && (
+                <button
+                  type="button"
+                  onClick={onConnect}
+                  className="mx-auto mt-4 flex items-center gap-2 rounded-[8px] border border-[#C9B8F7] bg-[#F4EFFE] px-4 py-2 text-[13px] font-medium text-[#8664F2] hover:bg-[#EDE4FD]"
+                >
+                  <TbLink size={15} /> Connect
+                </button>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="mb-3 grid grid-cols-4 gap-2">
+                {BUCKETS.map((b) => (
+                  <button
+                    key={b.id}
+                    type="button"
+                    onClick={() => setFilter(filter === b.id ? null : b.id)}
+                    className={`flex items-center justify-center gap-1.5 rounded-[8px] border px-1 py-1.5 text-[11.5px] ${
+                      filter === b.id
+                        ? "border-[#8664F2] bg-[#F4EFFE] text-[#5B3FD1]"
+                        : "border-[#E5E7EB] text-[#1F1F1F] hover:border-[#C9B8F7] dark:border-[#2a2a2a] dark:text-[#ededed]"
+                    }`}
+                  >
+                    <span className={`flex h-[18px] w-[18px] items-center justify-center rounded-[4px] ${b.tint}`}>{b.icon}</span>
+                    {b.id} {counts[b.id]}
+                  </button>
+                ))}
+              </div>
+
+              {shown.length === 0 && (
+                <div className="mt-6 text-center text-[12.5px] text-[#7E7E7E]">
+                  {tickets.length ? `No ${filter?.toLowerCase()} tickets on this screen.` : "No Jira tickets matched this screen."}
+                </div>
+              )}
+              {shown.map((t) => (
+                <TicketCard
+                  key={t.issue.key}
+                  ticket={t}
+                  clarification={t.match ? clarifications.get(t.issue.key) : undefined}
+                  editable={editable}
+                  onSaveNote={onSaveNote}
+                  onPostToTeams={onPostToTeams}
+                />
+              ))}
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

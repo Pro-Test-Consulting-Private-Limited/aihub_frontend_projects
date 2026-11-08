@@ -5,6 +5,7 @@ import { useProjects } from "@/app/lib/projectsStore";
 import Breadcrumbs from "@/app/components/breadcrumbs";
 import { ProjectBreadcrumbs } from "@/app/constants/projects";
 import AuthGuard from "@/app/lib/authguard";
+import { ProjectFeatureFlags } from "@/app/components/app-atlas/project-feature-flags";
 
 const STEPS = [
   { label: "Basic Info", key: "basic" },
@@ -750,6 +751,8 @@ export default function Projects() {
                     </>
                   )}
                 </div>
+
+                {selectedProjectId && <ProjectFeatureFlags projectId={selectedProjectId} />}
               </>
             )}
           </div>

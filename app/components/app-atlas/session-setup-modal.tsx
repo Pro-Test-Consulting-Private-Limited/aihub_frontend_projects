@@ -83,8 +83,9 @@ import {
   RESOLUTION_PRESETS,
   myScreenSize,
   needsStreamEmulation,
-  sizeDisplayLabel,
+  sizeCardSubtitle,
   sizeFromResolution,
+  sizePrimaryLabel,
   thisWindowSize,
 } from "@/app/lib/viewport-resolution";
 import {
@@ -871,7 +872,7 @@ export function SessionSetupModal({
                                     {p.isDefault ? " · default" : ""}
                                   </div>
                                   <div className="font-mono text-[10.5px] text-[#7E7E7E]">
-                                    {sizeDisplayLabel(d.width, d.height)}
+                                    {sizeCardSubtitle(d.width, d.height)}
                                   </div>
                                 </button>
                                 {renamingId === p.id ? (
@@ -909,8 +910,8 @@ export function SessionSetupModal({
                           const selected = isCardSelected(selection, d.id) && !selectedPresetId;
                           const sizeLabel =
                             d.id === "custom"
-                              ? sizeDisplayLabel(prefs.width, prefs.height)
-                              : sizeDisplayLabel(d.width, d.height);
+                              ? sizeCardSubtitle(prefs.width, prefs.height)
+                              : sizeCardSubtitle(d.width, d.height);
                           return (
                             <button
                               key={d.id}
@@ -1587,24 +1588,43 @@ export function SessionSetupModal({
                   />
                 </DevicePreviewFrame>
                 <div className="mt-2 flex flex-wrap justify-center gap-1">
-                  {[
-                    deviceById(prefs.devicePreset)?.label ?? (prefs.devicePreset === "custom" ? "Custom" : prefs.devicePreset),
-                    sizeDisplayLabel(prefs.width, prefs.height),
-                    `${prefs.width} × ${prefs.height}`,
-                    prefs.orientation === "portrait" ? "Portrait" : "Landscape",
-                    networkById(prefs.networkPreset)?.label ?? prefs.networkPreset,
-                    ...(needsStreamEmulation(prefs.width, prefs.height) ? ["Emulated, stream scaled"] : []),
-                    ...(isCustom && (prefs.deviceScaleFactor ?? 1) > 1 ? [`${prefs.deviceScaleFactor}x dens.`] : []),
-                  ].map((chip) => (
+                  {(
+                    [
+                      {
+                        key: "device",
+                        label:
+                          deviceById(prefs.devicePreset)?.label ??
+                          (prefs.devicePreset === "custom" ? "Custom" : prefs.devicePreset),
+                      },
+                      {
+                        key: "size",
+                        label: sizeCardSubtitle(prefs.width, prefs.height),
+                      },
+                      {
+                        key: "orient",
+                        label: prefs.orientation === "portrait" ? "Portrait" : "Landscape",
+                      },
+                      {
+                        key: "net",
+                        label: networkById(prefs.networkPreset)?.label ?? prefs.networkPreset,
+                      },
+                      ...(needsStreamEmulation(prefs.width, prefs.height)
+                        ? [{ key: "emu", label: "Emulated, stream scaled", danger: true as const }]
+                        : []),
+                      ...(isCustom && (prefs.deviceScaleFactor ?? 1) > 1
+                        ? [{ key: "dpr", label: `${prefs.deviceScaleFactor}x dens.` }]
+                        : []),
+                    ] as Array<{ key: string; label: string; danger?: boolean }>
+                  ).map((chip) => (
                     <span
-                      key={chip}
+                      key={chip.key}
                       className={`rounded-full border px-2 py-0.5 text-[11px] ${
-                        chip === "Emulated, stream scaled"
+                        chip.danger
                           ? "border-[#FCD34D] bg-[#FFFBEB] text-[#92400E]"
                           : "border-[#E5E7EB] bg-[#F9FAFB] text-[#374151] dark:border-[#2a2a2a] dark:bg-[#141414] dark:text-[#d1d5db]"
                       }`}
                     >
-                      {chip}
+                      {chip.label}
                     </span>
                   ))}
                 </div>
