@@ -894,7 +894,7 @@ export function SessionSetupModal({
                   <div
                     role="listbox"
                     aria-label="Device presets"
-                    className={`grid grid-cols-2 sm:grid-cols-3 ${compact ? "max-h-[88px] gap-1 overflow-hidden" : "gap-2"}`}
+                    className={`grid grid-cols-2 sm:grid-cols-3 ${compact ? "max-h-[64px] gap-1 overflow-hidden" : "gap-2"}`}
                   >
                     {category === "mine"
                       ? myDevicePresets
@@ -1608,7 +1608,7 @@ export function SessionSetupModal({
                 {configError && <p className="text-[12px] text-[#B45309]">{configError}</p>}
               </div>
 
-              <div className={`flex flex-col overflow-hidden lg:min-h-0 ${compact ? "min-h-[120px]" : "min-h-[280px]"}`}>
+              <div className={`flex flex-col overflow-hidden lg:min-h-0 ${compact ? "min-h-[80px]" : "min-h-[280px]"}`}>
                 <DevicePreviewFrame
                   width={prefs.width}
                   height={prefs.height}
