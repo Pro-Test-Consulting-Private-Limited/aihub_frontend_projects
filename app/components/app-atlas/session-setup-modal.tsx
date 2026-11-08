@@ -1248,52 +1248,56 @@ export function SessionSetupModal({
                         </div>
                       )}
 
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="text-[11px] text-[#7E7E7E]">Density</span>
-                        {[1, 2, 3].map((d) => (
-                          <button
-                            key={d}
-                            type="button"
-                            disabled={starting}
-                            onClick={() =>
-                              setPrefs((p) => normalizePrefs({ ...p, devicePreset: "custom", deviceScaleFactor: d }))
-                            }
-                            className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${
-                              (prefs.deviceScaleFactor ?? 1) === d
-                                ? "border-[#8664F2] bg-[#F5F0FF] text-[#8664F2]"
-                                : "border-[#E5E7EB] bg-white text-[#5E6066] dark:border-[#2a2a2a] dark:bg-[#0a0a0a]"
-                            }`}
-                          >
-                            {d}x
-                          </button>
-                        ))}
-                        {(prefs.deviceScaleFactor ?? 1) > 1 && (
-                          <span className="text-[10px] text-[#7E7E7E]">2x/3x make screenshots larger</span>
-                        )}
-                      </div>
+                      {!compact && (
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-[11px] text-[#7E7E7E]">Density</span>
+                          {[1, 2, 3].map((d) => (
+                            <button
+                              key={d}
+                              type="button"
+                              disabled={starting}
+                              onClick={() =>
+                                setPrefs((p) => normalizePrefs({ ...p, devicePreset: "custom", deviceScaleFactor: d }))
+                              }
+                              className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+                                (prefs.deviceScaleFactor ?? 1) === d
+                                  ? "border-[#8664F2] bg-[#F5F0FF] text-[#8664F2]"
+                                  : "border-[#E5E7EB] bg-white text-[#5E6066] dark:border-[#2a2a2a] dark:bg-[#0a0a0a]"
+                              }`}
+                            >
+                              {d}x
+                            </button>
+                          ))}
+                          {(prefs.deviceScaleFactor ?? 1) > 1 && (
+                            <span className="text-[10px] text-[#7E7E7E]">2x/3x make screenshots larger</span>
+                          )}
+                        </div>
+                      )}
 
                       {sizeHint && <p className="text-[11px] text-[#B45309]">{sizeHint}</p>}
 
-                      <div className="flex flex-wrap items-center gap-2">
-                        {savingKind === "device" ? (
-                          <InlineSaveName
-                            kind="device"
-                            disabled={starting}
-                            onCancel={() => setSavingKind(null)}
-                            onSave={(name) => createPreset("device", name)}
-                          />
-                        ) : (
-                          <button
-                            type="button"
-                            disabled={starting || atLimit}
-                            className={`${outlineButton} !inline-flex !items-center !gap-1.5 !px-3 !py-1.5 !text-[12px]`}
-                            onClick={() => setSavingKind("device")}
-                          >
-                            <TbBookmark size={14} />
-                            Save device preset
-                          </button>
-                        )}
-                      </div>
+                      {!compact && (
+                        <div className="flex flex-wrap items-center gap-2">
+                          {savingKind === "device" ? (
+                            <InlineSaveName
+                              kind="device"
+                              disabled={starting}
+                              onCancel={() => setSavingKind(null)}
+                              onSave={(name) => createPreset("device", name)}
+                            />
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={starting || atLimit}
+                              className={`${outlineButton} !inline-flex !items-center !gap-1.5 !px-3 !py-1.5 !text-[12px]`}
+                              onClick={() => setSavingKind("device")}
+                            >
+                              <TbBookmark size={14} />
+                              Save device preset
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                 </section>
@@ -1608,7 +1612,7 @@ export function SessionSetupModal({
                 {configError && <p className="text-[12px] text-[#B45309]">{configError}</p>}
               </div>
 
-              <div className={`flex flex-col overflow-hidden lg:min-h-0 ${compact ? "min-h-[80px]" : "min-h-[280px]"}`}>
+              <div className={`flex flex-col overflow-hidden lg:min-h-0 ${compact ? "min-h-[56px]" : "min-h-[280px]"}`}>
                 <DevicePreviewFrame
                   width={prefs.width}
                   height={prefs.height}
@@ -1641,46 +1645,48 @@ export function SessionSetupModal({
                     hasSelection={Boolean(selection)}
                   />
                 </DevicePreviewFrame>
-                <div className="mt-2 flex flex-wrap justify-center gap-1">
-                  {(
-                    [
-                      {
-                        key: "device",
-                        label:
-                          deviceById(prefs.devicePreset)?.label ??
-                          (prefs.devicePreset === "custom" ? "Custom" : prefs.devicePreset),
-                      },
-                      {
-                        key: "size",
-                        label: sizeCardSubtitle(prefs.width, prefs.height),
-                      },
-                      {
-                        key: "orient",
-                        label: prefs.orientation === "portrait" ? "Portrait" : "Landscape",
-                      },
-                      {
-                        key: "net",
-                        label: networkById(prefs.networkPreset)?.label ?? prefs.networkPreset,
-                      },
-                      // "Emulated, stream scaled" is shown only on the live recording chips when
-                      // session.emulation.streamScaled === true (API). Never predicted client-side.
-                      ...(isCustom && (prefs.deviceScaleFactor ?? 1) > 1
-                        ? [{ key: "dpr", label: `${prefs.deviceScaleFactor}x dens.` }]
-                        : []),
-                    ] as Array<{ key: string; label: string; danger?: boolean }>
-                  ).map((chip) => (
-                    <span
-                      key={chip.key}
-                      className={`rounded-full border px-2 py-0.5 text-[11px] ${
-                        chip.danger
-                          ? "border-[#FCD34D] bg-[#FFFBEB] text-[#92400E]"
-                          : "border-[#E5E7EB] bg-[#F9FAFB] text-[#374151] dark:border-[#2a2a2a] dark:bg-[#141414] dark:text-[#d1d5db]"
-                      }`}
-                    >
-                      {chip.label}
-                    </span>
-                  ))}
-                </div>
+                {!compact && (
+                  <div className="mt-2 flex flex-wrap justify-center gap-1">
+                    {(
+                      [
+                        {
+                          key: "device",
+                          label:
+                            deviceById(prefs.devicePreset)?.label ??
+                            (prefs.devicePreset === "custom" ? "Custom" : prefs.devicePreset),
+                        },
+                        {
+                          key: "size",
+                          label: sizeCardSubtitle(prefs.width, prefs.height),
+                        },
+                        {
+                          key: "orient",
+                          label: prefs.orientation === "portrait" ? "Portrait" : "Landscape",
+                        },
+                        {
+                          key: "net",
+                          label: networkById(prefs.networkPreset)?.label ?? prefs.networkPreset,
+                        },
+                        // "Emulated, stream scaled" is shown only on the live recording chips when
+                        // session.emulation.streamScaled === true (API). Never predicted client-side.
+                        ...(isCustom && (prefs.deviceScaleFactor ?? 1) > 1
+                          ? [{ key: "dpr", label: `${prefs.deviceScaleFactor}x dens.` }]
+                          : []),
+                      ] as Array<{ key: string; label: string; danger?: boolean }>
+                    ).map((chip) => (
+                      <span
+                        key={chip.key}
+                        className={`rounded-full border px-2 py-0.5 text-[11px] ${
+                          chip.danger
+                            ? "border-[#FCD34D] bg-[#FFFBEB] text-[#92400E]"
+                            : "border-[#E5E7EB] bg-[#F9FAFB] text-[#374151] dark:border-[#2a2a2a] dark:bg-[#141414] dark:text-[#d1d5db]"
+                        }`}
+                      >
+                        {chip.label}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>

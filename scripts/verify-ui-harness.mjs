@@ -427,58 +427,56 @@ async function apiFinish(id) {
   }, id);
 }
 
-try {
-  await page.keyboard.press("Escape").catch(() => undefined);
-  await page.waitForTimeout(400);
-  const snap4k = await apiSession(3840, 2160);
-  record(
-    "a.badge.api-4k",
-    "session.emulation.streamScaled===true",
-    snap4k.emulation || snap4k,
-    snap4k.emulation?.streamScaled === true,
-  );
-  // Try UI start for chip screenshot
-  try {
-    dialog = await openDialog();
-    await startRecordingAtResolution("4K");
-    await page.waitForTimeout(3000);
-    await page.screenshot({ path: path.join(OUT, "ui-live-4k-chips.png") });
-    const body4k = await page.locator("body").innerText();
-    const chip4k = /Emulated,\s*stream scaled/i.test(body4k);
-    record(
-      "a.badge.live-4k-chip",
-      "Emulated, stream scaled visible",
-      chip4k,
-      chip4k ? true : null,
-      chip4k ? "" : "API streamScaled=true is authoritative; chip may lag while session starts",
-    );
-    await stopRecording();
-  } catch (e) {
-    record("a.badge.live-4k-chip", "UI chip screenshot", String(e), null, "API streamScaled is authoritative");
+async function waitChip(re, ms = 25000) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < ms) {
+    const body = await page.locator("body").innerText();
+    if (re.test(body)) return true;
+    await page.waitForTimeout(800);
   }
-  if (snap4k.id) await apiFinish(snap4k.id);
+  return re.test(await page.locator("body").innerText());
+}
 
-  const snap720 = await apiSession(1280, 720);
-  record(
-    "a.badge.api-720p",
-    "session.emulation.streamScaled===false",
-    snap720.emulation || snap720,
-    snap720.emulation?.streamScaled === false,
-  );
-  try {
-    dialog = await openDialog();
-    await startRecordingAtResolution("720p");
-    await page.waitForTimeout(3000);
-    await page.screenshot({ path: path.join(OUT, "ui-live-720p-chips.png") });
-    const body720 = await page.locator("body").innerText();
-    record("a.badge.live-720p-chip", "no Emulated badge", !/Emulated,\s*stream scaled/i.test(body720), !/Emulated,\s*stream scaled/i.test(body720));
-    await stopRecording();
-  } catch (e) {
-    record("a.badge.live-720p-chip", "UI chip screenshot", String(e), null, "API streamScaled is authoritative");
+async function uiRecordScaled(resLabel) {
+  await page.goto(`${BASE}/app-atlas?projectId=${PROJECT_ID}`, { waitUntil: "domcontentloaded", timeout: 90000 });
+  await page.waitForTimeout(2000);
+  dialog = await openDialog();
+  await startRecordingAtResolution(resLabel);
+  // Poll live session from API while UI settles
+  let emu = null;
+  for (let i = 0; i < 30; i++) {
+    emu = await page.evaluate(async () => {
+      const r = await fetch("/api/dev-atlas/sessions?limit=8");
+      const data = await r.json();
+      const items = Array.isArray(data) ? data : data.items || data.sessions || [];
+      const live = items.find((s) => /recording|starting/i.test(s.status || ""));
+      return live?.emulation || null;
+    });
+    if (emu && typeof emu.streamScaled === "boolean") break;
+    await page.waitForTimeout(700);
   }
-  if (snap720.id) await apiFinish(snap720.id);
+  return emu;
+}
+
+try {
+  const emu4k = await uiRecordScaled("4K");
+  record("a.badge.api-4k", "session.emulation.streamScaled===true", emu4k, emu4k?.streamScaled === true);
+  const chip4k = await waitChip(/Emulated,\s*stream scaled/i, 20000);
+  await page.screenshot({ path: path.join(OUT, "ui-live-4k-chips.png"), fullPage: false });
+  record("a.badge.live-4k-chip", "Emulated, stream scaled visible", chip4k, chip4k);
+  await stopRecording();
+  await page.waitForTimeout(2500);
+
+  const emu720 = await uiRecordScaled("720p");
+  record("a.badge.api-720p", "session.emulation.streamScaled===false", emu720, emu720?.streamScaled === false);
+  await page.waitForTimeout(2000);
+  const body720 = await page.locator("body").innerText();
+  const chip720 = /Emulated,\s*stream scaled/i.test(body720);
+  await page.screenshot({ path: path.join(OUT, "ui-live-720p-chips.png"), fullPage: false });
+  record("a.badge.live-720p-chip", "no Emulated badge", !chip720, !chip720);
+  await stopRecording();
 } catch (err) {
-  record("a.badge.api-4k", "live sessions", String(err), false);
+  record("a.badge.live", "live sessions via UI+API", String(err), false);
 }
 
 // Health screenshots if canvas id provided

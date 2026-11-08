@@ -157,7 +157,7 @@ export function DevicePreviewFrame({
     <div
       ref={boxRef}
       className={`relative flex w-full flex-1 flex-col items-center justify-center overflow-hidden rounded-[12px] border border-[#E5E7EB] bg-[#F7F7FA] dark:border-[#2a2a2a] dark:bg-[#0a0a0a] ${
-        compact ? "min-h-[72px] p-1" : "min-h-[260px] p-3"
+        compact ? "min-h-[48px] p-0.5" : "min-h-[260px] p-3"
       }`}
     >
       <div
