@@ -21,9 +21,12 @@ type Props = {
   onSizeChange: (width: number, height: number) => void;
   children?: React.ReactNode;
   appUrl?: string;
+  /** Compact density: shorter preview box for short viewports. */
+  compact?: boolean;
 };
 
 const BOX_MIN_H = 260;
+const BOX_MIN_H_COMPACT = 140;
 const BOX_PAD = 16;
 
 export function DevicePreviewFrame({
@@ -41,9 +44,11 @@ export function DevicePreviewFrame({
   onSizeChange,
   children,
   appUrl,
+  compact,
 }: Props) {
   const boxRef = useRef<HTMLDivElement>(null);
-  const [box, setBox] = useState({ w: 280, h: BOX_MIN_H });
+  const minH = compact ? BOX_MIN_H_COMPACT : BOX_MIN_H;
+  const [box, setBox] = useState({ w: 280, h: minH });
   const [frozenScale, setFrozenScale] = useState<number | null>(null);
   const [ghost, setGhost] = useState<{ w: number; h: number } | null>(null);
   const [tip, setTip] = useState<{ x: number; y: number; label: string } | null>(null);
@@ -65,14 +70,14 @@ export function DevicePreviewFrame({
       const r = el.getBoundingClientRect();
       setBox({
         w: Math.max(160, r.width - BOX_PAD * 2),
-        h: Math.max(BOX_MIN_H - BOX_PAD * 2, r.height - BOX_PAD * 2),
+        h: Math.max(minH - BOX_PAD * 2, r.height - BOX_PAD * 2),
       });
     };
     measure();
     const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
     ro?.observe(el);
     return () => ro?.disconnect();
-  }, []);
+  }, [minH]);
 
   const fit = fitScale(width, height, box.w, box.h);
   const scale = frozenScale ?? fit.scale;
@@ -151,7 +156,9 @@ export function DevicePreviewFrame({
   return (
     <div
       ref={boxRef}
-      className="relative flex w-full min-h-[260px] flex-1 flex-col items-center justify-center overflow-hidden rounded-[12px] border border-[#E5E7EB] bg-[#F7F7FA] p-3 dark:border-[#2a2a2a] dark:bg-[#0a0a0a]"
+      className={`relative flex w-full flex-1 flex-col items-center justify-center overflow-hidden rounded-[12px] border border-[#E5E7EB] bg-[#F7F7FA] dark:border-[#2a2a2a] dark:bg-[#0a0a0a] ${
+        compact ? "min-h-[140px] p-1.5" : "min-h-[260px] p-3"
+      }`}
     >
       <div
         className={`relative bg-[#111] text-white shadow-lg dark:bg-[#000] ${

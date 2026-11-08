@@ -358,6 +358,33 @@ export function SessionSetupModal({
   const [persona, setPersona] = useState(() => loadPersona());
   const [personaOpen, setPersonaOpen] = useState(false);
   const [personaClock, setPersonaClock] = useState("");
+  /** Compact density: smaller preview, tighter rows, persona groups on one row — auto under 900px viewport height. */
+  const [compact, setCompact] = useState(false);
+  useEffect(() => {
+    const read = () => {
+      const force = typeof document !== "undefined" ? document.documentElement.dataset.appatlasDensity : undefined;
+      if (force === "comfortable") {
+        setCompact(false);
+        return;
+      }
+      if (force === "compact") {
+        setCompact(true);
+        return;
+      }
+      setCompact(window.matchMedia("(max-height: 900px)").matches);
+    };
+    read();
+    const mq = window.matchMedia("(max-height: 900px)");
+    mq.addEventListener("change", read);
+    window.addEventListener("appatlas-density", read);
+    const obs = new MutationObserver(read);
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["data-appatlas-density"] });
+    return () => {
+      mq.removeEventListener("change", read);
+      window.removeEventListener("appatlas-density", read);
+      obs.disconnect();
+    };
+  }, []);
 
   const syncPresets = useCallback(
     (items: UserRecordingPreset[]) => {
@@ -732,11 +759,21 @@ export function SessionSetupModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="flex max-h-[calc(100vh-48px)] w-full max-w-[1040px] flex-col overflow-hidden rounded-[16px] bg-white shadow-xl dark:bg-[#141414]"
+        data-density={compact ? "compact" : "comfortable"}
+        className={`flex max-h-[calc(100vh-48px)] w-full max-w-[1040px] flex-col overflow-hidden rounded-[16px] bg-white shadow-xl dark:bg-[#141414] ${
+          compact ? "text-[12px]" : ""
+        }`}
       >
-        <div className="flex shrink-0 flex-col gap-2 border-b border-[#D9D9D9] px-5 py-3 dark:border-[#2a2a2a] sm:px-6">
+        <div
+          className={`flex shrink-0 flex-col border-b border-[#D9D9D9] dark:border-[#2a2a2a] ${
+            compact ? "gap-1 px-3 py-1.5 sm:px-4" : "gap-2 px-5 py-3 sm:px-6"
+          }`}
+        >
           <div className="flex items-center justify-between gap-3">
-            <h2 id={titleId} className="text-[18px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">
+            <h2
+              id={titleId}
+              className={`font-semibold text-[#1F1F1F] dark:text-[#ededed] ${compact ? "text-[15px]" : "text-[18px]"}`}
+            >
               Start recording
             </h2>
             <button
@@ -786,9 +823,17 @@ export function SessionSetupModal({
         </div>
 
         <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
-          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3 sm:overflow-hidden sm:px-6 [@media(max-height:760px)]:overflow-y-auto">
-            <div className="grid h-full grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.9fr)]">
-              <div className="min-w-0 space-y-3">
+          <div
+            className={`min-h-0 flex-1 overflow-hidden ${
+              compact ? "px-3 py-1.5 sm:px-4" : "px-5 py-3 sm:px-6"
+            }`}
+          >
+            <div
+              className={`grid h-full grid-cols-1 lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)] ${
+                compact ? "gap-2" : "gap-4"
+              }`}
+            >
+              <div className={`min-w-0 ${compact ? "space-y-1.5" : "space-y-3"}`}>
                 <section>
                   <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
                     <div className="flex flex-wrap items-center gap-2">
@@ -1258,8 +1303,14 @@ export function SessionSetupModal({
                     <span className="truncate text-[11px] text-[#7E7E7E]">{personaSummary(persona)}</span>
                   </button>
                   {personaOpen && (
-                    <div className="mt-1.5 space-y-1.5 rounded-[10px] border border-[#E5E7EB] bg-[#FAFAFA] p-2 dark:border-[#2a2a2a] dark:bg-[#121212]">
-                      <div className="flex flex-wrap gap-1">
+                    <div
+                      className={`mt-1 rounded-[10px] border border-[#E5E7EB] bg-[#FAFAFA] dark:border-[#2a2a2a] dark:bg-[#121212] ${
+                        compact
+                          ? "flex flex-nowrap items-center gap-1 overflow-x-auto p-1.5"
+                          : "space-y-1.5 p-2"
+                      }`}
+                    >
+                      <div className={`flex gap-1 ${compact ? "shrink-0 flex-nowrap" : "flex-wrap"}`}>
                         {(["light", "dark", "no-preference"] as const).map((c) => (
                           <button
                             key={c}
@@ -1288,7 +1339,7 @@ export function SessionSetupModal({
                           Reduced motion
                         </button>
                       </div>
-                      <div className="flex flex-wrap gap-1">
+                      <div className={`flex gap-1 ${compact ? "shrink-0 flex-nowrap" : "flex-wrap"}`}>
                         {PERSONA_LOCALES.map((l) => (
                           <button
                             key={l.id}
@@ -1306,11 +1357,13 @@ export function SessionSetupModal({
                           </button>
                         ))}
                       </div>
-                      <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#5E6066]">
-                        <span className="font-mono">{personaClock || "—"}</span>
-                        <span className="text-[#7E7E7E]">{persona.timezoneId}</span>
-                      </div>
-                      <div className="flex flex-wrap gap-1">
+                      {!compact && (
+                        <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#5E6066]">
+                          <span className="font-mono">{personaClock || "—"}</span>
+                          <span className="text-[#7E7E7E]">{persona.timezoneId}</span>
+                        </div>
+                      )}
+                      <div className={`flex gap-1 ${compact ? "shrink-0 flex-nowrap" : "flex-wrap"}`}>
                         {PERSONA_CITIES.map((c) => (
                           <button
                             key={c.id}
@@ -1327,7 +1380,7 @@ export function SessionSetupModal({
                           </button>
                         ))}
                       </div>
-                      <div className="flex flex-wrap gap-2 text-[11px] text-[#5E6066]">
+                      <div className={`flex gap-2 text-[11px] text-[#5E6066] ${compact ? "shrink-0 flex-nowrap" : "flex-wrap"}`}>
                         {(
                           [
                             ["permissionLocation", "Location"],
@@ -1549,7 +1602,7 @@ export function SessionSetupModal({
                 {configError && <p className="text-[12px] text-[#B45309]">{configError}</p>}
               </div>
 
-              <div className="flex min-h-[280px] flex-col lg:min-h-0">
+              <div className={`flex flex-col lg:min-h-0 ${compact ? "min-h-[160px]" : "min-h-[280px]"}`}>
                 <DevicePreviewFrame
                   width={prefs.width}
                   height={prefs.height}
@@ -1564,6 +1617,7 @@ export function SessionSetupModal({
                   ratioText={ratioLabel(prefs.width, prefs.height)}
                   onSizeChange={onWidthHeight}
                   appUrl={appUrl}
+                  compact={compact}
                 >
                   <LiveUrlPreview
                     client={client}
@@ -1625,7 +1679,11 @@ export function SessionSetupModal({
             </div>
           </div>
 
-          <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-[#D9D9D9] bg-white px-5 py-3 dark:border-[#2a2a2a] dark:bg-[#141414] sm:px-6">
+          <div
+            className={`flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-[#D9D9D9] bg-white dark:border-[#2a2a2a] dark:bg-[#141414] ${
+              compact ? "px-3 py-1.5 sm:px-4" : "px-5 py-3 sm:px-6"
+            }`}
+          >
             <div className="flex flex-wrap items-center gap-3">
               <button
                 type="button"

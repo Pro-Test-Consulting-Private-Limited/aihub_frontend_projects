@@ -23,10 +23,14 @@ export type Project = {
   progress?: number;
 };
 
+/** Real ai-hub-dev project id so POST /preview can resolve application_url from AI Hub DB. */
+const BYPASS_PROJECT_ID =
+  process.env.NEXT_PUBLIC_BYPASS_PROJECT_ID || "a88245fd-828f-419e-a4e5-dd47449e968a";
+
 const BYPASS_PROJECT: Project = {
-  id: "local-bypass-project",
+  id: BYPASS_PROJECT_ID,
   name: "Local Bypass Demo",
-  description: "DEV-ONLY project for Phase A UI verification",
+  description: "DEV-ONLY project for Phase A UI verification (maps to Pro-Test Digital Wallet)",
   domain: "Testing",
   department: "Information Technology",
   workspace: "Local",
@@ -38,6 +42,8 @@ const BYPASS_PROJECT: Project = {
   product: "App Atlas",
   status: "Active",
 };
+
+export { BYPASS_PROJECT_ID };
 
 type ProjectsContextType = {
   projects: Project[];
