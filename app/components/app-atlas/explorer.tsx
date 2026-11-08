@@ -5,7 +5,6 @@ import {
   TbChevronDown,
   TbChevronLeft,
   TbChevronRight,
-  TbDeviceFloppy,
   TbDotsVertical,
   TbFolder,
   TbFolderFilled,
@@ -32,14 +31,13 @@ type Props = {
   loading: boolean;
   selectedId: string | null;
   canvas: Canvas | null;
-  canSave: boolean;
   canStart: boolean;
+  canReplay: boolean;
   onSelect: (id: string) => void;
   onRename: (c: CanvasSummary) => void;
   onDelete: (c: CanvasSummary) => void;
   onNew: () => void;
-  onRun: () => void;
-  onSave: () => void;
+  onReplay: () => void;
   onCollapse: () => void;
   onFocusNode: (id: string) => void;
   onConnect: (c: CanvasSummary) => void;
@@ -65,10 +63,13 @@ export function Explorer(props: Props) {
           <button type="button" className={iconButton} title="New canvas: start recording" onClick={props.onNew} disabled={!props.canStart}>
             <TbPlus size={16} />
           </button>
-          <button type="button" className={iconButton} title={props.canSave ? "Save execution" : "Nothing to save"} onClick={props.onSave} disabled={!props.canSave}>
-            <TbDeviceFloppy size={16} />
-          </button>
-          <button type="button" className={iconButton} title="Run AppAtlas (choose device / network)" onClick={props.onRun} disabled={!props.canStart}>
+          <button
+            type="button"
+            className={iconButton}
+            title={props.canReplay ? "Replay recording" : "Open a canvas with a recording to replay"}
+            onClick={props.onReplay}
+            disabled={!props.canReplay}
+          >
             <TbPlayerPlay size={15} />
           </button>
           <button type="button" className={iconButton} title="Hide explorer" onClick={props.onCollapse}>

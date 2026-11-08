@@ -489,17 +489,20 @@ export default function AtlasWorkspace() {
             loading={canvasesLoading}
             selectedId={selectedId}
             canvas={canvas}
-            canSave={!!unsaved}
             canStart={canStart}
+            canReplay={Boolean(canvas?.replay?.mp4Url || canvas?.replay?.gifUrl)}
             onSelect={(id) => selectCanvas(id === selectedId ? null : id)}
             onRename={rename}
             onDelete={remove}
             onNew={runQuick}
-            onRun={runQuick}
-            onSave={() => setSaveOpen(true)}
+            onReplay={() => {
+              setTab("canvas");
+              setView("screens");
+              setReplayOpen(true);
+            }}
             onCollapse={() => setExplorerOpen(false)}
             onFocusNode={setFocusNodeId}
-              onConnect={setConnectFor}
+            onConnect={setConnectFor}
             swagger={swagger}
             view={view}
             apiSummary={apiSummary}
@@ -514,10 +517,18 @@ export default function AtlasWorkspace() {
           <button
             type="button"
             onClick={() => setExplorerOpen(true)}
-            className="flex w-[28px] shrink-0 items-start justify-center border-r border-[#EEE] bg-[#F3F4F6] pt-3 text-[#5E6066] hover:text-[#8664F2] dark:border-[#2a2a2a] dark:bg-[#161616] dark:text-[#9ca3af] dark:hover:text-[#8664F2]"
+            className="flex w-[28px] shrink-0 flex-col items-center gap-1.5 border-r border-[#EEE] bg-[#F3F4F6] py-3 text-[#5E6066] hover:text-[#8664F2] dark:border-[#2a2a2a] dark:bg-[#161616] dark:text-[#9ca3af] dark:hover:text-[#8664F2]"
             title="Show explorer"
           >
-            <TbChevronRight size={16} />
+            <TbChevronRight size={14} className="shrink-0" />
+            {"EXPLORER".split("").map((ch, i) => (
+              <span
+                key={`${ch}-${i}`}
+                className="text-[10px] font-semibold leading-none tracking-wide"
+              >
+                {ch}
+              </span>
+            ))}
           </button>
         )}
 
@@ -559,15 +570,7 @@ export default function AtlasWorkspace() {
               <div className="absolute top-3 left-4 z-10 flex items-center gap-2 rounded-[8px] bg-white/90 px-3 py-1.5 text-[11px] text-[#5E6066] shadow-sm dark:bg-[#141414]/90 dark:text-[#9ca3af]">
                 <span className="font-medium text-[#1F1F1F] dark:text-[#ededed]">{canvas.name}</span> · {canvas.owner.name}
                 {!canvas.isMine && " · view only"}
-                <button
-                  type="button"
-                  className="pointer-events-auto font-medium text-[#8664F2] underline-offset-2 hover:underline"
-                  onClick={() => setReplayOpen(true)}
-                >
-                  Replay
-                </button>
               </div>
-              {replayOpen && <ReplayPlayer canvas={canvas} onClose={() => setReplayOpen(false)} />}
               {panelNodeId && (
                 <JiraPanel
                   key={panelNodeId}
@@ -624,6 +627,7 @@ export default function AtlasWorkspace() {
               }
             />
           )}
+          {replayOpen && canvas && <ReplayPlayer canvas={canvas} onClose={() => setReplayOpen(false)} />}
         </div>
       </div>
 
