@@ -211,7 +211,7 @@ export default function Home() {
                   <div className="text-[#1F1F1F] dark:text-[#ededed] font-medium text-[18px]">
                     {item.label}
                   </div>
-                  <Image src={item.icon} width={40} alt="active-projects" />
+                  <Image src={item.icon} width={40} alt="active-projects" className="dark:invert" />
                 </div>
 
                 <div className="flex justify-between items-center mt-4 pt-3">

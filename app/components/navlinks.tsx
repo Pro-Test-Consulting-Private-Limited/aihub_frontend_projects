@@ -40,14 +40,14 @@ const NavLinks = ({ list, collapsed = false, onExpand }: NavProps) => {
     return (
       <Image
         src={icon}
-        className="w-[18px] dark:invert-0"
+        className={`w-[18px] ${isActive ? "" : "dark:invert"}`}
         style={
           isActive
             ? {
                 filter:
                   "brightness(0) saturate(100%) invert(44%) sepia(12%) saturate(2326%) hue-rotate(205deg) brightness(91%) contrast(91%)",
               }
-            : {}
+            : undefined
         }
         alt="nav-icon"
       />

@@ -380,7 +380,7 @@ export default function AtlasWorkspace() {
               className="flex h-[34px] max-w-[340px] items-center gap-2 rounded-[8px] border border-[#E5E7EB] bg-[#F5F6F6] px-3 text-[13px] text-[#1F1F1F] dark:border-[#2a2a2a] dark:bg-[#141414] dark:text-[#ededed]"
               title={appUrl || "No application URL"}
             >
-              <TbWorld size={15} className="shrink-0 text-[#5E6066]" />
+              <TbWorld size={15} className="shrink-0 text-[#5E6066] dark:text-[#9ca3af]" />
               <span className="truncate">
                 {project ? (
                   <>
@@ -393,7 +393,7 @@ export default function AtlasWorkspace() {
                   "No projects yet"
                 )}
               </span>
-              <TbChevronDown size={14} className="shrink-0 text-[#5E6066]" />
+              <TbChevronDown size={14} className="shrink-0 text-[#5E6066] dark:text-[#9ca3af]" />
             </button>
             {projectMenu && (
               <div className="absolute top-10 left-0 z-40 w-[320px] rounded-[10px] border border-[#E6E1F5] bg-white py-1 shadow-lg dark:border-[#2a2a2a] dark:bg-[#141414]">

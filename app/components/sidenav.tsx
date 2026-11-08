@@ -32,7 +32,7 @@ export default function SideNav({ collapsed, transition, onExpand }: SideNavProp
     `w-[100%] ${collapsed ? "" : "md:w-[50%]"} rounded-[10px] h-[35px] flex items-center justify-center cursor-pointer text-[16px] text-[#1F1F1F] dark:text-[#ededed] font-[500] ${
       activeTheme === value ? "bg-[#fff] dark:bg-[#0a0a0a]" : ""
     }`;
-  const themeIconClass = `mr-[0px] ${collapsed ? "" : "md:mr-[5px]"} h-5 w-auto`;
+  const themeIconClass = `mr-[0px] ${collapsed ? "" : "md:mr-[5px]"} h-5 w-auto dark:invert`;
 
   return (
     <div

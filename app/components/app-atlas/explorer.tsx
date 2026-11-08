@@ -96,7 +96,7 @@ export function Explorer(props: Props) {
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    {active ? <TbChevronDown size={12} className="shrink-0 text-[#7E7E7E]" /> : <TbChevronRight size={12} className="shrink-0 text-[#7E7E7E]" />}
+                    {active ? <TbChevronDown size={12} className="shrink-0 text-[#7E7E7E] dark:text-[#a3a3a3]" /> : <TbChevronRight size={12} className="shrink-0 text-[#7E7E7E] dark:text-[#a3a3a3]" />}
                     <span className="h-[10px] w-[10px] shrink-0 rounded-[2px] border-2 border-[#E1962E] bg-[#FFE7C2]" />
                     <span className="min-w-0 flex-1 truncate font-medium text-[#1F1F1F] dark:text-[#ededed]" title={c.description || c.name}>
                       {c.name}
@@ -117,7 +117,7 @@ export function Explorer(props: Props) {
                         <TbDotsVertical size={14} />
                       </button>
                     ) : (
-                      <TbLock size={12} className="shrink-0 text-[#c0c0c0]" title="View only: recorded by someone else" />
+                      <TbLock size={12} className="shrink-0 text-[#c0c0c0] dark:text-[#9ca3af]" title="View only: recorded by someone else" />
                     )}
                   </div>
                   {active && (
@@ -210,8 +210,8 @@ export function Explorer(props: Props) {
                     onClick={() => props.onSelect(c.id)}
                     className="flex cursor-pointer items-center gap-2 px-5 py-1.5 hover:bg-[#F9FAFC] dark:hover:bg-[#141414]"
                   >
-                    {open ? <TbChevronDown size={12} className="text-[#7E7E7E]" /> : <TbChevronRight size={12} className="text-[#7E7E7E]" />}
-                    <TbFolderFilled size={14} className="text-[#E1962E]" />
+                    {open ? <TbChevronDown size={12} className="text-[#7E7E7E] dark:text-[#a3a3a3]" /> : <TbChevronRight size={12} className="text-[#7E7E7E] dark:text-[#a3a3a3]" />}
+                    <TbFolderFilled size={14} className="text-[#E1962E] dark:text-[#F0B45A]" />
                     <span className="truncate font-medium text-[#1F1F1F] dark:text-[#ededed]">{c.name}</span>
                   </div>
                   {open && (
@@ -235,7 +235,7 @@ export function Explorer(props: Props) {
 function SectionHeader({ open, onToggle, icon, label }: { open: boolean; onToggle: () => void; icon: React.ReactNode; label: string }) {
   return (
     <div onClick={onToggle} className="flex cursor-pointer items-center gap-2 border-b border-[#F3F3F3] px-4 py-2.5 font-medium text-[#1F1F1F] dark:border-[#1a1a1a] dark:text-[#ededed]">
-      {open ? <TbChevronDown size={13} className="text-[#7E7E7E]" /> : <TbChevronRight size={13} className="text-[#7E7E7E]" />}
+      {open ? <TbChevronDown size={13} className="text-[#7E7E7E] dark:text-[#a3a3a3]" /> : <TbChevronRight size={13} className="text-[#7E7E7E] dark:text-[#a3a3a3]" />}
       {icon}
       {label}
     </div>
@@ -299,7 +299,7 @@ function ConnectedAppButton({
       {bare ? (
         icon
       ) : (
-        <span className="flex h-[20px] w-[20px] items-center justify-center rounded-[5px] bg-white shadow-sm">{icon}</span>
+        <span className="flex h-[20px] w-[20px] items-center justify-center rounded-[5px] bg-white shadow-sm dark:bg-[#2a2440]">{icon}</span>
       )}
       <span>{label}</span>
     </button>

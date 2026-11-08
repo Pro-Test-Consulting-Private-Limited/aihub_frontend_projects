@@ -51,14 +51,14 @@ export default function TopNav() {
             src={SearchImage}
             width={18}
             alt="search"
-            className="absolute right-[15px] top-[10px]"
+            className="absolute right-[15px] top-[10px] dark:invert"
           />
         </div>
         <div className="w-[40px] h-[40px] rounded-[50px] border border-[#E5E7EB] dark:border-[#2a2a2a] flex items-center justify-center mr-[15px] cursor-pointer">
-          <Image src={MessagesImage} width={20} alt="notification" />
+          <Image src={MessagesImage} width={20} alt="notification" className="dark:invert" />
         </div>
         <div className="w-[40px] h-[40px] rounded-[50px] border border-[#E5E7EB] dark:border-[#2a2a2a] flex items-center justify-center mr-[15px] cursor-pointer">
-          <Image src={NotificationImage} width={20} alt="notification" />
+          <Image src={NotificationImage} width={20} alt="notification" className="dark:invert" />
         </div>
 
         <div
