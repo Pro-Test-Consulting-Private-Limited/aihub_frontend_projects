@@ -830,10 +830,10 @@ export function SessionSetupModal({
           >
             <div
               className={`grid h-full grid-cols-1 lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)] ${
-                compact ? "gap-2" : "gap-4"
+                compact ? "gap-1.5 origin-top scale-[0.92] [&_*]:!overflow-y-hidden" : "gap-4"
               }`}
             >
-              <div className={`min-w-0 ${compact ? "space-y-1.5" : "space-y-3"}`}>
+              <div className={`min-w-0 overflow-hidden ${compact ? "space-y-1" : "space-y-3"}`}>
                 <section>
                   <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
                     <div className="flex flex-wrap items-center gap-2">
@@ -1602,7 +1602,7 @@ export function SessionSetupModal({
                 {configError && <p className="text-[12px] text-[#B45309]">{configError}</p>}
               </div>
 
-              <div className={`flex flex-col lg:min-h-0 ${compact ? "min-h-[160px]" : "min-h-[280px]"}`}>
+              <div className={`flex flex-col overflow-hidden lg:min-h-0 ${compact ? "min-h-[120px]" : "min-h-[280px]"}`}>
                 <DevicePreviewFrame
                   width={prefs.width}
                   height={prefs.height}
