@@ -514,7 +514,7 @@ export default function AtlasWorkspace() {
           <button
             type="button"
             onClick={() => setExplorerOpen(true)}
-            className="flex w-[28px] shrink-0 items-start justify-center border-r border-[#EEE] bg-white pt-3 text-[#5E6066] hover:text-[#8664F2] dark:border-[#1a1a1a] dark:bg-[#0a0a0a]"
+            className="flex w-[28px] shrink-0 items-start justify-center border-r border-[#EEE] bg-[#F3F4F6] pt-3 text-[#5E6066] hover:text-[#8664F2] dark:border-[#2a2a2a] dark:bg-[#161616] dark:text-[#9ca3af] dark:hover:text-[#8664F2]"
             title="Show explorer"
           >
             <TbChevronRight size={16} />
