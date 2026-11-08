@@ -24,6 +24,7 @@ import type {
   SetupPresetPayload,
   UserRecordingPreset,
 } from "@/app/lib/user-recording-presets";
+import { isLocalAuthBypassEnabled } from "@/app/lib/auth-bypass";
 
 type PresetPayload = DevicePresetPayload | NetworkPresetPayload | SetupPresetPayload;
 
@@ -32,7 +33,24 @@ const BUILD_APPATLAS_API = (
 ).replace(/\/$/, "");
 const PROD_APPATLAS_API = "https://ai-hub.protestcorp.com/atlas-api";
 
-export const APPATLAS_API = siteOrigin() ? `${siteOrigin()}/atlas-api` : BUILD_APPATLAS_API;
+/** When local auth bypass is on, route through /api/dev-atlas (server injects X-Proxy-Auth). */
+export function atlasApiBase(): string {
+  if (typeof window !== "undefined" && isLocalAuthBypassEnabled()) return "/api/dev-atlas";
+  return siteOrigin() ? `${siteOrigin()}/atlas-api` : BUILD_APPATLAS_API;
+}
+
+/** Lazy base URL (re-evaluates bypass on each access). */
+export const APPATLAS_API = {
+  toString() {
+    return atlasApiBase();
+  },
+  valueOf() {
+    return atlasApiBase();
+  },
+  [Symbol.toPrimitive]() {
+    return atlasApiBase();
+  },
+} as unknown as string;
 
 export class AtlasError extends Error {
   constructor(message: string, public status: number) {
@@ -44,9 +62,11 @@ type Msal = { instance: IPublicClientApplication; accounts: AccountInfo[] };
 
 export function atlasClient({ instance, accounts }: Msal) {
   /** `base` "" targets this app's own /api routes (Jira, which needs the server-side cookies). */
-  const request = async <T>(path: string, init: RequestInit = {}, retried = false, base = APPATLAS_API): Promise<T> => {
-    const token = await getFreshIdToken(instance, accounts, retried);
-    const res = await fetch(`${base}${path}`, {
+  const request = async <T>(path: string, init: RequestInit = {}, retried = false, base?: string): Promise<T> => {
+    const api = base ?? atlasApiBase();
+    const bypass = isLocalAuthBypassEnabled();
+    const token = bypass ? null : await getFreshIdToken(instance, accounts, retried);
+    const res = await fetch(`${api}${path}`, {
       ...init,
       headers: {
         ...(init.body ? { "Content-Type": "application/json" } : {}),
@@ -54,7 +74,7 @@ export function atlasClient({ instance, accounts }: Msal) {
         ...init.headers,
       },
     });
-    if (res.status === 401 && !retried) return request<T>(path, init, true, base);
+    if (res.status === 401 && !retried && !bypass) return request<T>(path, init, true, api);
     if (res.status === 204) return undefined as T;
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw new AtlasError(body.error ?? res.statusText, res.status);
@@ -100,8 +120,9 @@ export function atlasClient({ instance, accounts }: Msal) {
       colorScheme?: string;
       locale?: string;
     }) => {
-      const token = await getFreshIdToken(instance, accounts);
-      const res = await fetch(`${APPATLAS_API}/preview`, {
+      const bypass = isLocalAuthBypassEnabled();
+      const token = bypass ? null : await getFreshIdToken(instance, accounts);
+      const res = await fetch(`${atlasApiBase()}/preview`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -145,9 +166,10 @@ export function atlasClient({ instance, accounts }: Msal) {
       request<TicketNote>(`/canvases/${canvasId}/notes/${encodeURIComponent(issueKey)}`, json("PUT", { text })),
     /** EventSource can't send headers, so the token goes in the query string. */
     openEvents: async (id: string) => {
-      const token = await getFreshIdToken(instance, accounts);
+      const bypass = isLocalAuthBypassEnabled();
+      const token = bypass ? "bypass" : await getFreshIdToken(instance, accounts);
       return new EventSource(
-        `${APPATLAS_API}/sessions/${id}/events?access_token=${encodeURIComponent(token ?? "")}`,
+        `${atlasApiBase()}/sessions/${id}/events?access_token=${encodeURIComponent(token ?? "")}`,
       );
     },
 
@@ -203,9 +225,10 @@ export type AtlasClient = ReturnType<typeof atlasClient>;
 
 /** Viewer and screenshot URLs may be relative to the API, or absolute on the backend's public (prod) host. */
 export const atlasUrl = (url: string) => {
-  if (!/^https?:/.test(url)) return `${APPATLAS_API}${url}`;
-  for (const base of [PROD_APPATLAS_API, BUILD_APPATLAS_API]) {
-    if (url.startsWith(`${base}/`)) return `${APPATLAS_API}${url.slice(base.length)}`;
+  const api = atlasApiBase();
+  if (!/^https?:/.test(url)) return `${api}${url}`;
+  for (const base of [PROD_APPATLAS_API, BUILD_APPATLAS_API, "https://ai-hub-dev.protestcorp.com/atlas-api"]) {
+    if (url.startsWith(`${base}/`)) return `${api}${url.slice(base.length)}`;
   }
   return url;
 };

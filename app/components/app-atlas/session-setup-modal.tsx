@@ -82,7 +82,6 @@ import {
 import {
   RESOLUTION_PRESETS,
   myScreenSize,
-  needsStreamEmulation,
   sizeCardSubtitle,
   sizeFromResolution,
   sizePrimaryLabel,
@@ -1011,11 +1010,6 @@ export function SessionSetupModal({
                           Lock
                         </button>
                         <span className="font-mono text-[11px] text-[#7E7E7E]">{ratioLabel(prefs.width, prefs.height)}</span>
-                        {needsStreamEmulation(prefs.width, prefs.height) && (
-                          <span className="rounded-full border border-[#FCD34D] bg-[#FFFBEB] px-2 py-0.5 text-[10px] font-medium text-[#92400E]">
-                            Emulated, stream scaled
-                          </span>
-                        )}
                       </div>
 
                       {sizeBy === "pixels" && (
@@ -1608,9 +1602,8 @@ export function SessionSetupModal({
                         key: "net",
                         label: networkById(prefs.networkPreset)?.label ?? prefs.networkPreset,
                       },
-                      ...(needsStreamEmulation(prefs.width, prefs.height)
-                        ? [{ key: "emu", label: "Emulated, stream scaled", danger: true as const }]
-                        : []),
+                      // "Emulated, stream scaled" is shown only on the live recording chips when
+                      // session.emulation.streamScaled === true (API). Never predicted client-side.
                       ...(isCustom && (prefs.deviceScaleFactor ?? 1) > 1
                         ? [{ key: "dpr", label: `${prefs.deviceScaleFactor}x dens.` }]
                         : []),

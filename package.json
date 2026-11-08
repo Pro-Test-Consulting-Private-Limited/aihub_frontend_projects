@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:auth-bypass-prod": "node scripts/assert-no-auth-bypass-in-prod.mjs"
   },
   "dependencies": {
     "@azure/msal-browser": "^5.5.0",
