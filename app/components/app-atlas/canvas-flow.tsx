@@ -169,7 +169,8 @@ function Flow({ nodes, edges, editable, focusNodeId, selectedNodeId, onSelectNod
         nodesDraggable={editable}
         nodesConnectable={false}
         edgesFocusable={false}
-        elementsSelectable={false}
+        elementsSelectable
+        nodesFocusable
         fitView
         fitViewOptions={{ padding: 0.2, maxZoom: 1 }}
         minZoom={0.2}

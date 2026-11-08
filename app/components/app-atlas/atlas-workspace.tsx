@@ -38,6 +38,7 @@ import { SitTestingView } from "./sit-testing-view";
 import { CoverageOverview } from "./coverage-overview";
 import { useApiSpec, useApiSpecView } from "@/app/hooks/use-api-spec";
 import { clearCanvasSwagger, getCanvasSwagger, type CanvasSwagger } from "@/app/lib/canvas-swagger";
+import { isLocalAuthBypassEnabled } from "@/app/lib/auth-bypass";
 
 const TABS = [
   { id: "canvas", label: "Canvas", icon: TbLayoutGrid },
@@ -164,9 +165,10 @@ export default function AtlasWorkspace() {
     }
   }, [client]);
 
+  const bypass = isLocalAuthBypassEnabled();
   useEffect(() => {
-    if (accounts.length) loadCanvases();
-  }, [accounts.length, loadCanvases]);
+    if (accounts.length || bypass) loadCanvases();
+  }, [accounts.length, bypass, loadCanvases]);
 
   const visible = useMemo(
     () => canvases.filter((c) => (!host || hostOf(c.startUrl) === host) && (!mineOnly || c.isMine)),
