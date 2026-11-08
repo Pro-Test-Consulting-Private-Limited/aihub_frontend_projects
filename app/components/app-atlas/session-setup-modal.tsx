@@ -891,7 +891,11 @@ export function SessionSetupModal({
                       </button>
                     ))}
                   </div>
-                  <div role="listbox" aria-label="Device presets" className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  <div
+                    role="listbox"
+                    aria-label="Device presets"
+                    className={`grid grid-cols-2 sm:grid-cols-3 ${compact ? "max-h-[88px] gap-1 overflow-hidden" : "gap-2"}`}
+                  >
                     {category === "mine"
                       ? myDevicePresets
                           .filter((p) => {
