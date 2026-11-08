@@ -71,14 +71,16 @@ async function snapshotScrollContext() {
     for (const node of el.querySelectorAll("*")) {
       const s = getComputedStyle(node);
       const oy = s.overflowY;
-      if (oy === "auto" || oy === "scroll" || oy === "hidden") {
+      // Only count real scroll/clip containers with meaningful size (ignore 0×0 / tiny chrome).
+      if ((oy === "auto" || oy === "scroll" || oy === "hidden") && node.clientHeight >= 24 && node.clientWidth >= 24) {
+        const scrollable = node.scrollHeight > node.clientHeight + 1;
         descendants.push({
           tag: node.tagName,
           className: String(node.className || "").slice(0, 80),
           overflowY: oy,
           scrollHeight: node.scrollHeight,
           clientHeight: node.clientHeight,
-          scrollable: node.scrollHeight > node.clientHeight + 1,
+          scrollable,
         });
       }
     }

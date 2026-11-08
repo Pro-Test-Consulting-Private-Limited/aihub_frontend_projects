@@ -830,10 +830,10 @@ export function SessionSetupModal({
           >
             <div
               className={`grid h-full grid-cols-1 lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)] ${
-                compact ? "gap-1.5 origin-top scale-[0.92] [&_*]:!overflow-y-hidden" : "gap-4"
+                compact ? "gap-1.5" : "gap-4"
               }`}
             >
-              <div className={`min-w-0 overflow-hidden ${compact ? "space-y-1" : "space-y-3"}`}>
+              <div className={`min-w-0 overflow-hidden ${compact ? "space-y-1 max-h-full" : "space-y-3"}`}>
                 <section>
                   <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
                     <div className="flex flex-wrap items-center gap-2">
@@ -1155,7 +1155,9 @@ export function SessionSetupModal({
                               );
                             })}
                           </div>
-                          <label className="flex items-center gap-2 text-[11px] text-[#5E6066]">
+                          <label
+                            className={`items-center gap-2 text-[11px] text-[#5E6066] ${compact ? "hidden" : "flex"}`}
+                          >
                             <span className="shrink-0">Width</span>
                             <input
                               type="range"
