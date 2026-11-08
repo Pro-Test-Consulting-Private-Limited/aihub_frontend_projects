@@ -490,7 +490,14 @@ export default function AtlasWorkspace() {
             selectedId={selectedId}
             canvas={canvas}
             canStart={canStart}
-            canReplay={Boolean(canvas?.replay?.mp4Url || canvas?.replay?.gifUrl)}
+            canReplay={Boolean(
+              canvas &&
+                (canvas.replay?.mp4Url ||
+                  canvas.replay?.gifUrl ||
+                  canvas.nodes.some(
+                    (n) => n.screenshotUrl || n.states.some((s) => s.screenshotUrl),
+                  )),
+            )}
             onSelect={(id) => selectCanvas(id === selectedId ? null : id)}
             onRename={rename}
             onDelete={remove}
