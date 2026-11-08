@@ -441,34 +441,52 @@ async function uiRecordScaled(resLabel) {
   await page.goto(`${BASE}/app-atlas?projectId=${PROJECT_ID}`, { waitUntil: "domcontentloaded", timeout: 90000 });
   await page.waitForTimeout(2000);
   dialog = await openDialog();
+  // Capture the POST /sessions create response (there is no list endpoint).
+  const createdWait = page.waitForResponse(
+    (r) => /\/api\/dev-atlas\/sessions\/?$/.test(new URL(r.url()).pathname) && r.request().method() === "POST",
+    { timeout: 120000 },
+  );
   await startRecordingAtResolution(resLabel);
-  // Poll live session from API while UI settles
-  let emu = null;
-  for (let i = 0; i < 30; i++) {
-    emu = await page.evaluate(async () => {
-      const r = await fetch("/api/dev-atlas/sessions?limit=8");
-      const data = await r.json();
-      const items = Array.isArray(data) ? data : data.items || data.sessions || [];
-      const live = items.find((s) => /recording|starting/i.test(s.status || ""));
-      return live?.emulation || null;
-    });
-    if (emu && typeof emu.streamScaled === "boolean") break;
-    await page.waitForTimeout(700);
+  const createdRes = await createdWait;
+  const created = await createdRes.json();
+  const id = created?.id;
+  let emu = created?.emulation || null;
+  if (id) {
+    for (let i = 0; i < 30; i++) {
+      emu = await page.evaluate(async (sid) => {
+        const g = await fetch(`/api/dev-atlas/sessions/${sid}`);
+        if (!g.ok) return null;
+        const snap = await g.json();
+        return snap.emulation || null;
+      }, id);
+      if (emu && typeof emu.streamScaled === "boolean") break;
+      await page.waitForTimeout(700);
+    }
   }
-  return emu;
+  return { id, emulation: emu };
 }
 
 try {
-  const emu4k = await uiRecordScaled("4K");
-  record("a.badge.api-4k", "session.emulation.streamScaled===true", emu4k, emu4k?.streamScaled === true);
+  const rec4k = await uiRecordScaled("4K");
+  record(
+    "a.badge.api-4k",
+    "session.emulation.streamScaled===true",
+    rec4k.emulation,
+    rec4k.emulation?.streamScaled === true,
+  );
   const chip4k = await waitChip(/Emulated,\s*stream scaled/i, 20000);
   await page.screenshot({ path: path.join(OUT, "ui-live-4k-chips.png"), fullPage: false });
   record("a.badge.live-4k-chip", "Emulated, stream scaled visible", chip4k, chip4k);
   await stopRecording();
   await page.waitForTimeout(2500);
 
-  const emu720 = await uiRecordScaled("720p");
-  record("a.badge.api-720p", "session.emulation.streamScaled===false", emu720, emu720?.streamScaled === false);
+  const rec720 = await uiRecordScaled("720p");
+  record(
+    "a.badge.api-720p",
+    "session.emulation.streamScaled===false",
+    rec720.emulation,
+    rec720.emulation?.streamScaled === false,
+  );
   await page.waitForTimeout(2000);
   const body720 = await page.locator("body").innerText();
   const chip720 = /Emulated,\s*stream scaled/i.test(body720);
