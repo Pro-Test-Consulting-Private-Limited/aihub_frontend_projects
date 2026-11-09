@@ -11,6 +11,13 @@ export type NavType = "button" | "link" | "form" | "key" | "in-page" | "other";
 
 export type ScreenStateKind = "initial" | "loading" | "loaded" | "interaction" | "error";
 
+export type SimulatedStateMeta = {
+  endpoint: string;
+  mode: string;
+  status?: number;
+  delayMs?: number;
+};
+
 export type ScreenState = {
   id: string;
   label: string;
@@ -21,6 +28,9 @@ export type ScreenState = {
   text?: string;
   kind: ScreenStateKind;
   createdAt: number;
+  autoLabel?: string;
+  simulated?: SimulatedStateMeta;
+  recordedAs?: string;
 };
 
 export type ArrivalInfo = {
@@ -99,6 +109,17 @@ export type EmulationSummary = {
   } | null;
 };
 
+export type ReplayTimelineEvent = {
+  at: number;
+  kind: string;
+  label: string;
+  x?: number;
+  y?: number;
+  sensitive?: boolean;
+  box?: { x: number; y: number; w: number; h: number };
+  who?: string;
+};
+
 export type SessionSnapshot = {
   id: string;
   startUrl: string;
@@ -131,6 +152,31 @@ export type SessionSnapshot = {
     cls: number | null;
     a11yViolations: number;
   };
+  replay?: {
+    mp4Url?: string;
+    gifUrl?: string;
+    durationSec?: number;
+    frameCount?: number;
+    error?: string;
+    limitedMessage?: string;
+  };
+  timeline?: ReplayTimelineEvent[];
+  recordedAs?: string | null;
+  simulate?: {
+    enabled: boolean;
+    locked: boolean;
+    lockReason?: string;
+    environment: string;
+    observed: Array<{
+      method: string;
+      path: string;
+      lastStatus: number;
+      count: number;
+      emptyCapable: boolean;
+      emptyDisabledReason?: string;
+    }>;
+    armed: { id: string; method: string; path: string; mode: string; armedAt: number } | null;
+  };
 };
 
 export type Capacity = {
@@ -153,6 +199,9 @@ export type CanvasState = {
   kind: ScreenStateKind;
   screenshotUrl: string;
   pageObjectCount: number;
+  autoLabel?: string;
+  simulated?: SimulatedStateMeta;
+  recordedAs?: string;
 };
 
 export type SessionHealthSummary = {
@@ -170,16 +219,6 @@ export type SessionHealthSummary = {
   a11ySummary?: string[];
   slowestRequestMs?: number | null;
   slowestRequestUrl?: string | null;
-};
-
-export type ReplayTimelineEvent = {
-  at: number;
-  kind: string;
-  label: string;
-  x?: number;
-  y?: number;
-  sensitive?: boolean;
-  box?: { x: number; y: number; w: number; h: number };
 };
 
 export type CanvasNode = {

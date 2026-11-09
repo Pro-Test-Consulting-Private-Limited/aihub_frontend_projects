@@ -6,6 +6,7 @@ import { deviceDisplayName, networkChipLabel, recordingCountsLine } from "@/app/
 import { MOBILE_BEZEL_INSET_PX, fitStreamScale } from "@/app/lib/stream-fit";
 import { atlasUrl, type AtlasClient } from "@/app/services/appatlas";
 import { outlineButton, primaryButton } from "./modal";
+import { WhatIfPanel } from "./what-if-panel";
 
 const DONE: SessionSnapshot["status"][] = ["finished", "expired", "error"];
 const FALLBACK_BROWSER_CHROME = 88;
@@ -27,7 +28,7 @@ export function RecordingView({
 }) {
   const [snap, setSnap] = useState(initial);
   const [now, setNow] = useState(() => Date.now());
-  const [busy, setBusy] = useState<"finish" | "discard" | null>(null);
+  const [busy, setBusy] = useState<"finish" | "discard" | "save-login" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [box, setBox] = useState({ w: 800, h: 500 });
   const containerRef = useRef<HTMLDivElement>(null);
@@ -207,6 +208,14 @@ export function RecordingView({
               }
               danger={snap.emulation?.offline}
             />
+            {snap.simulate?.armed && (
+              <ConfigChip
+                label={`Armed · ${snap.simulate.armed.mode}`}
+                title={`${snap.simulate.armed.method} ${snap.simulate.armed.path}`}
+                danger
+              />
+            )}
+            {snap.recordedAs && <ConfigChip label={`Recorded as: ${snap.recordedAs}`} title="Saved login role" />}
             <span className="truncate font-mono text-[11px] text-[#7E7E7E]" title={snap.currentUrl || snap.startUrl}>
               {snap.currentUrl || snap.startUrl}
             </span>
@@ -225,6 +234,24 @@ export function RecordingView({
           </div>
         </div>
         <div className="flex shrink-0 gap-3">
+          <button
+            type="button"
+            className={`${outlineButton} !py-1.5 !text-[13px]`}
+            disabled={!!busy || snap.status !== "recording"}
+            title="Save cookies + storage for this app origin (encrypted)"
+            onClick={() => {
+              const role = window.prompt("Role label for this login", "User");
+              if (role == null) return;
+              setBusy("save-login");
+              void client
+                .saveSessionLogin(snap.id, { roleLabel: role || "User" })
+                .then(() => setError(null))
+                .catch((err: unknown) => setError(err instanceof Error ? err.message : "Could not save login"))
+                .finally(() => setBusy(null));
+            }}
+          >
+            {busy === "save-login" ? "Saving login…" : "Save this login"}
+          </button>
           <button type="button" className={`${outlineButton} !py-1.5 !text-[13px]`} onClick={discard} disabled={!!busy}>
             {busy === "discard" ? "Discarding…" : "Discard"}
           </button>
@@ -299,26 +326,47 @@ export function RecordingView({
             </div>
           )}
         </div>
-        <div className="w-[230px] shrink-0 overflow-y-auto">
-          <div className="mb-2 text-[12px] font-medium text-[#1F1F1F] dark:text-[#ededed]">Screens captured</div>
-          {snap.nodes.length === 0 && <div className="text-[11px] text-[#7E7E7E]">Screens appear here as you browse.</div>}
-          {[...snap.nodes].reverse().map((n) => (
-            <div
-              key={n.id}
-              className={`mb-2 overflow-hidden rounded-[8px] border bg-white dark:bg-[#141414] ${
-                n.status === "active" ? "border-[#8664F2]" : "border-[#E6E1F5] dark:border-[#2a2a2a]"
-              }`}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={atlasUrl(n.shotUrl)} alt="" loading="lazy" className="h-[90px] w-full object-cover object-top" />
-              <div className="px-2 py-1.5">
-                <div className="truncate text-[11px] font-medium text-[#1F1F1F] dark:text-[#ededed]">{n.path}</div>
-                <div className="text-[10px] text-[#7E7E7E]">
-                  {n.states.length} {n.states.length === 1 ? "state" : "states"}
+        <div className="flex w-[260px] shrink-0 flex-col gap-3 overflow-y-auto">
+          {snap.simulate && <WhatIfPanel client={client} sessionId={snap.id} simulate={snap.simulate} />}
+          <div>
+            <div className="mb-2 text-[12px] font-medium text-[#1F1F1F] dark:text-[#ededed]">Screens captured</div>
+            {snap.nodes.length === 0 && <div className="text-[11px] text-[#7E7E7E]">Screens appear here as you browse.</div>}
+            {[...snap.nodes].reverse().map((n) => (
+              <div
+                key={n.id}
+                className={`mb-2 overflow-hidden rounded-[8px] border bg-white dark:bg-[#141414] ${
+                  n.status === "active" ? "border-[#8664F2]" : "border-[#E6E1F5] dark:border-[#2a2a2a]"
+                }`}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={atlasUrl(n.shotUrl)} alt="" loading="lazy" className="h-[90px] w-full object-cover object-top" />
+                <div className="px-2 py-1.5">
+                  <div className="truncate text-[11px] font-medium text-[#1F1F1F] dark:text-[#ededed]">{n.path}</div>
+                  <div className="text-[10px] text-[#7E7E7E]">
+                    {n.states.length} {n.states.length === 1 ? "state" : "states"}
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {n.states
+                      .filter((s) => s.simulated || s.recordedAs)
+                      .slice(-4)
+                      .map((s) => (
+                        <span
+                          key={s.id}
+                          className={`rounded-[4px] px-1 py-0.5 text-[9px] font-medium ${
+                            s.simulated
+                              ? "bg-[#FEF3C7] text-[#92400E]"
+                              : "bg-[#EEF2FF] text-[#4F46E5]"
+                          }`}
+                          title={s.simulated ? `${s.simulated.mode} · ${s.simulated.endpoint}` : s.recordedAs}
+                        >
+                          {s.simulated ? "Simulated" : `Recorded as: ${s.recordedAs}`}
+                        </span>
+                      ))}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
     </div>

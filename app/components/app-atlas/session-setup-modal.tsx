@@ -357,6 +357,8 @@ export function SessionSetupModal({
   const [sizeHint, setSizeHint] = useState<string | null>(null);
   const [persona, setPersona] = useState(() => loadPersona());
   const [personaOpen, setPersonaOpen] = useState(false);
+  const [savedLogins, setSavedLogins] = useState<Array<{ id: string; roleLabel: string; origin: string; expiresInLabel: string }>>([]);
+  const [savedLoginId, setSavedLoginId] = useState("");
   const [personaClock, setPersonaClock] = useState("");
   /** Compact density: smaller preview, tighter rows, persona groups on one row — auto under 900px viewport height. */
   const [compact, setCompact] = useState(false);
@@ -407,6 +409,21 @@ export function SessionSetupModal({
     setSizeBy("pixels");
     setSizeHint(null);
   }, [projectId, canvasId, userId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void client
+      .listSavedLogins()
+      .then((items) => {
+        if (!cancelled) setSavedLogins(items);
+      })
+      .catch(() => {
+        if (!cancelled) setSavedLogins([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
 
   useEffect(() => {
     let cancelled = false;
@@ -696,7 +713,10 @@ export function SessionSetupModal({
     rememberCanvasViewport(canvasId, next.width, next.height);
     setRecent(loadRecentDevices());
     savePersona(persona);
-    onStart(next, personaToSessionFields(persona));
+    onStart(next, {
+      ...personaToSessionFields(persona),
+      ...(savedLoginId ? { savedLoginId } : {}),
+    });
   };
 
   const updatePersona = (patch: Partial<PersonaPrefs>) => {
@@ -1723,7 +1743,23 @@ export function SessionSetupModal({
                 </button>
               )}
             </div>
-            <div className="flex gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-2 text-[12px] text-[#5E6066] dark:text-[#9ca3af]">
+                <span className="font-medium">Record as</span>
+                <select
+                  className="rounded-[6px] border border-[#E5E7EB] bg-white px-2 py-1 text-[12px] dark:border-[#333] dark:bg-[#0a0a0a]"
+                  value={savedLoginId}
+                  onChange={(e) => setSavedLoginId(e.target.value)}
+                  disabled={starting}
+                >
+                  <option value="">None</option>
+                  {savedLogins.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.roleLabel} · {l.origin.replace(/^https?:\/\//, "")} · {l.expiresInLabel}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <button type="button" className={outlineButton} onClick={onClose} disabled={starting}>
                 Cancel
               </button>

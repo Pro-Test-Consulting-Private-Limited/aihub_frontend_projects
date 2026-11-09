@@ -17,6 +17,10 @@ export type SessionEmulationPrefs = {
 
 export type StartSessionOptions = {
   url: string;
+  /** Phase B: project feature flags / environment lock. */
+  projectId?: string;
+  /** Phase B: apply owned saved login before navigate. */
+  savedLoginId?: string;
   devicePreset: string;
   networkPreset: string;
   viewer?: "auto" | "vnc";

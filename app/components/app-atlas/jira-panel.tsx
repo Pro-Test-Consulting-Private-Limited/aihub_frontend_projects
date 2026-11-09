@@ -15,6 +15,9 @@ import {
 } from "react-icons/tb";
 import type { Canvas, CanvasClarification, JiraIssue, JiraNodeMatch, TicketNote } from "@/app/interfaces/appatlas";
 import { HealthPanel } from "./health-panel";
+import { ReportBugModal } from "./report-bug-modal";
+import { atlasClient } from "@/app/services/appatlas";
+import { useMsal } from "@azure/msal-react";
 
 type Bucket = "Epic" | "Story" | "Bug" | "Task";
 
@@ -204,6 +207,8 @@ export function JiraPanel({
                 <TicketCard
                   key={t.issue.key}
                   ticket={t}
+                  canvas={canvas}
+                  nodeId={nodeId}
                   clarification={t.match ? clarifications.get(t.issue.key) : undefined}
                   editable={editable}
                   onSaveNote={onSaveNote}
@@ -224,14 +229,22 @@ function TicketCard({
   editable,
   onSaveNote,
   onPostToTeams,
+  canvas,
+  nodeId,
 }: {
   ticket: Ticket;
   clarification?: CanvasClarification;
   editable: boolean;
   onSaveNote: (issueKey: string, text: string) => Promise<TicketNote>;
   onPostToTeams?: (issueKey: string, clarification: CanvasClarification) => Promise<void>;
+  canvas: Canvas;
+  nodeId: string;
 }) {
   const { issue, epic } = ticket;
+  const { instance, accounts } = useMsal();
+  const client = useMemo(() => atlasClient({ instance, accounts }), [instance, accounts]);
+  const [bugOpen, setBugOpen] = useState(false);
+  const [bugChip, setBugChip] = useState<string | null>(null);
 
   return (
     <div className="mb-3 rounded-[12px] border border-[#E6E1F5] p-3 shadow-sm dark:border-[#2a2a2a]">
@@ -241,6 +254,9 @@ function TicketCard({
             {issue.key} <TbExternalLink size={12} />
           </a>
           <span className="rounded-[4px] bg-[#EEF2FF] px-1.5 py-0.5 text-[10px] text-[#4F46E5]">{issue.type.toLowerCase()}</span>
+          {bugChip && (
+            <span className="rounded-[4px] bg-[#FEE2E2] px-1.5 py-0.5 text-[10px] font-medium text-[#B91C1C]">Bug {bugChip}</span>
+          )}
         </div>
         {issue.status && (
           <span className={`shrink-0 rounded-[6px] px-2 py-0.5 text-[10.5px] font-medium ${STATUS_STYLE[issue.statusCategory] ?? STATUS_STYLE.new}`}>
@@ -262,9 +278,43 @@ function TicketCard({
         </div>
         {issue.priority && <span className={`font-semibold uppercase ${PRIORITY_STYLE(issue.priority)}`}>{issue.priority}</span>}
       </div>
+      {editable && (
+        <button
+          type="button"
+          className="mt-2 text-[11px] font-medium text-[#8664F2] underline-offset-2 hover:underline"
+          onClick={() => setBugOpen(true)}
+        >
+          Report bug
+        </button>
+      )}
 
       {clarification && (
         <Clarifications item={clarification} editable={editable} onSaveNote={onSaveNote} onPostToTeams={onPostToTeams} />
+      )}
+      {bugOpen && (
+        <ReportBugModal
+          client={client}
+          acSummary={issue.summary}
+          acKey={issue.key}
+          acText={issue.summary}
+          projectKey={canvas.jira?.projectKey || issue.key.split("-")[0]}
+          storyKey={issue.key}
+          deepLink={`${typeof window !== "undefined" ? window.location.origin : ""}/app-atlas?canvas=${canvas.id}&node=${nodeId}`}
+          environmentLine={[
+            canvas.sessionId ? `session=${canvas.sessionId}` : "",
+            `canvas=${canvas.name}`,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+          timeline={canvas.timeline || []}
+          untilAt={Date.now()}
+          screenshotUrl={canvas.nodes.find((n) => n.id === nodeId)?.screenshotUrl}
+          onClose={() => setBugOpen(false)}
+          onCreated={(key) => {
+            setBugChip(key);
+            setBugOpen(false);
+          }}
+        />
       )}
     </div>
   );

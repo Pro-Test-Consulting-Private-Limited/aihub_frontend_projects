@@ -112,9 +112,19 @@ export function ReplayPlayer({ canvas, onClose }: { canvas: Canvas; onClose: () 
             ))}
           </div>
 
+          {timeline.some((e) => e.kind === "simulate" && Math.abs((mp4 ? mediaTime * 1000 : frame?.at ?? 0) - e.at) < 8000) && (
+            <div className="absolute top-2 left-1/2 -translate-x-1/2 rounded bg-[#B45309]/90 px-3 py-1 text-[11px] font-semibold text-white">
+              Simulated failure
+            </div>
+          )}
           {frame && !mp4 && (
             <div className="absolute bottom-2 left-2 rounded bg-black/60 px-2 py-1 text-[11px] text-white">
               {frame.path} · {frame.label}
+              {canvas.nodes
+                .flatMap((n) => n.states)
+                .find((s) => s.id === frame.id && s.simulated) && (
+                <span className="ml-2 rounded bg-[#B45309] px-1.5 py-0.5 text-[10px]">Simulated</span>
+              )}
             </div>
           )}
           {canvas.replay?.limitedMessage && (

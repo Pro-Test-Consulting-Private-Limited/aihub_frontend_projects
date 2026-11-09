@@ -41,6 +41,14 @@ export function ScreenNode({ data }: NodeProps<AtlasScreenNode>) {
           <span className="rounded-[4px] bg-[#F3F4F6] dark:bg-[#2a2a2a] px-1.5 py-0.5 text-[9px] text-[#5E6066] dark:text-[#9ca3af]">
             States · {screen.stateCount}
           </span>
+          {screen.states?.some((s) => s.simulated) && (
+            <span className="rounded-[4px] bg-[#FEF3C7] px-1.5 py-0.5 text-[9px] font-medium text-[#92400E]">Simulated</span>
+          )}
+          {screen.states?.some((s) => s.recordedAs) && (
+            <span className="rounded-[4px] bg-[#EEF2FF] px-1.5 py-0.5 text-[9px] font-medium text-[#4F46E5]">
+              Recorded as: {screen.states.find((s) => s.recordedAs)?.recordedAs}
+            </span>
+          )}
         </div>
       </div>
       <div className="mx-3 h-[110px] overflow-hidden rounded-[6px] border border-[#EEE] dark:border-[#2a2a2a] bg-[#F9FAFC]">

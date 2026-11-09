@@ -283,7 +283,11 @@ export default function AtlasWorkspace() {
         await client.startSession({
           url,
           viewer,
+          projectId: project?.id || projectId || undefined,
           ...emulationBodyFromPrefs(prefs, personaFields),
+          ...((personaFields as { savedLoginId?: string } | undefined)?.savedLoginId
+            ? { savedLoginId: String((personaFields as { savedLoginId?: string }).savedLoginId) }
+            : {}),
         }),
       );
       setSetupOpen(false);

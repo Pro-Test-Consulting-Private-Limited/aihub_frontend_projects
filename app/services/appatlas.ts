@@ -92,14 +92,73 @@ export function atlasClient({ instance, accounts }: Msal) {
     getProjectFeatures: (projectId: string) =>
       request<{
         projectId: string;
-        features: { persona: boolean; replay: boolean; health: boolean };
-        defaults: { persona: boolean; replay: boolean; health: boolean };
+        features: {
+          persona: boolean;
+          replay: boolean;
+          health: boolean;
+          simulate?: boolean;
+          jiraBug?: boolean;
+          savedLogins?: boolean;
+        };
+        environment?: string;
+        defaults: {
+          persona: boolean;
+          replay: boolean;
+          health: boolean;
+          simulate?: boolean;
+          jiraBug?: boolean;
+          savedLogins?: boolean;
+        };
       }>(`/project-features/${encodeURIComponent(projectId)}`),
-    setProjectFeatures: (projectId: string, body: Partial<{ persona: boolean; replay: boolean; health: boolean }>) =>
-      request<{ projectId: string; features: { persona: boolean; replay: boolean; health: boolean } }>(
-        `/project-features/${encodeURIComponent(projectId)}`,
-        json("PUT", body),
+    setProjectFeatures: (
+      projectId: string,
+      body: Partial<{
+        persona: boolean;
+        replay: boolean;
+        health: boolean;
+        simulate: boolean;
+        jiraBug: boolean;
+        savedLogins: boolean;
+        environment: string;
+      }>,
+    ) =>
+      request<{
+        projectId: string;
+        features: {
+          persona: boolean;
+          replay: boolean;
+          health: boolean;
+          simulate: boolean;
+          jiraBug: boolean;
+          savedLogins: boolean;
+        };
+        environment: string;
+      }>(`/project-features/${encodeURIComponent(projectId)}`, json("PUT", body)),
+    armSimulate: (sessionId: string, body: { method: string; path: string; mode: string }) =>
+      request<import("@/app/interfaces/appatlas").SessionSnapshot>(
+        `/sessions/${sessionId}/simulate/arm`,
+        json("POST", body),
       ),
+    disarmSimulate: (sessionId: string) =>
+      request<import("@/app/interfaces/appatlas").SessionSnapshot>(
+        `/sessions/${sessionId}/simulate/disarm`,
+        json("POST", {}),
+      ),
+    listSavedLogins: () =>
+      request<{ items: Array<{ id: string; roleLabel: string; origin: string; expiresInLabel: string }> }>(
+        "/saved-logins",
+      ).then((r) => r.items),
+    deleteSavedLogin: (id: string) => request<void>(`/saved-logins/${id}`, json("DELETE")),
+    saveSessionLogin: (sessionId: string, body: { roleLabel?: string } = {}) =>
+      request<{ id: string; roleLabel: string; origin: string; expiresInLabel: string }>(
+        `/sessions/${sessionId}/saved-login`,
+        json("POST", body),
+      ),
+    previewBug: (body: Record<string, unknown>) => request<Record<string, unknown>>("/bugs/preview", json("POST", body)),
+    similarBugs: (body: Record<string, unknown>) =>
+      request<{ similar: Array<{ key: string; summary: string }>; jql: string }>("/bugs/similar", json("POST", body)),
+    createBug: (body: Record<string, unknown>) =>
+      request<{ key?: string; error?: string; livePath?: string; liveTested?: boolean }>("/bugs", json("POST", body)),
     listRecordingPresets: () =>
       request<{ items: UserRecordingPreset[] }>("/recording-presets").then((r) => r.items),
     createRecordingPreset: (body: { kind: PresetKind; name: string; payload: PresetPayload }) =>
