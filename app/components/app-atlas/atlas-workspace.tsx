@@ -236,8 +236,9 @@ export default function AtlasWorkspace() {
   };
 
   // A reload mid-recording reattaches to the running session, or offers to save it if it already stopped.
+  // Local AUTH_BYPASS has no MSAL accounts — still resume so Phase B harness / localhost can reattach.
   useEffect(() => {
-    if (!accounts.length) return;
+    if (!accounts.length && !bypass) return;
     const id = localStorage.getItem(ACTIVE_SESSION_KEY);
     if (!id) return;
     let cancelled = false;
@@ -248,6 +249,7 @@ export default function AtlasWorkspace() {
         if (LIVE_STATUSES.includes(snap.status)) {
           setRecording(snap);
           setTab("canvas");
+          setExplorerOpen(false);
         } else {
           localStorage.removeItem(ACTIVE_SESSION_KEY);
           if (snap.status !== "error" && snap.nodes.length) {
@@ -262,7 +264,7 @@ export default function AtlasWorkspace() {
     return () => {
       cancelled = true;
     };
-  }, [accounts.length, client]);
+  }, [accounts.length, bypass, client]);
 
   const openSessionSetup = (url?: string) => {
     if (!(url || appUrl)) return;
