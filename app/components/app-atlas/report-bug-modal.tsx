@@ -61,8 +61,14 @@ export function ReportBugModal(props: Props) {
       .previewBug(body)
       .then(async (p) => {
         if (cancelled) return;
-        const sim = await props.client.similarBugs(body).catch(() => ({ similar: [] }));
-        setPreview({ ...p, similar: sim.similar });
+        const sim = await props.client.similarBugs(body).catch(() => ({ similar: [] as Array<{ key: string; summary: string }> }));
+        setPreview({
+          steps: Array.isArray(p.steps) ? (p.steps as string[]) : [],
+          createPayload: p.createPayload,
+          idempotencyKey: typeof p.idempotencyKey === "string" ? p.idempotencyKey : undefined,
+          redactedNetwork: Array.isArray(p.redactedNetwork) ? p.redactedNetwork : undefined,
+          similar: sim.similar,
+        });
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(err instanceof Error ? err.message : "Preview failed");
