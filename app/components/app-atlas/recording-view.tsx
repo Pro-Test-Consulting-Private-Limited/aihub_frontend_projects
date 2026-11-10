@@ -192,7 +192,7 @@ export function RecordingView({
                       ? "Health warn"
                       : "Health issues"
                 }
-                title={`Errors ${snap.health.consoleErrors}/${snap.health.pageErrors} · HTTP ${snap.health.httpErrors} · a11y ${snap.health.a11yViolations} · LCP ${snap.health.lcpMs ?? "—"}ms`}
+                title={`Errors ${snap.health.consoleErrors}/${snap.health.pageErrors} · HTTP ${snap.health.httpErrors} · a11y ${snap.health.a11yViolations} · LCP ${snap.health.lcpMs != null ? `${snap.health.lcpMs}ms` : "not measured"}`}
                 danger={snap.health.level !== "ok"}
               />
             )}

@@ -210,6 +210,16 @@ export type CanvasState = {
   recordedAs?: string;
 };
 
+export type A11yIssue = {
+  id: string;
+  help: string;
+  impact: string | null;
+  nodes: number;
+  target?: string;
+  failureSummary?: string;
+  screenshotUrl?: string;
+};
+
 export type SessionHealthSummary = {
   level: "ok" | "warn" | "bad";
   consoleErrors: number;
@@ -223,6 +233,7 @@ export type SessionHealthSummary = {
   cls: number | null;
   a11yViolations: number;
   a11ySummary?: string[];
+  a11yIssues?: A11yIssue[];
   slowestRequestMs?: number | null;
   slowestRequestUrl?: string | null;
 };
