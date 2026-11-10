@@ -99,7 +99,8 @@ export function WhatIfPanel({
                     {o.path}
                   </span>
                   <span className="ml-auto text-[#9ca3af]">
-                    {o.lastStatus} · ×{o.count}
+                    {o.lastStatus || "—"} · ×{o.count}
+                    {(o.simulatedCount || 0) > 0 ? ` · sim×${o.simulatedCount}` : ""}
                   </span>
                 </div>
                 <div className="mt-1 flex flex-wrap gap-1">

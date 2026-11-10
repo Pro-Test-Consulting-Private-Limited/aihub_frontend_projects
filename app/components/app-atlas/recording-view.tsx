@@ -258,7 +258,29 @@ export function RecordingView({
               void client
                 .saveSessionLogin(snap.id, { roleLabel: role || "User" })
                 .then(() => setError(null))
-                .catch((err: unknown) => setError(err instanceof Error ? err.message : "Could not save login"))
+                .catch(async (err: unknown) => {
+                  const msg = err instanceof Error ? err.message : "Could not save login";
+                  if (/No logged-in session detected/i.test(msg)) {
+                    const ok = window.confirm(
+                      "No logged-in session detected. Log in first, then save.\n\nSave anyway?",
+                    );
+                    if (!ok) {
+                      setError(msg);
+                      return;
+                    }
+                    try {
+                      await client.saveSessionLogin(snap.id, {
+                        roleLabel: role || "User",
+                        confirmUnauthenticated: true,
+                      });
+                      setError(null);
+                    } catch (err2: unknown) {
+                      setError(err2 instanceof Error ? err2.message : "Could not save login");
+                    }
+                    return;
+                  }
+                  setError(msg);
+                })
                 .finally(() => setBusy(null));
             }}
           >

@@ -172,6 +172,7 @@ export type SessionSnapshot = {
       path: string;
       lastStatus: number;
       count: number;
+      simulatedCount?: number;
       emptyCapable: boolean;
       emptyDisabledReason?: string;
     }>;
