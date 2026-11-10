@@ -717,14 +717,22 @@ export default function AtlasWorkspace() {
                   onConnect={canvas.isMine ? () => setConnectFor(canvas) : undefined}
                   onPostToTeams={
                     canvas.isMine
-                      ? async (issueKey, clarification) => {
-                          const lines = clarification.questions.map((q, i) => `${i + 1}. ${q.question}`).join("\n");
+                      ? async (payload) => {
                           await client.sendTeamsMessage(canvas.id, {
-                            issueKey,
-                            subject: `${issueKey} requirement clarifications`,
-                            text: lines || "No open questions.",
+                            issueKey: payload.issueKey,
+                            subject: payload.subject,
+                            text: payload.text,
+                            mentions: payload.mentions.map((m) => ({
+                              id: m.id,
+                              displayName: m.displayName,
+                            })),
                           });
                         }
+                      : undefined
+                  }
+                  loadTeamsMembers={
+                    canvas.isMine
+                      ? async () => (await client.listCanvasTeamMembers(canvas.id)).items
                       : undefined
                   }
                   onSaveNote={async (issueKey, text) => {

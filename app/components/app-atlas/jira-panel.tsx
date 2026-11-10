@@ -16,6 +16,7 @@ import {
 import type { Canvas, CanvasClarification, JiraIssue, JiraNodeMatch, TicketNote } from "@/app/interfaces/appatlas";
 import { isLocalAuthBypassEnabled } from "@/app/lib/auth-bypass";
 import { HealthPanel } from "./health-panel";
+import { PostToTeamsModal, type PostToTeamsPayload } from "./post-to-teams-modal";
 import { ReportBugModal } from "./report-bug-modal";
 import { atlasClient } from "@/app/services/appatlas";
 import { useMsal } from "@azure/msal-react";
@@ -63,6 +64,7 @@ export function JiraPanel({
   onConnect,
   onSaveNote,
   onPostToTeams,
+  loadTeamsMembers,
 }: {
   canvas: Canvas;
   nodeId: string;
@@ -71,9 +73,13 @@ export function JiraPanel({
   onClose: () => void;
   onConnect?: () => void;
   onSaveNote: (issueKey: string, text: string) => Promise<TicketNote>;
-  /** Post clarification questions to the linked Teams channel (same Entra account). */
-  onPostToTeams?: (issueKey: string, clarification: CanvasClarification) => Promise<void>;
+  /** Compose + post clarification questions to the linked Teams channel (same Entra account). */
+  onPostToTeams?: (payload: PostToTeamsPayload) => Promise<void>;
+  loadTeamsMembers?: () => Promise<Array<{ id: string; displayName: string; email?: string | null }>>;
 }) {
+  const teamsChannelLabel = canvas.teams
+    ? [canvas.teams.teamName, canvas.teams.channelName].filter(Boolean).join(" · ") || null
+    : null;
   const node = canvas.nodes.find((n) => n.id === nodeId);
   const mapping = canvas.jira;
   const [filter, setFilter] = useState<Bucket | null>(null);
@@ -251,6 +257,8 @@ export function JiraPanel({
                   editable={editable}
                   onSaveNote={onSaveNote}
                   onPostToTeams={onPostToTeams}
+                  loadTeamsMembers={loadTeamsMembers}
+                  teamsChannelLabel={teamsChannelLabel}
                 />
               ))}
             </>
@@ -267,6 +275,8 @@ function TicketCard({
   editable,
   onSaveNote,
   onPostToTeams,
+  loadTeamsMembers,
+  teamsChannelLabel,
   canvas,
   nodeId,
 }: {
@@ -274,7 +284,9 @@ function TicketCard({
   clarification?: CanvasClarification;
   editable: boolean;
   onSaveNote: (issueKey: string, text: string) => Promise<TicketNote>;
-  onPostToTeams?: (issueKey: string, clarification: CanvasClarification) => Promise<void>;
+  onPostToTeams?: (payload: PostToTeamsPayload) => Promise<void>;
+  loadTeamsMembers?: () => Promise<Array<{ id: string; displayName: string; email?: string | null }>>;
+  teamsChannelLabel?: string | null;
   canvas: Canvas;
   nodeId: string;
 }) {
@@ -327,7 +339,14 @@ function TicketCard({
       )}
 
       {clarification && (
-        <Clarifications item={clarification} editable={editable} onSaveNote={onSaveNote} onPostToTeams={onPostToTeams} />
+        <Clarifications
+          item={clarification}
+          editable={editable}
+          onSaveNote={onSaveNote}
+          onPostToTeams={onPostToTeams}
+          loadTeamsMembers={loadTeamsMembers}
+          teamsChannelLabel={teamsChannelLabel}
+        />
       )}
       {bugOpen && (
         <ReportBugModal
@@ -363,29 +382,19 @@ function Clarifications({
   editable,
   onSaveNote,
   onPostToTeams,
+  loadTeamsMembers,
+  teamsChannelLabel,
 }: {
   item: CanvasClarification;
   editable: boolean;
   onSaveNote: (issueKey: string, text: string) => Promise<TicketNote>;
-  onPostToTeams?: (issueKey: string, clarification: CanvasClarification) => Promise<void>;
+  onPostToTeams?: (payload: PostToTeamsPayload) => Promise<void>;
+  loadTeamsMembers?: () => Promise<Array<{ id: string; displayName: string; email?: string | null }>>;
+  teamsChannelLabel?: string | null;
 }) {
   const pending = item.status === "queued" || item.status === "running";
-  const [posting, setPosting] = useState(false);
+  const [composeOpen, setComposeOpen] = useState(false);
   const [postMsg, setPostMsg] = useState<string | null>(null);
-
-  const postTeams = async () => {
-    if (!onPostToTeams || !editable) return;
-    setPosting(true);
-    setPostMsg(null);
-    try {
-      await onPostToTeams(item.issueKey, item);
-      setPostMsg("Posted to Teams");
-    } catch (err) {
-      setPostMsg(err instanceof Error ? err.message : "Could not post to Teams");
-    } finally {
-      setPosting(false);
-    }
-  };
 
   return (
     <div className="mt-3">
@@ -397,16 +406,31 @@ function Clarifications({
         {editable && onPostToTeams && item.status === "ready" && item.questions.length > 0 && (
           <button
             type="button"
-            disabled={posting}
-            onClick={() => void postTeams()}
+            onClick={() => {
+              setPostMsg(null);
+              setComposeOpen(true);
+            }}
             className="rounded-[6px] border border-[#E6E1F5] bg-white px-2 py-0.5 text-[10px] font-medium normal-case text-[#6264A7] hover:border-[#6264A7] disabled:opacity-50 dark:border-[#2a2a2a] dark:bg-[#141414]"
-            title="Post these questions to the linked Teams channel (same Microsoft sign-in)"
+            title="Edit message, tag people, then post to the linked Teams channel"
           >
-            {posting ? "Posting…" : "Post to Teams"}
+            Post to Teams
           </button>
         )}
       </div>
       {postMsg && <div className="mb-1.5 text-[11px] text-[#5E6066] dark:text-[#9ca3af]">{postMsg}</div>}
+      {composeOpen && onPostToTeams && (
+        <PostToTeamsModal
+          issueKey={item.issueKey}
+          clarification={item}
+          channelLabel={teamsChannelLabel}
+          loadMembers={async () => (loadTeamsMembers ? loadTeamsMembers() : [])}
+          onPost={async (payload) => {
+            await onPostToTeams(payload);
+            setPostMsg("Posted to Teams");
+          }}
+          onClose={() => setComposeOpen(false)}
+        />
+      )}
 
       {pending && (
         <div className="flex items-center gap-2 rounded-[6px] bg-[#F4EFFE] px-2 py-1.5 text-[11.5px] text-[#5B3FD1] dark:bg-[#1c1530] dark:text-[#c4b5fd]">
