@@ -20,6 +20,9 @@ import type {
   JiraProject,
   SessionSnapshot,
   SitEpic,
+  SitJob,
+  SitJobsList,
+  SitModelStatus,
   SitWorkbook,
   TicketNote,
 } from "@/app/interfaces/appatlas";
@@ -268,7 +271,7 @@ export function atlasClient({ instance, accounts }: Msal) {
       );
     },
 
-    /** SIT Testing: epics/tickets (canvas Jira or demo catalog). */
+    /** SIT Testing: epics/tickets (canvas Jira). */
     listSitTickets: (canvasId?: string | null) => {
       const q = canvasId ? `?canvasId=${encodeURIComponent(canvasId)}` : "";
       return request<{
@@ -276,22 +279,66 @@ export function atlasClient({ instance, accounts }: Msal) {
         projectKey: string | null;
         epics: SitEpic[];
         note?: string;
+        model?: SitModelStatus;
       }>(`/sit/tickets${q}`);
     },
-    generateSitWorkbook: (body: { issueKey?: string; issueKeys?: string[]; canvasId?: string | null }) =>
-      request<SitWorkbook>("/sit/generate", json("POST", body)),
+    getSitModelStatus: () => request<SitModelStatus>("/sit/model"),
+    generateSitWorkbook: (body: {
+      issueKey?: string;
+      issueKeys?: string[];
+      canvasId?: string | null;
+      useTemplate?: boolean;
+    }) => request<SitWorkbook>("/sit/generate", json("POST", body)),
+    enqueueSitGenerateJobs: (body: { issueKey?: string; issueKeys?: string[]; canvasId?: string | null }) =>
+      request<{ batchId: string; jobs: SitJob[] }>("/sit/jobs/generate", json("POST", body)),
+    enqueueSitReassessJobs: (body: { workbookId: string; issueKeys?: string[]; canvasId?: string | null }) =>
+      request<{ batchId: string; jobs: SitJob[] }>("/sit/jobs/reassess", json("POST", body)),
+    listSitJobs: (canvasId?: string | null) => {
+      const q = canvasId ? `?canvasId=${encodeURIComponent(canvasId)}` : "";
+      return request<SitJobsList>(`/sit/jobs${q}`);
+    },
+    getSitJob: (id: string) => request<SitJob>(`/sit/jobs/${id}`),
+    cancelSitJob: (id: string) => request<SitJob>(`/sit/jobs/${id}/cancel`, json("POST", {})),
+    dismissSitJob: (id: string) => request<{ ok: true }>(`/sit/jobs/${id}/dismiss`, json("POST", {})),
+    dismissAllSitFailedJobs: (canvasId?: string | null) =>
+      request<{ dismissed: number }>("/sit/jobs/dismiss-all", json("POST", canvasId ? { canvasId } : {})),
     listSitWorkbooks: (canvasId?: string | null) => {
       const q = canvasId ? `?canvasId=${encodeURIComponent(canvasId)}` : "";
       return request<{ items: SitWorkbook[] }>(`/sit/workbooks${q}`);
     },
     getSitWorkbook: (id: string) => request<SitWorkbook>(`/sit/workbooks/${id}`),
+    reassessSitWorkbook: (body: { workbookId: string; issueKeys?: string[]; canvasId?: string | null }) =>
+      request<{ workbook: SitWorkbook; stats: { modelCalls: number; cases: number; model: string } }>(
+        "/sit/reassess",
+        json("POST", body),
+      ),
+    patchSitCase: (
+      workbookId: string,
+      rowId: string,
+      body: { priority?: string; severity?: string; note?: string },
+    ) => request<SitWorkbook>(`/sit/workbooks/${workbookId}/cases/${rowId}`, json("PATCH", body)),
+    getSitRiskRubric: () => request<Record<string, unknown>>("/sit/risk-rubric"),
+    getSitRiskEval: (workbookId: string) =>
+      request<Record<string, unknown>>(`/sit/risk-eval?workbookId=${encodeURIComponent(workbookId)}`),
     sitCoverage: (canvasId?: string | null) => {
       const q = canvasId ? `?canvasId=${encodeURIComponent(canvasId)}` : "";
       return request<{
         tickets: Record<
           string,
-          { tests: number; byType: Record<string, number>; workbookId: string; generator: string; updatedAt: number }
+          {
+            tests: number;
+            byType: Record<string, number>;
+            byPriority?: Record<string, number>;
+            bySeverity?: Record<string, number>;
+            notAssessed?: number;
+            automationYes?: number;
+            workbookId: string;
+            generator: string;
+            updatedAt: number;
+            summary?: string | null;
+          }
         >;
+        workbookCount?: number;
       }>(`/sit/coverage${q}`);
     },
 

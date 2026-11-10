@@ -127,6 +127,7 @@ export default function AtlasWorkspace() {
   // Swagger is connected per canvas and is independent of Jira (canvas.jiraProjectKey).
   const [swagger, setSwagger] = useState<CanvasSwagger | null>(null);
   const [view, setView] = useState<"screens" | "api" | "sit">("screens");
+  const [sitFocus, setSitFocus] = useState<{ workbookId?: string; ticketKey?: string; testType?: string } | null>(null);
   const [cicdPageTrial, setCicdPageTrial] = useState(false);
   const apiSpec = useApiSpec(swagger?.specUrl ?? null);
   const apiSpecView = useApiSpecView(apiSpec);
@@ -609,9 +610,23 @@ export default function AtlasWorkspace() {
           {tab === "cicd" ? (
             <CicdView client={client} />
           ) : tab === "sit" || (tab === "canvas" && view === "sit") ? (
-            <SitTestingView client={client} canvasId={canvas?.id ?? null} canvasName={canvas?.name} />
+            <SitTestingView
+              client={client}
+              canvasId={canvas?.id ?? null}
+              canvasName={canvas?.name}
+              focusWorkbookId={sitFocus?.workbookId}
+              focusTicketKey={sitFocus?.ticketKey}
+              focusTestType={sitFocus?.testType}
+            />
           ) : tab === "coverage" ? (
-            <CoverageOverview client={client} canvasId={canvas?.id ?? null} />
+            <CoverageOverview
+              client={client}
+              canvasId={canvas?.id ?? null}
+              onOpenSit={(opts) => {
+                setSitFocus(opts ?? null);
+                setTab("sit");
+              }}
+            />
           ) : tab === "security" ? (
             <SecurityOverview targetUrl={appUrl} projectName={project?.name} client={client} />
           ) : tab === "performance" ? (

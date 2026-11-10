@@ -575,6 +575,17 @@ export type SitEpic = {
   tickets: SitTicket[];
 };
 
+export type SitModelState = "up" | "idle" | "down" | "unconfigured" | "unknown";
+
+export type SitModelStatus = {
+  state: SitModelState;
+  label: string;
+  detail: string;
+  model: string | null;
+  httpCode: number | null;
+  ms: number | null;
+};
+
 export type SitSheetColumn = { id: string; name: string; width?: number };
 export type SitSheetRow = { id: string; cells: Record<string, string> };
 export type SitSheet = {
@@ -598,5 +609,42 @@ export type SitWorkbook = {
   sheets: SitSheet[];
   createdAt: number;
   updatedAt: number;
+  generatedAt?: number | null;
+  assessedAt?: number | null;
   createdBy: { id: string; name: string };
 };
+
+export type SitJobKind = "generate" | "reassess";
+export type SitJobStatus = "queued" | "running" | "done" | "failed" | "cancelled";
+export type SitJobStage = "queued" | "generating" | "saving" | "assessing" | "done" | "failed";
+
+export type SitJobProgress = {
+  stage: SitJobStage;
+  queuePosition?: number;
+  batchSize?: number;
+  message?: string;
+  workbookId?: string;
+  caseIndex?: number;
+  caseTotal?: number;
+  elapsedMs?: number;
+};
+
+export type SitJob = {
+  id: string;
+  kind: SitJobKind;
+  status: SitJobStatus;
+  canvasId: string | null;
+  issueKey: string | null;
+  workbookId: string | null;
+  batchId: string | null;
+  user: { id: string; name: string };
+  progress: SitJobProgress;
+  plannedModelCalls: number;
+  error: string | null;
+  createdAt: number;
+  updatedAt: number;
+  startedAt: number | null;
+  finishedAt: number | null;
+};
+
+export type SitJobsList = { items: SitJob[]; pending: number };
