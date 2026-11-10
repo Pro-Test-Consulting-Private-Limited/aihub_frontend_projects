@@ -57,9 +57,8 @@ export function ConnectAppsModal({
   onClose: () => void;
 }) {
   const router = useRouter();
-  const { jira, swagger: swaggerIntegration, loading: statusLoading } = useIntegrationStatus();
-  // Teams uses the same Entra sign-in (Graph scopes) — not a separate login.
-  const teamsConnected = true;
+  const { jira, swagger: swaggerIntegration, teams, loading: statusLoading } = useIntegrationStatus();
+  const teamsConnected = teams.connected;
   const integrated: Record<AppId, boolean> = {
     jira: jira.connected,
     swagger: swaggerIntegration.connected,
