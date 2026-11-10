@@ -14,6 +14,7 @@ import {
   TbX,
 } from "react-icons/tb";
 import type { Canvas, CanvasClarification, JiraIssue, JiraNodeMatch, TicketNote } from "@/app/interfaces/appatlas";
+import { isLocalAuthBypassEnabled } from "@/app/lib/auth-bypass";
 import { HealthPanel } from "./health-panel";
 import { ReportBugModal } from "./report-bug-modal";
 import { atlasClient } from "@/app/services/appatlas";
@@ -278,7 +279,7 @@ function TicketCard({
         </div>
         {issue.priority && <span className={`font-semibold uppercase ${PRIORITY_STYLE(issue.priority)}`}>{issue.priority}</span>}
       </div>
-      {editable && (
+      {(editable || isLocalAuthBypassEnabled()) && (
         <button
           type="button"
           className="mt-2 text-[11px] font-medium text-[#8664F2] underline-offset-2 hover:underline"
