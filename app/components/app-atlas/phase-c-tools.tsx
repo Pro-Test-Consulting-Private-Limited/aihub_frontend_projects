@@ -123,7 +123,7 @@ export function PhaseCToolsModal({
   const pair = pairs?.[active];
 
   return (
-    <Modal title={`Phase C · ${canvasName}`} onClose={onClose} width={720}>
+    <Modal title={`Accessibility tools · ${canvasName}`} onClose={onClose} width={720}>
       <div className="mt-3 flex gap-2 text-[12px]">
         {flags.visualDiff && (
           <button type="button" className={tab === "diff" ? primaryButton : outlineButton} onClick={() => setTab("diff")}>

@@ -610,7 +610,7 @@ export default function AtlasWorkspace() {
                     onClick={() => setPhaseCOpen(true)}
                     className="rounded-[8px] border border-[#E6E1F5] bg-white px-3 py-1.5 text-[12px] font-medium text-[#8664F2] shadow-sm hover:border-[#8664F2] dark:border-[#2a2a2a] dark:bg-[#141414]"
                   >
-                    Phase C tools
+                    Accessibility tools
                   </button>
                 </div>
               )}
