@@ -9,7 +9,8 @@ import type { Canvas, CanvasSummary, JiraProject } from "@/app/interfaces/appatl
 import type { AtlasClient } from "@/app/services/appatlas";
 import { useIntegrationStatus, type SwaggerStatus } from "@/app/hooks/use-integration-status";
 import { clearCanvasSwagger, setCanvasSwagger, type CanvasSwagger } from "@/app/lib/canvas-swagger";
-import { clearToken, getEnvironment, getToken, setEnvironment, setToken, validateBaseUrl } from "@/app/lib/api-testing/environment";
+import { clearToken, getEnvironment, getToken, selectEnvProfile, setEnvironment, setToken, validateBaseUrl, type TestEnvironment } from "@/app/lib/api-testing/environment";
+import { EnvProfileChips } from "@/app/components/app-atlas/endpoint-tests/env-profile-chips";
 import { Modal, fieldInput, fieldLabel, outlineButton, primaryButton } from "./modal";
 
 type AppId = "jira" | "linear" | "swagger" | "redocly" | "stoplight" | "teams" | "slack";
@@ -514,16 +515,16 @@ function SwaggerStep({
   onChange: (conn: CanvasSwagger | null) => void;
 }) {
   const specUrl = integration.specUrl;
-  // Where the tests are sent. The base URL is kept in this browser; the token only in memory.
-  const [baseUrl, setBaseUrl] = useState(() => (specUrl ? getEnvironment(specUrl).baseUrl : ""));
+  // Where the tests are sent. Named env profiles + base URL stay in this browser; the token only in memory.
+  const [env, setEnv] = useState<TestEnvironment>(() => (specUrl ? getEnvironment(specUrl) : getEnvironment("")));
   const [token, setTokenText] = useState(() => (specUrl ? getToken(specUrl) : ""));
   const [busy, setBusy] = useState<"connect" | "disconnect" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const baseUrl = env.baseUrl;
   const baseUrlError = baseUrl.trim() ? validateBaseUrl(baseUrl) : null;
   useEffect(() => {
     if (!specUrl) return;
-    const e = getEnvironment(specUrl);
-    setBaseUrl(e.baseUrl);
+    setEnv(getEnvironment(specUrl));
     setTokenText(getToken(specUrl));
   }, [specUrl]);
 
@@ -531,7 +532,7 @@ function SwaggerStep({
     if (!specUrl || baseUrlError) return;
     setBusy("connect");
     setError(null);
-    setEnvironment(specUrl, { baseUrl });
+    setEnvironment(specUrl, env);
     setToken(specUrl, token);
     // Optimistic local mirror so API Testing opens immediately.
     onChange(setCanvasSwagger(canvas.id, { specUrl, title: integration.title }));
@@ -595,12 +596,24 @@ function SwaggerStep({
           <label className={fieldLabel} htmlFor="swagger-base-url">
             Base URL for testing
           </label>
+          <div className="mb-2">
+            <EnvProfileChips
+              env={env}
+              onSelect={(id) => {
+                if (!specUrl) return;
+                setEnv(selectEnvProfile(specUrl, id));
+              }}
+            />
+          </div>
           <input
             id="swagger-base-url"
             className={fieldInput}
             value={baseUrl}
-            onChange={(e) => setBaseUrl(e.target.value)}
-            placeholder="https://staging.example.com/api"
+            onChange={(e) => {
+              if (!specUrl) return;
+              setEnv(setEnvironment(specUrl, { baseUrl: e.target.value }));
+            }}
+            placeholder={`https://${env.active}.example.com/api`}
             autoComplete="off"
           />
           {baseUrlError && <p className="mt-1 text-[11.5px] text-[#DC2626]">{baseUrlError}</p>}

@@ -626,6 +626,29 @@ export type SitWorkbook = {
   createdBy: { id: string; name: string };
 };
 
+/** Dead Test Finder flags from GET /sit/workbooks/:id/audit (deterministic, no run history). */
+export type DeadFlag =
+  | "stub_workbook"
+  | "template_case"
+  | "not_assessed"
+  | "orphan_ticket"
+  | "empty_oracle"
+  | "generic_expected"
+  | "duplicate_case";
+
+export type DeadFlagHit = { flag: DeadFlag; reason: string };
+
+export type SitDeadAudit = {
+  workbookId: string;
+  generator: string;
+  flagsByRowId: Record<string, DeadFlagHit[]>;
+  summary: Record<DeadFlag, number>;
+  flaggedRows: number;
+  /** Nested copy for newer clients; older callers read top-level fields. */
+  dead?: SitDeadAudit;
+  m4?: unknown;
+};
+
 export type SitJobKind = "generate" | "reassess";
 export type SitJobStatus = "queued" | "running" | "done" | "failed" | "cancelled";
 export type SitJobStage = "queued" | "generating" | "saving" | "assessing" | "done" | "failed";

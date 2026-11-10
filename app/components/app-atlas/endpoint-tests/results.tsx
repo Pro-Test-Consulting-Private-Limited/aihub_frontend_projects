@@ -42,10 +42,52 @@ function CheckRow({ c }: { c: CheckResult }) {
   );
 }
 
+const SCHEMA_CHECK_IDS = new Set([
+  "required-fields",
+  "types",
+  "undocumented-fields",
+  "example-mismatch",
+  "error-envelope",
+  "content-type",
+  "status-documented",
+]);
+
+const SCHEMA_CHIP: Record<CheckResult["status"], string> = {
+  pass: "border-[#86efac] bg-[#F0FDF4] text-[#166534]",
+  fail: "border-[#fca5a5] bg-[#FEF2F2] text-[#991B1B]",
+  warn: "border-[#fcd34d] bg-[#FFFBEB] text-[#92400E]",
+  skip: "border-[#E5E7EB] bg-[#F5F6F6] text-[#6b7280]",
+};
+
+/** Pin schema / contract checks above the fold so they are not buried in the Checks list. */
+function SchemaAssertChips({ checks }: { checks: CheckResult[] }) {
+  const schema = checks.filter((c) => SCHEMA_CHECK_IDS.has(c.id));
+  if (!schema.length) return null;
+  return (
+    <div>
+      <div className={label}>Schema asserts</div>
+      <div className="flex flex-wrap gap-1.5">
+        {schema.map((c) => (
+          <span
+            key={c.id}
+            title={[c.label, c.expected && `Expected: ${c.expected}`, c.actual && `Actual: ${c.actual}`].filter(Boolean).join("\n")}
+            className={`rounded-full border px-2 py-0.5 text-[10.5px] font-semibold ${SCHEMA_CHIP[c.status]}`}
+          >
+            {c.label.replace(/\.$/, "")}
+            <span className="ml-1 opacity-80">{c.status}</span>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /** One run: request sent (masked), response received, duration and the check or assertion results. */
 export function ResultCard({ r, defaultOpen }: { r: RunResult; defaultOpen?: boolean }) {
-  const [open, setOpen] = useState(defaultOpen ?? (r.status === "failed" || r.status === "blocked"));
+  const hasSchemaIssue = r.checks.some((c) => SCHEMA_CHECK_IDS.has(c.id) && (c.status === "fail" || c.status === "warn"));
+  const [open, setOpen] = useState(defaultOpen ?? (r.status === "failed" || r.status === "blocked" || hasSchemaIssue));
   const fails = r.checks.filter((c) => c.status === "fail").length;
+  const failedPrereq = r.kind === "prerequisite" && (r.status === "failed" || r.status === "blocked");
   return (
     <div className={`${box} overflow-hidden`}>
       <button type="button" onClick={() => setOpen(!open)} className="flex w-full items-center gap-2 px-3 py-2 text-left" aria-expanded={open}>
@@ -59,9 +101,15 @@ export function ResultCard({ r, defaultOpen }: { r: RunResult; defaultOpen?: boo
         {r.response && <span className={`${mono} shrink-0 text-[11.5px] text-[#5E6066] dark:text-[#9ca3af]`}>{r.response.status}</span>}
         {r.request && <span className="shrink-0 text-[11.5px] text-[#7E7E7E]">{r.durationMs} ms</span>}
         {fails > 0 && <span className="shrink-0 text-[11px] font-semibold text-[#DC2626]">{fails} failed</span>}
+        {hasSchemaIssue && fails === 0 && <span className="shrink-0 text-[11px] font-semibold text-[#D97706]">schema</span>}
       </button>
       {open && (
         <div className="space-y-3 border-t border-[#EEE] px-3 py-3 dark:border-[#1a1a1a]">
+          {failedPrereq && (
+            <div className="rounded-[6px] bg-[#FFFBEB] px-2.5 py-2 text-[12px] leading-snug text-[#92400E] dark:bg-[#2a2210] dark:text-[#FCD34D]">
+              This prerequisite did not succeed. Later tests are <b>BLOCKED</b> (not failed) until it passes.
+            </div>
+          )}
           {plainCause(r) && <div className="rounded-[6px] bg-[#FEF2F2] px-2.5 py-2 text-[12px] leading-snug text-[#991B1B] dark:bg-[#2a1212] dark:text-[#FCA5A5]">{plainCause(r)}</div>}
           {r.hint && <div className="rounded-[6px] bg-[#FFFBEB] px-2.5 py-2 text-[12px] leading-snug text-[#92400E] dark:bg-[#2a2210] dark:text-[#FCD34D]">{r.hint}</div>}
           {r.note && <div className="rounded-[6px] bg-[#F5F1FF] px-2.5 py-1.5 text-[12px] leading-snug text-[#5B3FC4] dark:bg-[#1c1530] dark:text-[#C4B5FD]">{r.note.charAt(0).toUpperCase() + r.note.slice(1)}</div>}
@@ -69,6 +117,7 @@ export function ResultCard({ r, defaultOpen }: { r: RunResult; defaultOpen?: boo
             <button type="button" className={`${outlineButton} !px-2.5 !py-1 !text-[11.5px]`} onClick={() => requestAddAccount(r.action!.role)}>Add account</button>
           )}
           {r.error && !r.hint && <div className="text-[12px] text-[#DC2626]">{r.error}</div>}
+          {r.kind === "contract" && r.checks.length > 0 && <SchemaAssertChips checks={r.checks} />}
           {r.extracted && r.extracted.length > 0 && (
             <div>
               <div className={label}>Saved for later steps</div>
@@ -140,7 +189,7 @@ export function ResultsPanel({ run, rowOrder }: { run: RunResponse; rowOrder?: s
         <div className="rounded-[8px] border border-[#D97706] bg-[#FFFBEB] px-3 py-2 text-[12.5px] text-[#92400E] dark:bg-[#2a2210] dark:text-[#FCD34D]">
           {run.blockedReason ? (
             <>
-              <b>BLOCKED: {run.blockedReason.title}.</b> {run.blockedReason.message} Nothing was sent, so these are not failures.
+              <b>BLOCKED: {run.blockedReason.title}.</b> {run.blockedReason.message} Nothing was sent, so these are not failures — fix the blocker, then re-run.
               {run.blockedReason.action?.type === "add-account" && (
                 <div className="mt-1.5">
                   <button type="button" className={`${outlineButton} !px-2.5 !py-1 !text-[11.5px]`} onClick={() => requestAddAccount(run.blockedReason!.action!.role)}>Add account</button>
@@ -149,7 +198,17 @@ export function ResultsPanel({ run, rowOrder }: { run: RunResponse; rowOrder?: s
             </>
           ) : (
             <>
-              <b>BLOCKED.</b> A prerequisite failed, so the tests below did not run. They are not counted as failures.
+              <b>BLOCKED by a prerequisite.</b>{" "}
+              {(() => {
+                const failed = run.prerequisites.find((p) => p.status === "failed" || p.status === "blocked");
+                return failed ? (
+                  <>
+                    <span className={mono}>{failed.name}</span> did not succeed, so the tests below did not run. They are not counted as failures.
+                  </>
+                ) : (
+                  <>A prerequisite failed, so the tests below did not run. They are not counted as failures.</>
+                );
+              })()}
             </>
           )}
         </div>

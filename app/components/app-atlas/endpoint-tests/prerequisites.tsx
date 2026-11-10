@@ -206,10 +206,15 @@ export function PrerequisitesSection({
         )}
         </div>
       </div>
+      {getSharedSetup(specUrl) && steps.length > 0 && (
+        <div className="mt-2 rounded-[6px] border border-dashed border-[#c4b5fd] bg-[#F5F1FF] px-2.5 py-1.5 text-[11.5px] text-[#5B3FC4] dark:border-[#5b3fc4]/40 dark:bg-[#1c1530] dark:text-[#C4B5FD]">
+          Shared setup is on for this spec ({getSharedSetup(specUrl)!.prerequisites.length} step{getSharedSetup(specUrl)!.prerequisites.length === 1 ? "" : "s"}). New endpoints start with those steps; this endpoint keeps its own list until you replace it.
+        </div>
+      )}
       {open && (
         <div className="mt-2 space-y-2.5">
-          <Hint short="Calls that run first. What they return is saved for the tests.">
-            These run first, in order. Every field of their responses is saved automatically (token, userId...) and you can use it as <span className={mono}>{"{{token}}"}</span> in headers, path, query and body; add a rule below only to save a value under another name. A token a step saves belongs to the account it runs as (see Run as), so an admin login never replaces the customer&apos;s. Data a step sends (mobile number, password) is reused by later steps, and generated data is new on every run. If a step fails, the tests are BLOCKED, not failed.
+          <Hint short="Calls that run first. Failures BLOCK tests (not fail them).">
+            These run first, in order. Every field of their responses is saved automatically (token, userId…) as <span className={mono}>{"{{token}}"}</span> for later steps. Use <b>Suggest from spec</b> when you are unsure which login or create call to add. If a step fails, later tests are <b>BLOCKED</b> — not failed — until you fix it. Shared setup (“Use on all endpoints”) copies this list to new endpoints of the same spec.
           </Hint>
           {steps.map((s, i) => (
             <StepCard key={s.id} accountIds={accountIds} step={s} index={i} count={steps.length} last={lastRun?.prerequisites.find((p) => p.id === s.id)} onChange={(n) => onChange(steps.map((x) => (x.id === s.id ? n : x)))} onRemove={() => onChange(steps.filter((x) => x.id !== s.id))} onMove={(d) => move(i, d)} />

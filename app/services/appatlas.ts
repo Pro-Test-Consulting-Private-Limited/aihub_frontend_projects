@@ -19,6 +19,7 @@ import type {
   CanvasSummary,
   JiraProject,
   SessionSnapshot,
+  SitDeadAudit,
   SitEpic,
   SitJob,
   SitJobsList,
@@ -312,6 +313,10 @@ export function atlasClient({ instance, accounts }: Msal) {
       return request<{ items: SitWorkbook[] }>(`/sit/workbooks${q}`);
     },
     getSitWorkbook: (id: string) => request<SitWorkbook>(`/sit/workbooks/${id}`),
+    getSitWorkbookAudit: (id: string, canvasId?: string | null) => {
+      const q = canvasId ? `?canvasId=${encodeURIComponent(canvasId)}` : "";
+      return request<SitDeadAudit>(`/sit/workbooks/${id}/audit${q}`);
+    },
     reassessSitWorkbook: (body: { workbookId: string; issueKeys?: string[]; canvasId?: string | null }) =>
       request<{ workbook: SitWorkbook; stats: { modelCalls: number; cases: number; model: string } }>(
         "/sit/reassess",
@@ -349,6 +354,7 @@ export function atlasClient({ instance, accounts }: Msal) {
             generator: string;
             updatedAt: number;
             summary?: string | null;
+            deadFlags?: number;
           }
         >;
         workbookCount?: number;

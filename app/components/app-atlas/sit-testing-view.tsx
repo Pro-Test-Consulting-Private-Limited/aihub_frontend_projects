@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { TbLoader2, TbBolt, TbBookmarkFilled, TbClipboardList, TbGitMerge } from "react-icons/tb";
-import type { SitEpic, SitModelStatus, SitSheet, SitSheetRow, SitWorkbook } from "@/app/interfaces/appatlas";
+import type { DeadFlag, SitDeadAudit, SitEpic, SitModelStatus, SitSheet, SitSheetRow, SitWorkbook } from "@/app/interfaces/appatlas";
 import { EXECUTION_STATUSES, type SitExecutionStatus } from "@/app/lib/sit-eisenhower";
 import type { AtlasClient } from "@/app/services/appatlas";
 import { SitCaseDrawer } from "./sit-case-drawer";
+import { DeadFlagPills, DeadTestFinderStrip, filterRowsByDeadFlag } from "./sit-dead-finder";
 
 function EpicIcon() {
   return (
@@ -154,6 +155,9 @@ export function SitTestingView({
   const [activeSheetId, setActiveSheetId] = useState("test-cases");
   const [resultTicket, setResultTicket] = useState<string | "all">("all");
   const [resultType, setResultType] = useState<string | null>(null);
+  const [deadFlag, setDeadFlag] = useState<DeadFlag | null>(null);
+  const [deadAudit, setDeadAudit] = useState<SitDeadAudit | null>(null);
+  const [deadLoading, setDeadLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [model, setModel] = useState<SitModelStatus | null>(null);
   const [caseDrawer, setCaseDrawer] = useState<{
@@ -254,9 +258,37 @@ export function SitTestingView({
     return labels;
   }, [epics, selected]);
 
+  // Dead Test Finder: refresh whenever the open workbook changes (or after generate).
+  useEffect(() => {
+    if (!workbook?.id) {
+      setDeadAudit(null);
+      setDeadFlag(null);
+      return;
+    }
+    let cancelled = false;
+    setDeadLoading(true);
+    void client
+      .getSitWorkbookAudit(workbook.id, canvasId)
+      .then((audit) => {
+        if (!cancelled) setDeadAudit(audit);
+      })
+      .catch(() => {
+        if (!cancelled) setDeadAudit(null);
+      })
+      .finally(() => {
+        if (!cancelled) setDeadLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, workbook?.id, workbook?.updatedAt, canvasId]);
+
   const rawSheet: SitSheet | null =
     workbook?.sheets.find((s) => s.id === activeSheetId) || workbook?.sheets[0] || null;
-  const activeSheet: SitSheet | null = rawSheet ? filterSheetRows(rawSheet, resultTicket, resultType) : null;
+  const ticketFiltered: SitSheet | null = rawSheet ? filterSheetRows(rawSheet, resultTicket, resultType) : null;
+  const activeSheet: SitSheet | null = ticketFiltered
+    ? { ...ticketFiltered, rows: filterRowsByDeadFlag(ticketFiltered.rows, deadAudit, deadFlag) }
+    : null;
 
   const toggle = (key: string) => {
     setSelected((prev) => {
@@ -623,6 +655,13 @@ export function SitTestingView({
               ) : null}
             </div>
 
+            <DeadTestFinderStrip
+              audit={deadAudit}
+              loading={deadLoading}
+              activeFlag={deadFlag}
+              onFlag={setDeadFlag}
+            />
+
             {activeSheet.kind === "traceability" && <LinkMap sheet={activeSheet} />}
 
             <div className="max-h-[520px] overflow-auto">
@@ -681,6 +720,13 @@ export function SitTestingView({
                             >
                               {row.cells[col.id] || "-"}
                             </button>
+                          ) : col.id === "scenario" || col.id === "requirementId" || col.id === "tcId" ? (
+                            <div>
+                              {row.cells[col.id] ?? ""}
+                              {(col.id === "scenario" || col.id === "tcId") && (
+                                <DeadFlagPills hits={deadAudit?.flagsByRowId[row.id]} />
+                              )}
+                            </div>
                           ) : (
                             row.cells[col.id] ?? ""
                           )}

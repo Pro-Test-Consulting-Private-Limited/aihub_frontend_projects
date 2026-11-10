@@ -533,6 +533,7 @@ type SitCov = {
   assessedAt?: number | null;
   summary?: string | null;
   workbookId?: string;
+  deadFlags?: number;
 };
 
 type Row = {
@@ -554,6 +555,7 @@ type Row = {
   generatedAt: number | null;
   assessedAt: number | null;
   workbookId?: string;
+  deadFlags: number;
 };
 
 type FreshPreset = "all" | "fresh" | "aging" | "stale" | "never" | "custom";
@@ -754,6 +756,7 @@ export function CoverageOverview({
         generatedAt: s?.generatedAt ?? s?.updatedAt ?? null,
         assessedAt: s?.assessedAt ?? null,
         workbookId: s?.workbookId,
+        deadFlags: s?.deadFlags || 0,
       };
     };
 
@@ -1731,6 +1734,13 @@ export function CoverageOverview({
                                     <Tip text="Test depth for this ticket is based on template cases">
                                       <span className="shrink-0 rounded border border-[#D1D5DB] bg-[#F3F4F6] px-1.5 py-0.5 text-[10px] font-semibold text-[#4B5563]">
                                         Template
+                                      </span>
+                                    </Tip>
+                                  ) : null}
+                                  {t.deadFlags > 0 ? (
+                                    <Tip text={`${t.deadFlags} case${t.deadFlags === 1 ? "" : "s"} flagged by Dead Test Finder (stub, empty oracle, orphan, duplicate, …). Open SIT Results to filter.`}>
+                                      <span className="shrink-0 rounded border border-[#fcd34d] bg-[#fffbeb] px-1.5 py-0.5 text-[10px] font-semibold text-[#92400e]">
+                                        Dead · {t.deadFlags}
                                       </span>
                                     </Tip>
                                   ) : null}

@@ -32,7 +32,7 @@ export function ContractTab({ expect, onExpect, request, onRequest, isLogin, ...
   return (
     <section className="space-y-3">
       <Hint short="Sends a real request and checks it against the spec.">
-        Sends a real request and checks the answer against the spec: the status code is documented, required fields are present, types match, and the content type is the one the spec declares. Fields the spec does not document are reported as warnings.
+        Sends a real request and checks the answer against the spec: status documented, required fields, types, content type, <b>example shape</b>, and (on 4xx/5xx) a shared <b>error envelope</b>. Schema asserts are pinned on the result so mismatches are obvious. Undocumented fields are warnings.
       </Hint>
       <div className="flex flex-wrap items-center gap-2">
         <span className={`${label} !mb-0`}>Expect</span>

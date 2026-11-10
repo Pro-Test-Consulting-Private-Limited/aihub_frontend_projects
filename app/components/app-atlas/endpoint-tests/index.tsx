@@ -7,12 +7,13 @@ import { DependencyOverview, PreRunCheck } from "./dependencies";
 import { TbAlertTriangle, TbLock } from "react-icons/tb";
 import type { EndpointDetail, GateRow } from "@/app/interfaces/api-testing";
 import { useEndpointRun, useTestState } from "@/app/hooks/use-endpoint-tests";
-import { getEnvironment, getToken, setEnvironment, setToken } from "@/app/lib/api-testing/environment";
+import { getEnvironment, getToken, selectEnvProfile, setEnvironment, setToken, type TestEnvironment } from "@/app/lib/api-testing/environment";
 import { clearSession, sessionKey } from "@/app/lib/api-testing/session-cache";
 import { ContractTab, DataDrivenTab, FunctionalTab } from "./tabs";
 import { AccountsSection } from "./accounts";
 import { SetupForMe } from "./setup-for-me";
 import { PrerequisitesSection } from "./prerequisites";
+import { EnvProfileChips } from "./env-profile-chips";
 import { getRunAccounts } from "@/app/lib/api-testing/identities";
 import { box, input, label, mono, outlineButton, primaryButton } from "./ui";
 
@@ -40,16 +41,18 @@ export function EndpointTests({
   detail: EndpointDetail | null;
 }) {
   const [state, patch] = useTestState(`${specUrl}|${row.key}`);
-  const [env, setEnv] = useState(() => {
+  const [env, setEnv] = useState<TestEnvironment>(() => {
     const e = getEnvironment(specUrl);
-    return { ...e, baseUrl: e.baseUrl || serverUrl || "" };
+    if (!e.baseUrl && serverUrl) {
+      return setEnvironment(specUrl, { baseUrl: serverUrl, active: e.active });
+    }
+    return e;
   });
   const [token, setTokenText] = useState(() => getToken(specUrl));
   const runner = useEndpointRun({ specUrl, row, state, patch, baseUrl: env.baseUrl });
 
-  const updateEnv = (next: typeof env) => {
-    setEnv(next);
-    setEnvironment(specUrl, next);
+  const updateEnv = (next: Partial<TestEnvironment> & { baseUrl?: string }) => {
+    setEnv(setEnvironment(specUrl, next));
   };
   const target = { method: row.method, path: row.path };
   const gateReason = row.pass ? null : row.reasons.length ? row.reasons.map((f) => `${f.ruleId}: ${f.message}`).join("; ") : `Spec quality score ${row.score} is below the pass mark`;
@@ -72,7 +75,17 @@ export function EndpointTests({
       {view === "setup" && <SetupForMe specUrl={specUrl} row={row} state={state} patch={patch} secured={detail?.secured ?? true} />}
       <section className={`${box} space-y-2.5 px-3 py-3`}>
         <div className={label}>Target environment</div>
-        <input className={`${input} ${mono}`} value={env.baseUrl} placeholder="https://staging.example.com/api" onChange={(e) => updateEnv({ ...env, baseUrl: e.target.value })} aria-label="Base URL for testing" />
+        <EnvProfileChips
+          env={env}
+          onSelect={(id) => setEnv(selectEnvProfile(specUrl, id))}
+        />
+        <input
+          className={`${input} ${mono}`}
+          value={env.baseUrl}
+          placeholder={`https://${env.active}.example.com/api`}
+          onChange={(e) => updateEnv({ baseUrl: e.target.value })}
+          aria-label={`${env.active} base URL for testing`}
+        />
         <div className="flex items-center gap-2">
           <TbLock size={14} className="shrink-0 text-[#7E7E7E]" />
           <input

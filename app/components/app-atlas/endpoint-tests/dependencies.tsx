@@ -84,21 +84,24 @@ export function DependencyOverview({ specUrl, targetKey, hasPrerequisites, onAdd
             )}
           </div>
           {!me.independent && !hasPrerequisites && me.dependsOn.length > 0 && (
-            <button
-              type="button"
-              className={`${outlineButton} !px-2.5 !py-1 !text-[11.5px]`}
-              disabled={adding}
-              onClick={async () => {
-                setAdding(true);
-                try {
-                  await onAddSuggested();
-                } finally {
-                  setAdding(false);
-                }
-              }}
-            >
-              {adding ? <TbLoader2 size={12} className="animate-spin" /> : null} Add prerequisites
-            </button>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                className={`${outlineButton} !px-2.5 !py-1 !text-[11.5px]`}
+                disabled={adding}
+                onClick={async () => {
+                  setAdding(true);
+                  try {
+                    await onAddSuggested();
+                  } finally {
+                    setAdding(false);
+                  }
+                }}
+              >
+                {adding ? <TbLoader2 size={12} className="animate-spin" /> : null} Suggest prerequisites
+              </button>
+              <span className="text-[11px] text-[#7E7E7E]">Adds the calls this endpoint likely needs first. If one fails later, tests are BLOCKED — not failed.</span>
+            </div>
           )}
         </div>
       )}
