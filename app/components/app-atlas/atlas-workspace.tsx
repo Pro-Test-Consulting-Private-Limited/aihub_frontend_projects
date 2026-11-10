@@ -39,6 +39,7 @@ import { ApiTestingView } from "./api-testing-view";
 import { CicdView } from "./cicd-view";
 import { SitTestingView } from "./sit-testing-view";
 import { CoverageOverview } from "./coverage-overview";
+import { SecurityOverview } from "./security-overview";
 import { useApiSpec, useApiSpecView } from "@/app/hooks/use-api-spec";
 import { clearCanvasSwagger, getCanvasSwagger, type CanvasSwagger } from "@/app/lib/canvas-swagger";
 import { isLocalAuthBypassEnabled } from "@/app/lib/auth-bypass";
@@ -611,6 +612,8 @@ export default function AtlasWorkspace() {
             <SitTestingView client={client} canvasId={canvas?.id ?? null} canvasName={canvas?.name} />
           ) : tab === "coverage" ? (
             <CoverageOverview client={client} canvasId={canvas?.id ?? null} />
+          ) : tab === "security" ? (
+            <SecurityOverview targetUrl={appUrl} projectName={project?.name} client={client} />
           ) : tab === "performance" ? (
             <PerformanceView canvas={canvas} />
           ) : tab !== "canvas" ? (
