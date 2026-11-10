@@ -359,6 +359,7 @@ export function SessionSetupModal({
   const [personaOpen, setPersonaOpen] = useState(false);
   const [savedLogins, setSavedLogins] = useState<Array<{ id: string; roleLabel: string; origin: string; expiresInLabel: string }>>([]);
   const [savedLoginId, setSavedLoginId] = useState("");
+  const [recordAsOpen, setRecordAsOpen] = useState(false);
   const [personaClock, setPersonaClock] = useState("");
   /** Compact density: smaller preview, tighter rows, persona groups on one row — auto under 900px viewport height. */
   const [compact, setCompact] = useState(false);
@@ -1487,6 +1488,107 @@ export function SessionSetupModal({
                         : `↓ ${formatRate(prefs.downloadKbps)} · ↑ ${formatRate(prefs.uploadKbps)} · ${prefs.latencyMs} ms`}
                   </p>
 
+                  <div className="relative mt-3" data-testid="record-as-picker">
+                    <div className="mb-1.5 text-[12px] font-medium text-[#5E6066] dark:text-[#9ca3af]">Record as</div>
+                    <button
+                      type="button"
+                      disabled={starting}
+                      aria-haspopup="listbox"
+                      aria-expanded={recordAsOpen}
+                      onClick={() => setRecordAsOpen((o) => !o)}
+                      className={`flex w-full items-center justify-between rounded-[8px] border px-3 py-2 text-left text-[12px] ${
+                        savedLoginId
+                          ? "border-[#8664F2] bg-[#F5F0FF] text-[#5B3FD1]"
+                          : "border-[#E5E7EB] bg-white text-[#5E6066] dark:border-[#2a2a2a] dark:bg-[#0a0a0a] dark:text-[#9ca3af]"
+                      }`}
+                    >
+                      <span className="min-w-0 truncate">
+                        {savedLoginId
+                          ? (() => {
+                              const l = savedLogins.find((x) => x.id === savedLoginId);
+                              return l
+                                ? `${l.roleLabel} · ${l.origin.replace(/^https?:\/\//, "")} · ${l.expiresInLabel}`
+                                : "Saved login";
+                            })()
+                          : "None"}
+                      </span>
+                      <span className="ml-2 shrink-0 text-[#9ca3af]">{recordAsOpen ? "▴" : "▾"}</span>
+                    </button>
+                    {recordAsOpen && (
+                      <>
+                        <button
+                          type="button"
+                          className="fixed inset-0 z-10 cursor-default"
+                          aria-label="Close Record as"
+                          onClick={() => setRecordAsOpen(false)}
+                        />
+                        <ul
+                          role="listbox"
+                          aria-label="Record as"
+                          className="absolute z-20 mt-1 max-h-[220px] w-full overflow-y-auto rounded-[8px] border border-[#E5E7EB] bg-white py-1 text-[12px] shadow-lg dark:border-[#2a2a2a] dark:bg-[#141414]"
+                        >
+                          <li>
+                            <button
+                              type="button"
+                              role="option"
+                              aria-selected={!savedLoginId}
+                              className="block w-full px-3 py-2 text-left hover:bg-[#F5F0FF] dark:hover:bg-[#1a1430]"
+                              onClick={() => {
+                                setSavedLoginId("");
+                                setRecordAsOpen(false);
+                              }}
+                            >
+                              None
+                            </button>
+                          </li>
+                          {savedLogins.map((l) => (
+                            <li key={l.id} className="group flex items-center gap-1 px-1">
+                              <button
+                                type="button"
+                                role="option"
+                                aria-selected={savedLoginId === l.id}
+                                className={`min-w-0 flex-1 truncate rounded-[6px] px-2 py-2 text-left hover:bg-[#F5F0FF] dark:hover:bg-[#1a1430] ${
+                                  savedLoginId === l.id ? "bg-[#F5F0FF] text-[#5B3FD1]" : ""
+                                }`}
+                                onClick={() => {
+                                  setSavedLoginId(l.id);
+                                  setRecordAsOpen(false);
+                                }}
+                              >
+                                <span className="font-medium">{l.roleLabel}</span>
+                                <span className="text-[#7E7E7E]">
+                                  {" "}
+                                  · {l.origin.replace(/^https?:\/\//, "")} · {l.expiresInLabel}
+                                </span>
+                              </button>
+                              <button
+                                type="button"
+                                title="Delete saved login"
+                                aria-label={`Delete ${l.roleLabel}`}
+                                className="mr-1 rounded p-1 text-[#9ca3af] opacity-0 hover:bg-[#FEF2F2] hover:text-[#B91C1C] group-hover:opacity-100"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void client
+                                    .deleteSavedLogin(l.id)
+                                    .then(() => {
+                                      setSavedLogins((prev) => prev.filter((x) => x.id !== l.id));
+                                      if (savedLoginId === l.id) setSavedLoginId("");
+                                    })
+                                    .catch(() => undefined);
+                                }}
+                              >
+                                ✕
+                              </button>
+                            </li>
+                          ))}
+                          {savedLogins.length === 0 && (
+                            <li className="px-3 py-2 text-[#9ca3af]">No saved logins yet — use Save this login while recording.</li>
+                          )}
+                        </ul>
+                      </>
+                    )}
+                  </div>
+
                   {(myNetworkPresets.length > 0 || mySetupPresets.length > 0) && (
                     <div className="mt-3">
                       <div className="mb-1.5 text-[12px] font-medium text-[#5E6066] dark:text-[#9ca3af]">
@@ -1744,22 +1846,6 @@ export function SessionSetupModal({
               )}
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <label className="flex items-center gap-2 text-[12px] text-[#5E6066] dark:text-[#9ca3af]">
-                <span className="font-medium">Record as</span>
-                <select
-                  className="rounded-[6px] border border-[#E5E7EB] bg-white px-2 py-1 text-[12px] dark:border-[#333] dark:bg-[#0a0a0a]"
-                  value={savedLoginId}
-                  onChange={(e) => setSavedLoginId(e.target.value)}
-                  disabled={starting}
-                >
-                  <option value="">None</option>
-                  {savedLogins.map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.roleLabel} · {l.origin.replace(/^https?:\/\//, "")} · {l.expiresInLabel}
-                    </option>
-                  ))}
-                </select>
-              </label>
               <button type="button" className={outlineButton} onClick={onClose} disabled={starting}>
                 Cancel
               </button>

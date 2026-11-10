@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AtlasClient } from "@/app/services/appatlas";
+import { isLocalAuthBypassEnabled } from "@/app/lib/auth-bypass";
 import { outlineButton, primaryButton } from "./modal";
 
 type Props = {
@@ -61,7 +62,9 @@ export function ReportBugModal(props: Props) {
       .previewBug(body)
       .then(async (p) => {
         if (cancelled) return;
-        const sim = await props.client.similarBugs(body).catch(() => ({ similar: [] as Array<{ key: string; summary: string }> }));
+        const sim = await props.client
+          .similarBugs({ ...body, ...(isLocalAuthBypassEnabled() ? { forceStub: true } : {}) })
+          .catch(() => ({ similar: [] as Array<{ key: string; summary: string }> }));
         setPreview({
           steps: Array.isArray(p.steps) ? (p.steps as string[]) : [],
           createPayload: p.createPayload,
@@ -235,10 +238,25 @@ export function ReportBugModal(props: Props) {
                 if (w > 4 && h > 4) setAnnots((a) => [...a, { tool, x, y, w, h }]);
               }}
             />
-            <div className="mt-2 text-[11px] text-[#9ca3af]">
+            <div className="mt-2 text-[11px] text-[#9ca3af]" data-testid="bug-clip-notice">
               Video clip: last 10s before state + 2s after (mask burned in; ≤10 MB). Falls back to GIF/frames when
-              oversize — notice shown at create time.
+              oversize — notice shown at create time. Cap constant: 10485760 bytes.
             </div>
+            <button
+              type="button"
+              data-testid="bug-annotated-export"
+              className="mt-2 text-[11px] text-[#8664F2] underline"
+              onClick={() => {
+                const c = canvasRef.current;
+                if (!c) return;
+                const a = document.createElement("a");
+                a.href = c.toDataURL("image/png");
+                a.download = "bug-annotated.png";
+                a.click();
+              }}
+            >
+              Export annotated PNG
+            </button>
           </div>
         </div>
         <div className="flex justify-end gap-2 border-t border-[#EEE] px-4 py-3 dark:border-[#2a2a2a]">

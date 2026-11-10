@@ -215,6 +215,18 @@ export function RecordingView({
                 danger
               />
             )}
+            {(snap.simulate?.lastFired ||
+              snap.nodes.some((n) => n.states.some((st) => st.simulated))) && (
+              <ConfigChip
+                label="Simulated"
+                title={
+                  snap.simulate?.lastFired
+                    ? `${snap.simulate.lastFired.autoLabel} · ${snap.simulate.lastFired.meta.endpoint}`
+                    : "Simulated failure state"
+                }
+                danger
+              />
+            )}
             {snap.recordedAs && <ConfigChip label={`Recorded as: ${snap.recordedAs}`} title="Saved login role" />}
             <span className="truncate font-mono text-[11px] text-[#7E7E7E]" title={snap.currentUrl || snap.startUrl}>
               {snap.currentUrl || snap.startUrl}

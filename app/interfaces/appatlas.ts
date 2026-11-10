@@ -176,6 +176,11 @@ export type SessionSnapshot = {
       emptyDisabledReason?: string;
     }>;
     armed: { id: string; method: string; path: string; mode: string; armedAt: number } | null;
+    lastFired?: {
+      at: number;
+      autoLabel: string;
+      meta: SimulatedStateMeta;
+    } | null;
   };
 };
 

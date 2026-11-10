@@ -13,16 +13,81 @@ type Flags = {
   savedLogins: boolean;
 };
 
-const LABELS: { key: keyof Flags; title: string; body: string }[] = [
+const PHASE_A: { key: keyof Flags; title: string; body: string }[] = [
   { key: "persona", title: "Persona", body: "Locale, timezone, colour scheme and geo in Start recording." },
   { key: "replay", title: "Replay video", body: "CDP screencast → MP4/GIF with overlay exports." },
   { key: "health", title: "Health", body: "Console / network / Web Vitals / axe badges and Health tab." },
+];
+
+const PHASE_B: { key: keyof Flags; title: string; body: string }[] = [
   { key: "simulate", title: "What if? simulation", body: "Arm one-shot API failures while recording (dev/test/staging only)." },
   { key: "jiraBug", title: "Jira bug report", body: "One-click Bug with evidence from an AC or state." },
   { key: "savedLogins", title: "Saved logins", body: "Record as a saved role; cookies encrypted at rest, never shared." },
 ];
 
 const ENVS = ["dev", "test", "staging", "production", "unknown"] as const;
+
+function ToggleRow({
+  title,
+  body,
+  on,
+  disabled,
+  onToggle,
+}: {
+  title: string;
+  body: string;
+  on: boolean;
+  disabled?: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        border: "1px solid var(--line)",
+        borderRadius: 8,
+        padding: "12px 14px",
+        marginBottom: 8,
+      }}
+    >
+      <div>
+        <div style={{ fontWeight: 600, fontSize: 13 }}>{title}</div>
+        <div style={{ fontSize: 12, color: "#6B7280" }}>{body}</div>
+      </div>
+      <button
+        type="button"
+        aria-pressed={on}
+        onClick={onToggle}
+        disabled={disabled}
+        style={{
+          width: 38,
+          height: 20,
+          background: on ? "var(--purple)" : "#D6D6D6",
+          borderRadius: 20,
+          position: "relative",
+          cursor: "pointer",
+          border: "none",
+        }}
+      >
+        <span
+          style={{
+            width: 16,
+            height: 16,
+            background: "#fff",
+            borderRadius: "50%",
+            position: "absolute",
+            right: on ? 2 : 20,
+            top: 2,
+            transition: "right 0.15s",
+            display: "block",
+          }}
+        />
+      </button>
+    </div>
+  );
+}
 
 /** Per-project AppAtlas feature toggles (env defaults when unset). */
 export function ProjectFeatureFlags({ projectId }: { projectId: string }) {
@@ -95,87 +160,76 @@ export function ProjectFeatureFlags({ projectId }: { projectId: string }) {
   };
 
   return (
-    <div className="aihub-card" style={{ marginTop: 16 }}>
+    <div className="aihub-card" style={{ marginTop: 16 }} data-testid="appatlas-feature-flags">
       <div className="aihub-view-card-head">
         <h3>AppAtlas features</h3>
       </div>
       <p style={{ fontSize: 13, color: "#6B7280", marginBottom: 12 }}>
         Per-project toggles. Phase B flags default OFF. Defaults follow the environment ({defaults ? "loaded" : "…"}).
       </p>
-      <label style={{ display: "block", fontSize: 13, marginBottom: 12 }}>
-        <span style={{ fontWeight: 600 }}>Environment</span>
-        <select
-          value={environment}
-          disabled={saving || !flags}
-          onChange={(e) => {
-            const next = e.target.value;
-            setEnvironment(next);
-            if (flags) void persist(flags, next);
-          }}
-          style={{ display: "block", marginTop: 6, width: "100%", padding: "8px 10px", borderRadius: 8 }}
-        >
-          {ENVS.map((e) => (
-            <option key={e} value={e}>
-              {e}
-            </option>
-          ))}
-        </select>
-        <span style={{ fontSize: 12, color: "#6B7280" }}>
-          What-if simulation is locked for production and unknown (enforced in API + UI).
-        </span>
-      </label>
       {error && <div style={{ color: "#B45309", fontSize: 12, marginBottom: 8 }}>{error}</div>}
       {!flags ? (
         <div style={{ fontSize: 13, color: "#9CA3AF" }}>Loading…</div>
       ) : (
-        LABELS.map((row) => (
+        <>
+          <div style={{ fontWeight: 700, fontSize: 13, margin: "4px 0 10px" }}>Phase A features</div>
+          {PHASE_A.map((row) => (
+            <ToggleRow
+              key={row.key}
+              title={row.title}
+              body={row.body}
+              on={flags[row.key]}
+              disabled={saving}
+              onToggle={() => void toggle(row.key)}
+            />
+          ))}
+
           <div
-            key={row.key}
+            data-testid="phase-b-features"
             style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              border: "1px solid var(--line)",
-              borderRadius: 8,
-              padding: "12px 14px",
-              marginBottom: 8,
+              marginTop: 18,
+              paddingTop: 14,
+              borderTop: "1px solid var(--line)",
             }}
           >
-            <div>
-              <div style={{ fontWeight: 600, fontSize: 13 }}>{row.title}</div>
-              <div style={{ fontSize: 12, color: "#6B7280" }}>{row.body}</div>
-            </div>
-            <button
-              type="button"
-              aria-pressed={flags[row.key]}
-              onClick={() => void toggle(row.key)}
-              disabled={saving}
-              style={{
-                width: 38,
-                height: 20,
-                background: flags[row.key] ? "var(--purple)" : "#D6D6D6",
-                borderRadius: 20,
-                position: "relative",
-                cursor: "pointer",
-                border: "none",
-              }}
-            >
-              <span
-                style={{
-                  width: 16,
-                  height: 16,
-                  background: "#fff",
-                  borderRadius: "50%",
-                  position: "absolute",
-                  right: flags[row.key] ? 2 : 20,
-                  top: 2,
-                  transition: "right 0.15s",
-                  display: "block",
+            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>Phase B features</div>
+            <p style={{ fontSize: 12, color: "#6B7280", marginBottom: 12 }}>
+              What-if simulation, one-click Jira bugs, and saved logins. Environment lock applies to simulation.
+            </p>
+            <label style={{ display: "block", fontSize: 13, marginBottom: 12 }}>
+              <span style={{ fontWeight: 600 }}>Environment</span>
+              <select
+                value={environment}
+                disabled={saving}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setEnvironment(next);
+                  void persist(flags, next);
                 }}
+                style={{ display: "block", marginTop: 6, width: "100%", padding: "8px 10px", borderRadius: 8 }}
+              >
+                {ENVS.map((e) => (
+                  <option key={e} value={e}>
+                    {e}
+                  </option>
+                ))}
+              </select>
+              <span style={{ fontSize: 12, color: "#6B7280" }}>
+                What-if simulation is locked for production and unknown (enforced in API + UI).
+              </span>
+            </label>
+            {PHASE_B.map((row) => (
+              <ToggleRow
+                key={row.key}
+                title={row.title}
+                body={row.body}
+                on={flags[row.key]}
+                disabled={saving}
+                onToggle={() => void toggle(row.key)}
               />
-            </button>
+            ))}
           </div>
-        ))
+        </>
       )}
     </div>
   );

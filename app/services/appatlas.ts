@@ -148,6 +148,8 @@ export function atlasClient({ instance, accounts }: Msal) {
       request<{ items: Array<{ id: string; roleLabel: string; origin: string; expiresInLabel: string }> }>(
         "/saved-logins",
       ).then((r) => r.items),
+    getSavedLogin: (id: string) =>
+      request<{ id: string; roleLabel: string; origin: string; expiresInLabel: string }>(`/saved-logins/${id}`),
     deleteSavedLogin: (id: string) => request<void>(`/saved-logins/${id}`, json("DELETE")),
     saveSessionLogin: (sessionId: string, body: { roleLabel?: string } = {}) =>
       request<{ id: string; roleLabel: string; origin: string; expiresInLabel: string }>(
