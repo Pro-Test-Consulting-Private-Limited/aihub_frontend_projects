@@ -72,6 +72,10 @@ const nextConfig = {
         source: "/updates",
         destination: "/pages/updates",
       },
+      {
+        source: "/share/:token",
+        destination: "/pages/share/:token",
+      },
     ];
   },
 };

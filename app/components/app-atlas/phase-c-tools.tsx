@@ -49,6 +49,8 @@ export function PhaseCToolsModal({
   const [sheet, setSheet] = useState<Awaited<ReturnType<AtlasClient["responsiveSheet"]>> | null>(null);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [ignoreRegions, setIgnoreRegions] = useState<Array<{ x: number; y: number; width: number; height: number }>>([]);
+  const [ignoreDraft, setIgnoreDraft] = useState({ x: "0", y: "0", width: "40", height: "24" });
 
   useEffect(() => {
     if (!flags.responsiveSheet) return;
@@ -66,6 +68,7 @@ export function PhaseCToolsModal({
       const res = await client.visualDiff(canvasId, {
         rightCanvasId: baselineId,
         releaseLabel: releaseLabel.trim() || undefined,
+        ignoreRegions: ignoreRegions.length ? ignoreRegions : undefined,
       });
       setPairs(res.pairs);
       setActive(0);
@@ -96,7 +99,7 @@ export function PhaseCToolsModal({
     setError(null);
     try {
       const link = await client.createShareLink(canvasId, { expiresInHours: 72 });
-      setShareUrl(`${window.location.origin}/atlas-api${link.urlPath}`);
+      setShareUrl(`${window.location.origin}/share/${link.token}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create share link");
     } finally {
@@ -160,6 +163,50 @@ export function PhaseCToolsModal({
             placeholder="e.g. Release 1.4"
             disabled={!!busy}
           />
+          <label className={fieldLabel}>Ignore regions (pixels on compared size)</label>
+          <div className="flex flex-wrap items-end gap-2">
+            {(["x", "y", "width", "height"] as const).map((k) => (
+              <label key={k} className="text-[11px] text-[#6B7280]">
+                {k}
+                <input
+                  className={fieldInput}
+                  value={ignoreDraft[k]}
+                  onChange={(e) => setIgnoreDraft((d) => ({ ...d, [k]: e.target.value }))}
+                  disabled={!!busy}
+                />
+              </label>
+            ))}
+            <button
+              type="button"
+              className={outlineButton}
+              disabled={!!busy}
+              onClick={() => {
+                const region = {
+                  x: Number(ignoreDraft.x) || 0,
+                  y: Number(ignoreDraft.y) || 0,
+                  width: Number(ignoreDraft.width) || 1,
+                  height: Number(ignoreDraft.height) || 1,
+                };
+                setIgnoreRegions((r) => [...r, region]);
+              }}
+            >
+              Add region
+            </button>
+          </div>
+          {ignoreRegions.length > 0 && (
+            <ul className="text-[11px] text-[#5E6066]">
+              {ignoreRegions.map((r, i) => (
+                <li key={i} className="flex items-center justify-between gap-2">
+                  <span>
+                    #{i + 1}: {r.x},{r.y} {r.width}×{r.height}
+                  </span>
+                  <button type="button" className="text-[#991B1B]" onClick={() => setIgnoreRegions((list) => list.filter((_, j) => j !== i))}>
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
           <div className="flex justify-end">
             <button type="button" className={primaryButton} disabled={!!busy || !baselineId} onClick={() => void runDiff()}>
               {busy === "diff" ? "Comparing…" : "Compare"}
@@ -229,8 +276,8 @@ export function PhaseCToolsModal({
                 </div>
               )}
               <p className="text-[11px] text-[#6B7280]">
-                {pairs.filter((p) => p.changed).length} changed · {pairs.length} compared. Ignore regions can be sent via API
-                (`ignoreRegions`).
+                {pairs.filter((p) => p.changed).length} changed · {pairs.length} compared
+                {ignoreRegions.length ? ` · ${ignoreRegions.length} ignore region(s)` : ""}.
               </p>
             </>
           )}
@@ -258,8 +305,22 @@ export function PhaseCToolsModal({
                         <div className="mb-1 text-[10px] text-[#6B7280]">
                           {f.label} · {f.width}×{f.height}
                         </div>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={atlasUrl(f.screenshotUrl)} alt={f.label} className="h-[140px] w-full rounded object-cover object-top" />
+                        <div
+                          className={`overflow-hidden bg-black ${
+                            f.category === "phone"
+                              ? "rounded-[18px] border-[6px] border-[#111]"
+                              : f.category === "tablet"
+                                ? "rounded-[14px] border-[6px] border-[#111]"
+                                : "rounded-[8px] border-[5px] border-[#222]"
+                          }`}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={atlasUrl(f.screenshotUrl)}
+                            alt={f.label}
+                            className={`w-full object-cover object-top ${f.category === "laptop" ? "h-[110px]" : "h-[150px]"}`}
+                          />
+                        </div>
                         {f.warnings.length > 0 && (
                           <ul className="mt-1 space-y-0.5 text-[10px] text-[#92400E]">
                             {f.warnings.map((w, i) => (
@@ -275,11 +336,18 @@ export function PhaseCToolsModal({
                   </div>
                 </div>
               ))}
-              {sheet.posterPngUrl && (
-                <a className="text-[12px] text-[#8664F2] underline" href={atlasUrl(sheet.posterPngUrl)} target="_blank" rel="noreferrer">
-                  Download PNG poster
-                </a>
-              )}
+              <div className="flex flex-wrap gap-3">
+                {sheet.posterPngUrl && (
+                  <a className="text-[12px] text-[#8664F2] underline" href={atlasUrl(sheet.posterPngUrl)} target="_blank" rel="noreferrer">
+                    Download PNG poster
+                  </a>
+                )}
+                {sheet.posterPdfUrl && (
+                  <a className="text-[12px] text-[#8664F2] underline" href={atlasUrl(sheet.posterPdfUrl)} target="_blank" rel="noreferrer">
+                    Download PDF poster
+                  </a>
+                )}
+              </div>
             </div>
           )}
         </div>

@@ -336,6 +336,7 @@ export function atlasClient({ instance, accounts }: Msal) {
           }>;
         }>;
         posterPngUrl: string | null;
+        posterPdfUrl?: string | null;
         createdAt: number;
       }>(`/canvases/${canvasId}/responsive-sheet`, json("POST", body)),
     /** Phase C3: read-only share link + PDF poster. */
