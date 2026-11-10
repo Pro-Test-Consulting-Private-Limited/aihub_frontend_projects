@@ -81,7 +81,7 @@ export function HealthPanel({ node }: { node: CanvasNode }) {
             <div className="text-[11px] font-semibold uppercase tracking-wide text-[#9ca3af]">Accessibility</div>
             <p className="text-[12px] text-[#6B7280]">
               {h.a11yViolations} failing node{h.a11yViolations === 1 ? "" : "s"} across {a11yIssues.length} rule
-              {a11yIssues.length === 1 ? "" : "s"}. Click a card for details and full-size crop.
+              {a11yIssues.length === 1 ? "" : "s"}. Click a card for details and the highlighted screen.
             </p>
           </div>
           <div className="space-y-2">
@@ -382,22 +382,13 @@ function A11yIssueOverlay({
             return (
               <div key={`${node.target}-${i}`} className="rounded-lg border border-[#E5E7EB] p-2.5 dark:border-[#2a2a2a]">
                 <div className="mb-1 text-[11px] font-semibold text-[#6366F1]">Node {i + 1}</div>
-                {src ? (
-                  <button
-                    type="button"
-                    className="group relative mb-2 block w-full overflow-hidden rounded-md border border-[#E5E7EB] dark:border-[#333]"
-                    onClick={() => onFullscreen(atlasUrl(src))}
-                    title="View full screen"
-                  >
-                    <img
-                      src={atlasUrl(src)}
-                      alt={`${issue.id} node ${i + 1}`}
-                      className="max-h-48 w-full object-contain bg-[#F8FAFC]"
-                    />
-                    <span className="absolute right-2 bottom-2 rounded bg-black/65 px-2 py-1 text-[10px] text-white opacity-90 group-hover:opacity-100">
-                      Full screen
-                    </span>
-                  </button>
+                {src || screenShot ? (
+                  <A11yNodeShot
+                    preferredSrc={src}
+                    fallbackSrc={screenShot}
+                    alt={`${issue.id} node ${i + 1}`}
+                    onFullscreen={onFullscreen}
+                  />
                 ) : null}
                 {node.failureSummary && (
                   <p className="text-[12px] leading-relaxed text-[#4B5563] dark:text-[#d1d5db]">
@@ -414,7 +405,7 @@ function A11yIssueOverlay({
             );
           })}
           {details.length === 0 && (
-            <p className="text-[12px] text-[#6B7280]">No per-node crops were captured for this rule. Re-record to collect them.</p>
+            <p className="text-[12px] text-[#6B7280]">No per-node highlights were captured for this rule. Re-record to collect them.</p>
           )}
           {hidden > 0 && (
             <p className="text-[11px] text-[#6B7280]">
@@ -442,7 +433,7 @@ function FullscreenImage({ src, onClose }: { src: string; onClose: () => void })
       </button>
       <img
         src={src}
-        alt="Accessibility crop full screen"
+        alt="Accessibility issue full screen"
         className="max-h-full max-w-full object-contain"
         onClick={(e) => e.stopPropagation()}
       />
@@ -535,6 +526,49 @@ function MetricCard({ metric }: { metric: BuiltMetric }) {
         <p className="mt-1 text-[11px] leading-snug text-[#4B5563] dark:text-[#d1d5db]">{metric.body}</p>
       ) : null}
     </div>
+  );
+}
+
+/** Prefer the per-node highlight shot; fall back to the full screen if the crop is tiny/empty. */
+function A11yNodeShot({
+  preferredSrc,
+  fallbackSrc,
+  alt,
+  onFullscreen,
+}: {
+  preferredSrc?: string;
+  fallbackSrc?: string;
+  alt: string;
+  onFullscreen: (src: string) => void;
+}) {
+  const [src, setSrc] = useState(() => preferredSrc || fallbackSrc || "");
+  if (!src) return null;
+  return (
+    <button
+      type="button"
+      className="group relative mb-2 block w-full overflow-hidden rounded-md border border-[#E5E7EB] dark:border-[#333]"
+      onClick={() => onFullscreen(atlasUrl(src))}
+      title="View full screen"
+    >
+      <img
+        src={atlasUrl(src)}
+        alt={alt}
+        className="max-h-56 w-full object-contain bg-[#F8FAFC]"
+        onLoad={(e) => {
+          const img = e.currentTarget;
+          // Old near-empty element crops decode to tiny bitmaps — swap in the full screen shot.
+          if ((img.naturalWidth < 48 || img.naturalHeight < 48) && fallbackSrc && src !== fallbackSrc) {
+            setSrc(fallbackSrc);
+          }
+        }}
+        onError={() => {
+          if (fallbackSrc && src !== fallbackSrc) setSrc(fallbackSrc);
+        }}
+      />
+      <span className="absolute right-2 bottom-2 rounded bg-black/65 px-2 py-1 text-[10px] text-white opacity-90 group-hover:opacity-100">
+        Full screen
+      </span>
+    </button>
   );
 }
 
