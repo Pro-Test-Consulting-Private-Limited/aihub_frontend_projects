@@ -13,6 +13,12 @@ import {
   TbX,
 } from "react-icons/tb";
 import type { SitEpic, SitJob, SitWorkbook } from "@/app/interfaces/appatlas";
+import {
+  dominantQuadrant,
+  EISENHOWER_CHIP,
+  EISENHOWER_LABEL,
+  type EisenhowerQ,
+} from "@/app/lib/sit-eisenhower";
 import type { AtlasClient } from "@/app/services/appatlas";
 import { SitCaseDrawer } from "./sit-case-drawer";
 import { SitJobsChip } from "./sit-jobs-chip";
@@ -366,6 +372,57 @@ function SegmentBar({
   );
 }
 
+function EisenhowerCell({ byQuadrant }: { byQuadrant: Record<string, number> }) {
+  const q = dominantQuadrant(byQuadrant);
+  const total = Object.values(byQuadrant).reduce((n, v) => n + v, 0);
+  if (!total) return <span className="text-[#9ca3af]">-</span>;
+  const tip = (["Q1", "Q2", "Q3", "Q4", "Untriaged"] as EisenhowerQ[])
+    .map((k) => `${k}${k !== "Untriaged" ? ` ${EISENHOWER_LABEL[k]}` : ""}: ${byQuadrant[k] || 0}`)
+    .join(" · ");
+  return (
+    <div className="flex flex-col gap-1" title={tip}>
+      <span className={`inline-flex w-fit rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${EISENHOWER_CHIP[q]}`}>
+        {q}
+        {q !== "Untriaged" ? ` · ${EISENHOWER_LABEL[q]}` : ""}
+      </span>
+      <span className="text-[10px] tabular-nums text-[#8a93a8]">
+        Q1 {byQuadrant.Q1 || 0} · Q2 {byQuadrant.Q2 || 0} · Q3 {byQuadrant.Q3 || 0} · Q4 {byQuadrant.Q4 || 0}
+      </span>
+    </div>
+  );
+}
+
+function EisenhowerBoard({ byQuadrant }: { byQuadrant: Record<string, number> }) {
+  const cell = (q: Exclude<EisenhowerQ, "Untriaged">, extra: string) => (
+    <div className={`rounded-[10px] border p-3 ${EISENHOWER_CHIP[q]} ${extra}`}>
+      <div className="text-[11px] font-semibold uppercase tracking-wide">{q}</div>
+      <div className="mt-0.5 text-[12px] font-medium">{EISENHOWER_LABEL[q]}</div>
+      <div className="mt-2 text-[22px] font-semibold tabular-nums">{byQuadrant[q] || 0}</div>
+    </div>
+  );
+  return (
+    <div className="mb-4 rounded-[12px] border border-[#E6E1F5] bg-white p-3 dark:border-[#2a2a2a] dark:bg-[#0f0f0f]">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div>
+          <div className="text-[13px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">Eisenhower triage</div>
+          <p className="text-[11.5px] text-[#6b7280]">Urgent × Important from Priority × Severity. Does not replace Prio/Sev.</p>
+        </div>
+        {(byQuadrant.Untriaged || 0) > 0 ? (
+          <span className="rounded-full border border-[#E5E7EB] px-2 py-0.5 text-[11px] text-[#6B7280]">
+            Untriaged {byQuadrant.Untriaged}
+          </span>
+        ) : null}
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        {cell("Q1", "")}
+        {cell("Q3", "")}
+        {cell("Q2", "")}
+        {cell("Q4", "")}
+      </div>
+    </div>
+  );
+}
+
 function matrixShade(count: number, max: number) {
   if (count <= 0 || max <= 0) return "bg-transparent";
   const t = Math.min(1, count / max);
@@ -396,6 +453,8 @@ type SitCov = {
   byType: Record<string, number>;
   byPriority?: Record<string, number>;
   bySeverity?: Record<string, number>;
+  byQuadrant?: Record<string, number>;
+  byExecutionStatus?: Record<string, number>;
   notAssessed?: number;
   templateCases?: number;
   automationYes?: number;
@@ -414,6 +473,8 @@ type Row = {
   byType: Record<string, number>;
   byPriority: Record<string, number>;
   bySeverity: Record<string, number>;
+  byQuadrant: Record<string, number>;
+  byExecutionStatus: Record<string, number>;
   notAssessed: number;
   templateCases: number;
   automationYes: number;
@@ -427,7 +488,7 @@ type Row = {
 };
 
 type FreshPreset = "all" | "fresh" | "aging" | "stale" | "never" | "custom";
-type PrioSevView = "bars" | "numbers";
+type PrioSevView = "bars" | "numbers" | "matrix";
 
 type DrawerTarget = {
   workbookId: string;
@@ -483,7 +544,7 @@ export function CoverageOverview({
     try {
       setMatrixCollapsed(localStorage.getItem(MATRIX_COLLAPSE_KEY) === "1");
       const v = localStorage.getItem(PRIOSEV_VIEW_KEY);
-      if (v === "bars" || v === "numbers") setPrioSevView(v);
+      if (v === "bars" || v === "numbers" || v === "matrix") setPrioSevView(v);
     } catch {
       /* ignore */
     }
@@ -612,6 +673,8 @@ export function CoverageOverview({
         byType,
         byPriority: s?.byPriority || {},
         bySeverity: s?.bySeverity || {},
+        byQuadrant: s?.byQuadrant || {},
+        byExecutionStatus: s?.byExecutionStatus || {},
         notAssessed: s?.notAssessed || 0,
         templateCases: s?.templateCases || 0,
         automationYes: s?.automationYes || 0,
@@ -840,6 +903,16 @@ export function CoverageOverview({
       }
     }
     return gaps;
+  }, [flat]);
+
+  const eisenhowerTotals = useMemo(() => {
+    const totals: Record<string, number> = { Q1: 0, Q2: 0, Q3: 0, Q4: 0, Untriaged: 0 };
+    for (const t of flat) {
+      for (const [q, n] of Object.entries(t.byQuadrant || {})) {
+        totals[q] = (totals[q] || 0) + n;
+      }
+    }
+    return totals;
   }, [flat]);
 
   const ticketCountWithType = (ty: string) => allFlat.filter((t) => (t.byType[ty] || 0) > 0).length;
@@ -1340,6 +1413,8 @@ export function CoverageOverview({
               </div>
             </div>
 
+            {prioSevView === "matrix" ? <EisenhowerBoard byQuadrant={eisenhowerTotals} /> : null}
+
             <table className="w-full min-w-[1100px] border-collapse text-[13px]">
               <thead>
                 <tr className="border-b border-[#E5E7EB] dark:border-[#2a2a2a]">
@@ -1453,6 +1528,16 @@ export function CoverageOverview({
                         >
                           Numbers
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => persistPrioSevView("matrix")}
+                          className={`px-2 py-0.5 text-[10px] font-semibold ${
+                            prioSevView === "matrix" ? "bg-[#F4EFFE] text-[#5B3FD1]" : "bg-white text-[#6b7280]"
+                          }`}
+                          title="Eisenhower triage (Urgent × Important)"
+                        >
+                          Matrix
+                        </button>
                       </span>
                     </span>
                     <AnchoredPopover open={prioInfoOpen} anchorRef={prioInfoRef} onClose={closePrioInfo} width={360}>
@@ -1463,6 +1548,10 @@ export function CoverageOverview({
                         <b>Severity.</b> {severityDef}
                       </p>
                       <p className="mt-1">{priorityFloor}</p>
+                      <p className="mt-2">
+                        <b>Matrix</b> is Eisenhower triage: Q1 Do first · Q2 Schedule · Q3 Delegate · Q4 Later —
+                        derived from Priority × Severity (does not replace Prio/Sev).
+                      </p>
                       <p className="mt-2">
                         Assigned by {assignedBy} using the rubric, then checked against rule signals.
                       </p>
@@ -1659,7 +1748,9 @@ export function CoverageOverview({
                                     onClick={() => openDrawer(t)}
                                     className="text-left disabled:cursor-default"
                                   >
-                                    {prioSevView === "numbers" ? (
+                                    {prioSevView === "matrix" ? (
+                                      <EisenhowerCell byQuadrant={t.byQuadrant} />
+                                    ) : prioSevView === "numbers" ? (
                                       <span className="block max-w-[260px] text-[11px] leading-snug tabular-nums text-[#5b647a]">
                                         {prioSevNumbersLines(t).map((line) => (
                                           <span key={line} className="block">

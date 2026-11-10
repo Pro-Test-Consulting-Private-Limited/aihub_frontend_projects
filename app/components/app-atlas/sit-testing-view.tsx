@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { TbLoader2, TbBolt, TbBookmarkFilled, TbClipboardList, TbGitMerge } from "react-icons/tb";
 import type { SitEpic, SitModelStatus, SitSheet, SitSheetRow, SitWorkbook } from "@/app/interfaces/appatlas";
+import { EXECUTION_STATUSES, type SitExecutionStatus } from "@/app/lib/sit-eisenhower";
 import type { AtlasClient } from "@/app/services/appatlas";
 import { SitCaseDrawer } from "./sit-case-drawer";
 
@@ -264,6 +265,17 @@ export function SitTestingView({
       else next.add(key);
       return next;
     });
+  };
+
+  const patchExecutionStatus = async (rowId: string, executionStatus: SitExecutionStatus) => {
+    if (!workbook) return;
+    try {
+      const next = await client.patchSitCase(workbook.id, rowId, { executionStatus });
+      setWorkbook(next);
+      setHistory((prev) => prev.map((h) => (h.id === next.id ? next : h)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update status");
+    }
   };
 
   const selectAll = () => setSelected(new Set(allTicketKeys));
@@ -645,7 +657,20 @@ export function SitTestingView({
                           key={col.id}
                           className="max-w-[320px] border-b border-[#f3f4f6] px-3 py-2 align-top whitespace-pre-wrap text-[#1F1F1F] dark:border-[#1a1a1a] dark:text-[#ededed]"
                         >
-                          {col.id === "testType" || col.id === "coverage" ? (
+                          {col.id === "executionStatus" ? (
+                            <select
+                              className="rounded-[6px] border border-[#e2e6ef] bg-white px-1.5 py-1 text-[11.5px] text-[#1F1F1F] dark:border-[#2a2a2a] dark:bg-[#141414] dark:text-[#ededed]"
+                              value={(row.cells.executionStatus as SitExecutionStatus) || "Draft"}
+                              onChange={(e) => void patchExecutionStatus(row.id, e.target.value as SitExecutionStatus)}
+                              title="Manual execution status"
+                            >
+                              {EXECUTION_STATUSES.map((s) => (
+                                <option key={s} value={s}>
+                                  {s}
+                                </option>
+                              ))}
+                            </select>
+                          ) : col.id === "testType" || col.id === "coverage" ? (
                             <TypePill value={row.cells[col.id] || ""} />
                           ) : col.id === "priority" || col.id === "severity" ? (
                             <button

@@ -320,7 +320,13 @@ export function atlasClient({ instance, accounts }: Msal) {
     patchSitCase: (
       workbookId: string,
       rowId: string,
-      body: { priority?: string; severity?: string; note?: string },
+      body: {
+        priority?: string;
+        severity?: string;
+        note?: string;
+        executionStatus?: string;
+        eisenhower?: string;
+      },
     ) => request<SitWorkbook>(`/sit/workbooks/${workbookId}/cases/${rowId}`, json("PATCH", body)),
     getSitRiskRubric: () => request<Record<string, unknown>>("/sit/risk-rubric"),
     getSitRiskEval: (workbookId: string) =>
@@ -335,6 +341,8 @@ export function atlasClient({ instance, accounts }: Msal) {
             byType: Record<string, number>;
             byPriority?: Record<string, number>;
             bySeverity?: Record<string, number>;
+            byQuadrant?: Record<string, number>;
+            byExecutionStatus?: Record<string, number>;
             notAssessed?: number;
             automationYes?: number;
             workbookId: string;

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { TbLoader2, TbX } from "react-icons/tb";
 import type { SitJob, SitWorkbook } from "@/app/interfaces/appatlas";
+import { deriveEisenhower, EISENHOWER_CHIP, EISENHOWER_LABEL } from "@/app/lib/sit-eisenhower";
 import type { AtlasClient } from "@/app/services/appatlas";
 
 const BANDS = ["High", "Medium", "Low"] as const;
@@ -26,6 +27,8 @@ type CaseRow = {
   originalPriority: string;
   originalSeverity: string;
   model: string;
+  eisenhower: string;
+  eisenhowerLabel: string;
 };
 
 function rowsFromWorkbook(wb: SitWorkbook, ticketKey: string): CaseRow[] {
@@ -54,6 +57,13 @@ function rowsFromWorkbook(wb: SitWorkbook, ticketKey: string): CaseRow[] {
       originalPriority: r.cells.originalPriority || "",
       originalSeverity: r.cells.originalSeverity || "",
       model: r.cells.assessmentModel || "",
+      ...(() => {
+        const e = deriveEisenhower(r.cells);
+        return {
+          eisenhower: e.q,
+          eisenhowerLabel: e.q === "Untriaged" ? "Untriaged" : EISENHOWER_LABEL[e.q],
+        };
+      })(),
     }));
 }
 
@@ -319,6 +329,12 @@ export function SitCaseDrawer({
                     ) : (
                       <span className="text-[#9ca3af]">P -</span>
                     )}
+                    <span
+                      className={`rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${EISENHOWER_CHIP[c.eisenhower as keyof typeof EISENHOWER_CHIP] || ""}`}
+                      title={`Eisenhower ${c.eisenhowerLabel}`}
+                    >
+                      {c.eisenhower}
+                    </span>
                     {c.severity ? (
                       <span className={`rounded-full border px-1.5 py-0.5 text-[10px] ${CHIP[c.severity] || ""}`} title={c.originalSeverity ? `Original ${c.originalSeverity}` : undefined}>
                         S {c.severity}
