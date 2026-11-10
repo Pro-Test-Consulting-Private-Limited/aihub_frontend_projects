@@ -20,14 +20,17 @@ API (App Atlas backend): `GET /sit/tickets`, `POST /sit/generate`, workbooks. St
 | Placement | Behaviour |
 | --- | --- |
 | Connect apps modal | **Microsoft Teams** enabled (same Entra sign-in). **Link channel** stores `teamId` / `channelId` on the canvas |
-| Jira ticket panel | **Post to Teams** on ready clarification questions |
+| Jira ticket panel | **Post to Teams** opens a compose modal (subject, message, **Search team members…**) then posts with Graph `@` mentions |
 
-Tokens: App Atlas ID token for API; Graph `ChannelMessage.Send` only when linking/posting — not a second Teams login.
+Tokens: App Atlas ID token for API; Graph `ChannelMessage.Send` + team/channel member read only when linking/posting — not a second Teams login.
+
+**Parity (10 Nov 2026):** the mention picker lived on prod (`prod-teams-many-users`) before `origin/dev`; it is now on `origin/dev` via `post-to-teams-modal.tsx`.
 
 ## Files
 
 - `app/components/app-atlas/sit-testing-view.tsx`
 - `app/components/app-atlas/atlas-workspace.tsx`, `explorer.tsx`, `connect-apps-modal.tsx`, `jira-panel.tsx`
+- `app/components/app-atlas/post-to-teams-modal.tsx`
 - `app/services/appatlas.ts`, `app/interfaces/appatlas.ts`
 - `app/lib/msal.ts`, `app/lib/auth-client.ts`
 
