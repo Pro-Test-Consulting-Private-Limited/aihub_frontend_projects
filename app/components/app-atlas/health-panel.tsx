@@ -1,15 +1,22 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { A11yIssue, CanvasNode, SessionHealthSummary } from "@/app/interfaces/appatlas";
-import { HEALTH_BADGE_RULES, METRIC_HELP, WEB_VITAL_BANDS } from "@/app/lib/health-scoring";
+import {
+  A11Y_RULE_GUIDE,
+  HEALTH_BADGE_RULES,
+  METRIC_HELP,
+  WEB_VITAL_BANDS,
+} from "@/app/lib/health-scoring";
 import { atlasUrl } from "@/app/services/appatlas";
 
 type MetricKey = keyof typeof METRIC_HELP;
 
 export function HealthPanel({ node }: { node: CanvasNode }) {
   const h = node.health;
-  const [openIssue, setOpenIssue] = useState<string | null>(null);
+  const [guideOpen, setGuideOpen] = useState(false);
+  const [issueModal, setIssueModal] = useState<A11yIssue | null>(null);
+  const [fullscreenSrc, setFullscreenSrc] = useState<string | null>(null);
 
   const metrics = useMemo(() => (h ? buildMetrics(h) : []), [h]);
   const a11yIssues = useMemo((): A11yIssue[] => {
@@ -26,20 +33,42 @@ export function HealthPanel({ node }: { node: CanvasNode }) {
     });
   }, [h]);
 
+  useEffect(() => {
+    if (!guideOpen && !issueModal && !fullscreenSrc) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (fullscreenSrc) setFullscreenSrc(null);
+        else if (issueModal) setIssueModal(null);
+        else setGuideOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [guideOpen, issueModal, fullscreenSrc]);
+
   if (!h) {
     return <div className="p-4 text-[13px] text-[#7E7E7E]">No health data captured for this screen yet.</div>;
   }
 
   return (
     <div className="space-y-4 p-4">
-      <div className="flex items-center gap-2">
-        <LevelDot level={h.level} />
-        <span className="text-[13px] font-medium text-[#1F1F1F] dark:text-[#ededed]">
-          {node.path} · {h.level === "ok" ? "Healthy" : h.level === "warn" ? "Needs attention" : "Unhealthy"}
-        </span>
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <ColorChip color={levelColor(h.level)} label={h.level} />
+          <span className="text-[13px] font-medium text-[#1F1F1F] dark:text-[#ededed]">
+            {node.path} · {h.level === "ok" ? "Healthy" : h.level === "warn" ? "Needs attention" : "Unhealthy"}
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={() => setGuideOpen(true)}
+          className="shrink-0 rounded-md border border-[#E5E7EB] px-2 py-1 text-[11px] font-medium text-[#4B5563] hover:bg-[#F9FAFB] dark:border-[#333] dark:text-[#d1d5db] dark:hover:bg-[#1a1a1a]"
+        >
+          Scoring & a11y guide
+        </button>
       </div>
 
-      <ScoringLegend level={h.level} />
+      <ScoringLegend level={h.level} onOpenGuide={() => setGuideOpen(true)} />
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {metrics.map((m) => (
@@ -49,64 +78,39 @@ export function HealthPanel({ node }: { node: CanvasNode }) {
 
       {a11yIssues.length > 0 && (
         <div className="space-y-2">
-          <div className="flex items-end justify-between gap-2">
-            <div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-[#9ca3af]">Accessibility</div>
-              <p className="text-[12px] text-[#6B7280]">
-                {h.a11yViolations} failing node{h.a11yViolations === 1 ? "" : "s"} across {a11yIssues.length} rule
-                {a11yIssues.length === 1 ? "" : "s"}. Open a card for the crop and fix hint.
-              </p>
-            </div>
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-[#9ca3af]">Accessibility</div>
+            <p className="text-[12px] text-[#6B7280]">
+              {h.a11yViolations} failing node{h.a11yViolations === 1 ? "" : "s"} across {a11yIssues.length} rule
+              {a11yIssues.length === 1 ? "" : "s"}. Click a card for details and full-size crop.
+            </p>
           </div>
           <div className="space-y-2">
-            {a11yIssues.map((issue, i) => {
-              const key = `${issue.id}-${i}`;
-              const expanded = openIssue === key;
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setOpenIssue(expanded ? null : key)}
-                  className="w-full rounded-[10px] border border-[#E5E7EB] bg-white text-left transition hover:border-[#C7D2FE] dark:border-[#2a2a2a] dark:bg-[#141414]"
-                >
-                  <div className="flex gap-3 p-2.5">
-                    <A11yThumb issue={issue} screenShot={node.screenshotUrl} />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="rounded bg-[#EEF2FF] px-1.5 py-0.5 font-mono text-[10px] font-semibold text-[#4338CA] dark:bg-[#1e1b4b] dark:text-[#c7d2fe]">
-                          {issue.id}
-                        </span>
-                        {issue.impact && <ImpactPill impact={issue.impact} />}
-                        <span className="text-[10px] text-[#9ca3af]">
-                          {issue.nodes} node{issue.nodes === 1 ? "" : "s"}
-                        </span>
-                      </div>
-                      <div className="mt-1 text-[12px] font-medium text-[#1F1F1F] dark:text-[#ededed]">{issue.help}</div>
-                      {expanded && (
-                        <div className="mt-2 space-y-2 text-[11px] leading-relaxed text-[#4B5563] dark:text-[#d1d5db]">
-                          {issue.failureSummary && <p>{issue.failureSummary}</p>}
-                          {issue.target && (
-                            <p className="truncate font-mono text-[10px] text-[#6B7280]" title={issue.target}>
-                              target: {issue.target}
-                            </p>
-                          )}
-                          <p>{a11yFixHint(issue.id)}</p>
-                          {(issue.screenshotUrl || node.screenshotUrl) && (
-                            <div className="overflow-hidden rounded-md border border-[#E5E7EB] dark:border-[#333]">
-                              <img
-                                src={atlasUrl(issue.screenshotUrl || node.screenshotUrl)}
-                                alt={`${issue.id} example`}
-                                className="max-h-40 w-full object-cover object-top"
-                              />
-                            </div>
-                          )}
-                        </div>
-                      )}
+            {a11yIssues.map((issue, i) => (
+              <button
+                key={`${issue.id}-${i}`}
+                type="button"
+                onClick={() => setIssueModal(issue)}
+                className="w-full rounded-[10px] border border-[#E5E7EB] bg-white text-left transition hover:border-[#C7D2FE] dark:border-[#2a2a2a] dark:bg-[#141414]"
+              >
+                <div className="flex gap-3 p-2.5">
+                  <A11yThumb issue={issue} screenShot={node.screenshotUrl} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="rounded bg-[#EEF2FF] px-1.5 py-0.5 font-mono text-[10px] font-semibold text-[#4338CA] dark:bg-[#1e1b4b] dark:text-[#c7d2fe]">
+                        {issue.id}
+                      </span>
+                      {issue.impact && <ImpactPill impact={issue.impact} />}
+                      <span className="text-[10px] text-[#9ca3af]">
+                        {issue.nodes} node{issue.nodes === 1 ? "" : "s"}
+                      </span>
                     </div>
+                    <div className="mt-1 text-[12px] font-medium text-[#1F1F1F] dark:text-[#ededed]">{issue.help}</div>
+                    <div className="mt-1 text-[10px] text-[#6366F1]">Open details</div>
                   </div>
-                </button>
-              );
-            })}
+                </div>
+              </button>
+            ))}
           </div>
         </div>
       )}
@@ -116,17 +120,71 @@ export function HealthPanel({ node }: { node: CanvasNode }) {
           Slowest URL ({h.slowestRequestMs} ms): {h.slowestRequestUrl}
         </div>
       )}
+
+      {guideOpen && <GuideOverlay onClose={() => setGuideOpen(false)} />}
+      {issueModal && (
+        <A11yIssueOverlay
+          issue={issueModal}
+          screenShot={node.screenshotUrl}
+          onClose={() => setIssueModal(null)}
+          onFullscreen={(src) => setFullscreenSrc(src)}
+        />
+      )}
+      {fullscreenSrc && <FullscreenImage src={fullscreenSrc} onClose={() => setFullscreenSrc(null)} />}
     </div>
   );
 }
 
-function ScoringLegend({ level }: { level: SessionHealthSummary["level"] }) {
+function ColorChip({
+  color,
+  label,
+  size = 12,
+}: {
+  color: string;
+  label: string;
+  size?: number;
+}) {
+  return (
+    <button
+      type="button"
+      title={`${label}: ${color}`}
+      aria-label={`${label} colour ${color}`}
+      className="inline-flex items-center gap-1 rounded border border-black/10 bg-white px-1 py-0.5 text-[10px] text-[#4B5563] dark:border-white/10 dark:bg-[#1a1a1a] dark:text-[#d1d5db]"
+      onClick={() => {
+        void navigator.clipboard?.writeText(color).catch(() => undefined);
+      }}
+    >
+      <span
+        className="inline-block rounded-sm border border-black/15 dark:border-white/20"
+        style={{ width: size, height: size, background: color }}
+      />
+      <span className="font-mono">{color}</span>
+    </button>
+  );
+}
+
+function levelColor(level: SessionHealthSummary["level"]) {
+  return level === "ok" ? "#22C55E" : level === "warn" ? "#F59E0B" : "#EF4444";
+}
+
+function ScoringLegend({
+  level,
+  onOpenGuide,
+}: {
+  level: SessionHealthSummary["level"];
+  onOpenGuide: () => void;
+}) {
   return (
     <div className="rounded-[10px] border border-[#E5E7EB] bg-[#FAFAFA] p-3 dark:border-[#2a2a2a] dark:bg-[#141414]">
-      <div className="mb-2 text-[12px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">How scoring works</div>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="text-[12px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">How scoring works</div>
+        <button type="button" onClick={onOpenGuide} className="text-[11px] font-medium text-[#6366F1] hover:underline">
+          Full guide
+        </button>
+      </div>
       <p className="mb-2 text-[11px] leading-relaxed text-[#4B5563] dark:text-[#d1d5db]">
         Badge colour comes from error / HTTP / image / accessibility counts on this screen. TTFB, LCP, and CLS are
-        informational and do not change green / yellow / red.
+        context only.
       </p>
       <div className="space-y-1.5">
         {(["ok", "warn", "bad"] as const).map((key) => {
@@ -139,8 +197,8 @@ function ScoringLegend({ level }: { level: SessionHealthSummary["level"] }) {
                 active ? "bg-white ring-1 ring-[#C7D2FE] dark:bg-[#0f0f0f] dark:ring-[#4338ca]" : ""
               }`}
             >
-              <div className="mb-0.5 flex items-center gap-1.5">
-                <span className="inline-block h-2 w-2 rounded-full" style={{ background: rule.color }} />
+              <div className="mb-0.5 flex flex-wrap items-center gap-1.5">
+                <ColorChip color={rule.color} label={rule.label} />
                 <span className="font-medium text-[#1F1F1F] dark:text-[#ededed]">{rule.label}</span>
                 {active && <span className="text-[9px] uppercase tracking-wide text-[#6366F1]">this screen</span>}
               </div>
@@ -166,6 +224,214 @@ function ScoringLegend({ level }: { level: SessionHealthSummary["level"] }) {
   );
 }
 
+function GuideOverlay({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 p-4" onClick={onClose}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Health scoring and accessibility guide"
+        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[12px] border border-[#E5E7EB] bg-white p-4 shadow-xl dark:border-[#333] dark:bg-[#0f0f0f]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div>
+            <div className="text-[15px] font-semibold text-[#111827] dark:text-[#ededed]">Health scoring & accessibility</div>
+            <p className="mt-1 text-[12px] text-[#6B7280]">
+              Definitions, badge criteria, Web Vitals bands, and common accessibility rules with examples.
+            </p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-md px-2 py-1 text-[12px] text-[#6B7280] hover:bg-[#F3F4F6]">
+            Close
+          </button>
+        </div>
+
+        <section className="mb-4">
+          <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-[#9ca3af]">Badge colours</h3>
+          <div className="space-y-2">
+            {(["ok", "warn", "bad"] as const).map((key) => {
+              const rule = HEALTH_BADGE_RULES[key];
+              return (
+                <div key={key} className="rounded-lg border border-[#E5E7EB] p-2.5 dark:border-[#2a2a2a]">
+                  <div className="mb-1 flex items-center gap-2">
+                    <ColorChip color={rule.color} label={rule.label} size={14} />
+                    <span className="text-[13px] font-medium text-[#111827] dark:text-[#ededed]">{rule.label}</span>
+                  </div>
+                  {"summary" in rule ? (
+                    <p className="text-[12px] text-[#4B5563] dark:text-[#d1d5db]">{rule.summary}</p>
+                  ) : (
+                    <ul className="list-disc space-y-0.5 pl-4 text-[12px] text-[#4B5563] dark:text-[#d1d5db]">
+                      {rule.anyOf.map((line) => (
+                        <li key={line}>{line}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="mb-4">
+          <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-[#9ca3af]">Web Vitals</h3>
+          <div className="space-y-2">
+            {Object.values(WEB_VITAL_BANDS).map((v) => (
+              <div key={v.name} className="rounded-lg border border-[#E5E7EB] p-2.5 text-[12px] dark:border-[#2a2a2a]">
+                <div className="font-medium text-[#111827] dark:text-[#ededed]">{v.name}</div>
+                <p className="mt-1 text-[#4B5563] dark:text-[#d1d5db]">{v.meaning}</p>
+                <p className="mt-1 text-[#6B7280]">
+                  Good {v.good}; needs improvement {v.needsImprovement}; poor {v.poor}.
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section>
+          <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-[#9ca3af]">Accessibility rules</h3>
+          <div className="space-y-2">
+            {A11Y_RULE_GUIDE.map((rule) => (
+              <div key={rule.id} className="rounded-lg border border-[#E5E7EB] p-2.5 text-[12px] dark:border-[#2a2a2a]">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded bg-[#EEF2FF] px-1.5 py-0.5 font-mono text-[10px] font-semibold text-[#4338CA]">
+                    {rule.id}
+                  </span>
+                  <span className="font-medium text-[#111827] dark:text-[#ededed]">{rule.title}</span>
+                </div>
+                <p className="mt-1 text-[#4B5563] dark:text-[#d1d5db]">
+                  <span className="font-medium">Definition:</span> {rule.definition}
+                </p>
+                <p className="mt-1 text-[#4B5563] dark:text-[#d1d5db]">
+                  <span className="font-medium">Example:</span> {rule.example}
+                </p>
+                {rule.id === "color-contrast" && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <span className="text-[11px] text-[#6B7280]">Fail example</span>
+                    <ColorChip color="#A78BFA" label="light purple on white" />
+                    <span className="text-[11px] text-[#6B7280]">on</span>
+                    <ColorChip color="#FFFFFF" label="white" />
+                    <span className="text-[11px] text-[#6B7280]">Pass example</span>
+                    <ColorChip color="#4C1D95" label="deep purple on white" />
+                    <span className="text-[11px] text-[#6B7280]">on</span>
+                    <ColorChip color="#FFFFFF" label="white" />
+                  </div>
+                )}
+                <p className="mt-1 text-[#4B5563] dark:text-[#d1d5db]">
+                  <span className="font-medium">Fix:</span> {rule.fix}
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function A11yIssueOverlay({
+  issue,
+  screenShot,
+  onClose,
+  onFullscreen,
+}: {
+  issue: A11yIssue;
+  screenShot: string;
+  onClose: () => void;
+  onFullscreen: (src: string) => void;
+}) {
+  const src = issue.screenshotUrl || screenShot;
+  const guide = A11Y_RULE_GUIDE.find((g) => g.id === issue.id);
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 p-4" onClick={onClose}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${issue.id} accessibility issue`}
+        className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-[12px] border border-[#E5E7EB] bg-white p-4 shadow-xl dark:border-[#333] dark:bg-[#0f0f0f]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="rounded bg-[#EEF2FF] px-1.5 py-0.5 font-mono text-[11px] font-semibold text-[#4338CA]">
+                {issue.id}
+              </span>
+              {issue.impact && <ImpactPill impact={issue.impact} />}
+              <span className="text-[11px] text-[#9ca3af]">
+                {issue.nodes} node{issue.nodes === 1 ? "" : "s"}
+              </span>
+            </div>
+            <div className="mt-1 text-[14px] font-semibold text-[#111827] dark:text-[#ededed]">{issue.help}</div>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-md px-2 py-1 text-[12px] text-[#6B7280] hover:bg-[#F3F4F6]">
+            Close
+          </button>
+        </div>
+
+        {src ? (
+          <button
+            type="button"
+            className="group relative mb-3 block w-full overflow-hidden rounded-lg border border-[#E5E7EB] dark:border-[#333]"
+            onClick={() => onFullscreen(atlasUrl(src))}
+            title="View full screen"
+          >
+            <img src={atlasUrl(src)} alt={`${issue.id} crop`} className="max-h-64 w-full object-contain bg-[#F8FAFC]" />
+            <span className="absolute right-2 bottom-2 rounded bg-black/65 px-2 py-1 text-[10px] text-white opacity-90 group-hover:opacity-100">
+              Full screen
+            </span>
+          </button>
+        ) : null}
+
+        <div className="space-y-2 text-[12px] leading-relaxed text-[#4B5563] dark:text-[#d1d5db]">
+          {issue.failureSummary && (
+            <p>
+              <span className="font-medium text-[#111827] dark:text-[#ededed]">Failure:</span> {issue.failureSummary}
+            </p>
+          )}
+          {issue.target && (
+            <p className="break-all font-mono text-[11px] text-[#6B7280]">
+              <span className="font-sans font-medium text-[#111827] dark:text-[#ededed]">Target: </span>
+              {issue.target}
+            </p>
+          )}
+          <p>
+            <span className="font-medium text-[#111827] dark:text-[#ededed]">Fix hint:</span> {a11yFixHint(issue.id)}
+          </p>
+          {guide && (
+            <div className="rounded-lg border border-[#E5E7EB] bg-[#FAFAFA] p-2.5 dark:border-[#2a2a2a] dark:bg-[#141414]">
+              <div className="font-medium text-[#111827] dark:text-[#ededed]">{guide.title}</div>
+              <p className="mt-1">{guide.definition}</p>
+              <p className="mt-1">
+                <span className="font-medium">Example:</span> {guide.example}
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FullscreenImage({ src, onClose }: { src: string; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/90 p-3" onClick={onClose}>
+      <button
+        type="button"
+        className="absolute top-3 right-3 rounded-md bg-white/10 px-3 py-1.5 text-[12px] text-white hover:bg-white/20"
+        onClick={onClose}
+      >
+        Close
+      </button>
+      <img
+        src={src}
+        alt="Accessibility crop full screen"
+        className="max-h-full max-w-full object-contain"
+        onClick={(e) => e.stopPropagation()}
+      />
+    </div>
+  );
+}
+
 type BuiltMetric = {
   key: MetricKey;
   label: string;
@@ -177,10 +443,7 @@ type BuiltMetric = {
 
 function buildMetrics(h: SessionHealthSummary): BuiltMetric[] {
   const rows: Array<BuiltMetric | null> = [
-    countMetric("consoleErrors", "Console errors", h.consoleErrors, {
-      warnAt: 1,
-      badAt: 3,
-    }),
+    countMetric("consoleErrors", "Console errors", h.consoleErrors, { warnAt: 1, badAt: 3 }),
     countMetric("consoleWarnings", "Console warnings", h.consoleWarnings, { infoOnly: true }),
     countMetric("pageErrors", "Page errors", h.pageErrors, { badAt: 1 }),
     countMetric("failedRequests", "Failed requests", h.failedRequests, { warnAt: 1 }),
@@ -214,14 +477,7 @@ function countMetric(
   if (opts.infoOnly) tone = value > 0 ? "info" : "ok";
   else if (opts.badAt != null && value >= opts.badAt) tone = "bad";
   else if (opts.warnAt != null && value >= opts.warnAt) tone = "warn";
-  return {
-    key,
-    label,
-    display: String(value),
-    tone,
-    body: help.body,
-    scoring: help.scoring,
-  };
+  return { key, label, display: String(value), tone, body: help.body, scoring: help.scoring };
 }
 
 function vitalMetric(
@@ -238,18 +494,10 @@ function vitalMetric(
       display: "Not measured",
       tone: "neutral",
       body: `${bands.meaning} This visit did not report a value (common for LCP on quick navigations or SPA transitions).`,
-      scoring: "Informational only — does not change the badge colour.",
     };
   }
   const help = METRIC_HELP[key];
-  return {
-    key,
-    label,
-    display: fmt(value),
-    tone: "info",
-    body: help.body,
-    scoring: help.scoring,
-  };
+  return { key, label, display: fmt(value), tone: "info", body: help.body };
 }
 
 function MetricCard({ metric }: { metric: BuiltMetric }) {
@@ -261,9 +509,20 @@ function MetricCard({ metric }: { metric: BuiltMetric }) {
         : metric.tone === "ok"
           ? "border-[#BBF7D0] bg-[#F0FDF4]"
           : "border-[#E5E7EB] bg-white dark:border-[#2a2a2a] dark:bg-[#141414]";
+  const chip =
+    metric.tone === "bad"
+      ? "#EF4444"
+      : metric.tone === "warn"
+        ? "#F59E0B"
+        : metric.tone === "ok"
+          ? "#22C55E"
+          : null;
   return (
     <div className={`rounded-[10px] border px-2.5 py-2 ${border}`}>
-      <div className="text-[10px] font-semibold uppercase tracking-wide text-[#6B7280]">{metric.label}</div>
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-[10px] font-semibold uppercase tracking-wide text-[#6B7280]">{metric.label}</div>
+        {chip && <ColorChip color={chip} label={metric.tone} size={10} />}
+      </div>
       <div className="text-[16px] font-semibold text-[#111827] dark:text-[#ededed]">{metric.display}</div>
       <p className="mt-1 text-[11px] leading-snug text-[#4B5563] dark:text-[#d1d5db]">{metric.body}</p>
       {metric.scoring && <p className="mt-1 text-[10px] font-medium text-[#6366F1]">{metric.scoring}</p>}
@@ -286,35 +545,24 @@ function A11yThumb({ issue, screenShot }: { issue: A11yIssue; screenShot: string
 }
 
 function ImpactPill({ impact }: { impact: string }) {
+  const color =
+    impact === "critical" || impact === "serious" ? "#EF4444" : impact === "moderate" ? "#F59E0B" : "#9CA3AF";
   const c =
     impact === "critical" || impact === "serious"
       ? "bg-[#FEE2E2] text-[#B91C1C]"
       : impact === "moderate"
         ? "bg-[#FEF3C7] text-[#B45309]"
         : "bg-[#E5E7EB] text-[#374151]";
-  return <span className={`rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase ${c}`}>{impact}</span>;
+  return (
+    <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase ${c}`}>
+      <span className="inline-block h-2 w-2 rounded-sm" style={{ background: color }} />
+      {impact}
+    </span>
+  );
 }
 
 function a11yFixHint(id: string): string {
-  switch (id) {
-    case "button-name":
-      return "Give the control visible text, aria-label, or an accessible name so screen readers can announce it.";
-    case "color-contrast":
-      return "Increase contrast between text and background to at least 4.5:1 for normal text (3:1 for large text).";
-    case "label":
-      return "Associate every input with a <label> (for/id) or aria-labelledby / aria-label.";
-    case "select-name":
-      return "Provide an accessible name for the <select> via a label or aria-label.";
-    case "page-has-heading-one":
-      return "Add a single <h1> that names the page purpose.";
-    case "image-alt":
-      return "Add meaningful alt text (or alt=\"\" for decorative images).";
-    default:
-      return "Review the failing nodes and apply the WCAG guidance for this rule.";
-  }
-}
-
-function LevelDot({ level }: { level: SessionHealthSummary["level"] }) {
-  const c = level === "ok" ? "bg-[#22C55E]" : level === "warn" ? "bg-[#F59E0B]" : "bg-[#EF4444]";
-  return <span className={`inline-block h-2.5 w-2.5 rounded-full ${c}`} />;
+  const guide = A11Y_RULE_GUIDE.find((g) => g.id === id);
+  if (guide) return guide.fix;
+  return "Review the failing nodes and apply the WCAG guidance for this rule.";
 }

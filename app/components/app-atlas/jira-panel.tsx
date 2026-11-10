@@ -78,10 +78,32 @@ export function JiraPanel({
   const mapping = canvas.jira;
   const [filter, setFilter] = useState<Bucket | null>(null);
   const [drawerTab, setDrawerTab] = useState<"requirements" | "health">("requirements");
+  const [panelWidth, setPanelWidth] = useState(360);
+  const dragRef = useRef<{ startX: number; startW: number } | null>(null);
   const clarifications = useMemo(
     () => new Map((canvas.clarifications ?? []).map((c) => [c.issueKey, c])),
     [canvas.clarifications],
   );
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!dragRef.current) return;
+      const delta = dragRef.current.startX - e.clientX;
+      const next = Math.min(720, Math.max(280, dragRef.current.startW + delta));
+      setPanelWidth(next);
+    };
+    const onUp = () => {
+      dragRef.current = null;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, []);
 
   const tickets = useMemo<Ticket[]>(() => {
     if (!mapping) return [];
@@ -122,7 +144,22 @@ export function JiraPanel({
   const shown = filter ? tickets.filter((t) => bucketOf(t.issue) === filter) : tickets;
 
   return (
-    <div className="absolute top-0 right-0 z-20 flex h-full w-[360px] flex-col border-l border-[#E6E1F5] bg-white shadow-[-8px_0_24px_rgba(0,0,0,0.06)] dark:border-[#2a2a2a] dark:bg-[#0f0f0f]">
+    <div
+      className="absolute top-0 right-0 z-20 flex h-full flex-col border-l border-[#E6E1F5] bg-white shadow-[-8px_0_24px_rgba(0,0,0,0.06)] dark:border-[#2a2a2a] dark:bg-[#0f0f0f]"
+      style={{ width: panelWidth }}
+    >
+      <button
+        type="button"
+        aria-label="Resize side panel"
+        title="Drag to resize"
+        className="absolute top-0 left-0 z-30 h-full w-1.5 -translate-x-1/2 cursor-ew-resize bg-transparent hover:bg-[#8664F2]/35"
+        onMouseDown={(e) => {
+          e.preventDefault();
+          dragRef.current = { startX: e.clientX, startW: panelWidth };
+          document.body.style.cursor = "ew-resize";
+          document.body.style.userSelect = "none";
+        }}
+      />
       <div className="flex items-center justify-between border-b border-[#EEE] px-4 py-2.5 dark:border-[#1a1a1a]">
         <div className="min-w-0">
           <div className="text-[11px] text-[#7E7E7E]">Agile Project Management &amp; Issue Tracking</div>

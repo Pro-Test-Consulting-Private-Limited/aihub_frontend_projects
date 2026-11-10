@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   TbChevronDown,
   TbChevronLeft,
@@ -54,9 +54,45 @@ export function Explorer(props: Props) {
   const [canvasesOpen, setCanvasesOpen] = useState(true);
   const [detailsOpen, setDetailsOpen] = useState(true);
   const [menuFor, setMenuFor] = useState<string | null>(null);
+  const [panelWidth, setPanelWidth] = useState(270);
+  const dragRef = useRef<{ startX: number; startW: number } | null>(null);
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!dragRef.current) return;
+      const delta = e.clientX - dragRef.current.startX;
+      setPanelWidth(Math.min(480, Math.max(200, dragRef.current.startW + delta)));
+    };
+    const onUp = () => {
+      dragRef.current = null;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, []);
 
   return (
-    <div className="flex h-full w-[270px] shrink-0 flex-col border-r border-[#EEE] bg-white dark:border-[#1a1a1a] dark:bg-[#0a0a0a]">
+    <div
+      className="relative flex h-full shrink-0 flex-col border-r border-[#EEE] bg-white dark:border-[#1a1a1a] dark:bg-[#0a0a0a]"
+      style={{ width: panelWidth }}
+    >
+      <button
+        type="button"
+        aria-label="Resize explorer"
+        title="Drag to resize"
+        className="absolute top-0 right-0 z-30 h-full w-1.5 translate-x-1/2 cursor-ew-resize bg-transparent hover:bg-[#8664F2]/35"
+        onMouseDown={(e) => {
+          e.preventDefault();
+          dragRef.current = { startX: e.clientX, startW: panelWidth };
+          document.body.style.cursor = "ew-resize";
+          document.body.style.userSelect = "none";
+        }}
+      />
       <div className="flex items-center justify-between border-b border-[#EEE] px-4 py-3 dark:border-[#1a1a1a]">
         <div className="text-[15px] font-medium text-[#1F1F1F] dark:text-[#ededed]">Explorer</div>
         <div className="flex items-center gap-1">
