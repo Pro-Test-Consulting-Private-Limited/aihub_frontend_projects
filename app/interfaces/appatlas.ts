@@ -304,6 +304,15 @@ export type CanvasSummary = {
   updatedAt: number;
 };
 
+/** Durable Swagger binding on a canvas (App Atlas owns this; localStorage is a mirror). */
+export type CanvasSwaggerBinding = {
+  specUrl: string;
+  title: string | null;
+  connectedAt: number;
+  swaggerKey: string;
+  specHash: string | null;
+};
+
 export type Canvas = CanvasSummary & {
   sessionId: string | null;
   nodes: CanvasNode[];
@@ -325,6 +334,9 @@ export type Canvas = CanvasSummary & {
   teamsMessages?: CanvasTeamsMessage[];
   github?: CanvasGithub | null;
   cicd?: CanvasCicd | null;
+  swagger?: CanvasSwaggerBinding | null;
+  /** Org-wide API chain (identities + dependencies); not shown in product UI. */
+  swaggerChain?: unknown;
 };
 
 export type ClarificationQuestion = {

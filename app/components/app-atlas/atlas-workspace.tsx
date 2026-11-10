@@ -41,7 +41,7 @@ import { SitTestingView } from "./sit-testing-view";
 import { CoverageOverview } from "./coverage-overview";
 import { SecurityOverview } from "./security-overview";
 import { useApiSpec, useApiSpecView } from "@/app/hooks/use-api-spec";
-import { clearCanvasSwagger, getCanvasSwagger, type CanvasSwagger } from "@/app/lib/canvas-swagger";
+import { clearCanvasSwagger, getCanvasSwagger, setCanvasSwagger, type CanvasSwagger } from "@/app/lib/canvas-swagger";
 import { isLocalAuthBypassEnabled } from "@/app/lib/auth-bypass";
 
 const BASE_TABS = [
@@ -266,7 +266,19 @@ export default function AtlasWorkspace() {
       if (canvas?.id === id) return;
       setCanvas(null);
       try {
-        setCanvas(await client.getCanvas(id));
+        const full = await client.getCanvas(id);
+        setCanvas(full);
+        // Hydrate browser mirror from App Atlas swagger binding.
+        if (full.swagger?.specUrl) {
+          const conn = setCanvasSwagger(id, {
+            specUrl: full.swagger.specUrl,
+            title: full.swagger.title,
+            connectedAt: full.swagger.connectedAt,
+            swaggerKey: full.swagger.swaggerKey,
+            specHash: full.swagger.specHash,
+          });
+          setSwagger(conn);
+        }
       } catch (err) {
         if (err instanceof AtlasError && err.status === 404) {
           setNotice("That canvas was deleted.");

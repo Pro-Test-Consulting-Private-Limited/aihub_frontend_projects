@@ -276,6 +276,8 @@ export function ApiTestingView({
         <EndpointDetailPanel
           specUrl={specUrl}
           row={selectedRow}
+          rows={rows}
+          serverUrl={spec.data?.serverUrl ?? null}
           moduleTone={selectedTone}
           onClose={() => setSelectedKey(null)}
         />

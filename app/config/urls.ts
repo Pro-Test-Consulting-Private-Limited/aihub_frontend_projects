@@ -13,10 +13,14 @@ export const CLARIFY_API_BASE =
   siteOrigin() || process.env.NEXT_PUBLIC_CLARIFY_API_BASE_URL || "http://localhost:4000";
 
 /**
- * API Test Scenario Agent (Swagger spec quality check on the App Atlas canvas). A separate service: it is NOT replaced
- * by the site origin, so it follows NEXT_PUBLIC_API_AGENT_BASE_URL everywhere. Local by default.
+ * API Test Scenario Agent (Swagger quality + contract/data/functional runs on App Atlas).
+ * On AI Hub sites: same-origin `/api-agent` (nginx → VM container). Local: localhost:4500.
+ * NEXT_PUBLIC_API_AGENT_BASE_URL overrides when set (build env).
  */
-export const API_AGENT_BASE = (process.env.NEXT_PUBLIC_API_AGENT_BASE_URL || "http://localhost:4000").replace(/\/$/, "");
+export const API_AGENT_BASE = (
+  process.env.NEXT_PUBLIC_API_AGENT_BASE_URL ||
+  (siteOrigin() ? `${siteOrigin()}/api-agent` : "http://localhost:4500")
+).replace(/\/$/, "");
 
 /**
  * Security Test Agent (credential stuffing + guided checks on the App Atlas Security tab).

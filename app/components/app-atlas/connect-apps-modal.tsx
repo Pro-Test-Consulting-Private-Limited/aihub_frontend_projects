@@ -9,6 +9,7 @@ import type { Canvas, CanvasSummary, JiraProject } from "@/app/interfaces/appatl
 import type { AtlasClient } from "@/app/services/appatlas";
 import { useIntegrationStatus, type SwaggerStatus } from "@/app/hooks/use-integration-status";
 import { clearCanvasSwagger, setCanvasSwagger, type CanvasSwagger } from "@/app/lib/canvas-swagger";
+import { clearToken, getEnvironment, getToken, setEnvironment, setToken, validateBaseUrl } from "@/app/lib/api-testing/environment";
 import { Modal, fieldInput, fieldLabel, outlineButton, primaryButton } from "./modal";
 
 type AppId = "jira" | "linear" | "swagger" | "redocly" | "stoplight" | "teams" | "slack";
@@ -174,7 +175,14 @@ export function ConnectAppsModal({
           onConnected={onConnected}
         />
       ) : (
-        <SwaggerStep canvas={canvas} integration={swaggerIntegration} current={swagger} onBack={() => setStep("apps")} onChange={onSwaggerChange} />
+        <SwaggerStep
+          client={client}
+          canvas={canvas}
+          integration={swaggerIntegration}
+          current={swagger}
+          onBack={() => setStep("apps")}
+          onChange={onSwaggerChange}
+        />
       )}
     </Modal>
   );
@@ -491,12 +499,14 @@ function JiraStep({
 
 /** Swagger and Jira are independent: this step only reads the Swagger integration and never touches the Jira mapping. */
 function SwaggerStep({
+  client,
   canvas,
   integration,
   current,
   onBack,
   onChange,
 }: {
+  client: AtlasClient;
   canvas: CanvasSummary;
   integration: SwaggerStatus;
   current: CanvasSwagger | null;
@@ -504,15 +514,61 @@ function SwaggerStep({
   onChange: (conn: CanvasSwagger | null) => void;
 }) {
   const specUrl = integration.specUrl;
-
-  const connect = () => {
+  // Where the tests are sent. The base URL is kept in this browser; the token only in memory.
+  const [baseUrl, setBaseUrl] = useState(() => (specUrl ? getEnvironment(specUrl).baseUrl : ""));
+  const [token, setTokenText] = useState(() => (specUrl ? getToken(specUrl) : ""));
+  const [busy, setBusy] = useState<"connect" | "disconnect" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const baseUrlError = baseUrl.trim() ? validateBaseUrl(baseUrl) : null;
+  useEffect(() => {
     if (!specUrl) return;
+    const e = getEnvironment(specUrl);
+    setBaseUrl(e.baseUrl);
+    setTokenText(getToken(specUrl));
+  }, [specUrl]);
+
+  const connect = async () => {
+    if (!specUrl || baseUrlError) return;
+    setBusy("connect");
+    setError(null);
+    setEnvironment(specUrl, { baseUrl });
+    setToken(specUrl, token);
+    // Optimistic local mirror so API Testing opens immediately.
     onChange(setCanvasSwagger(canvas.id, { specUrl, title: integration.title }));
+    try {
+      const canvasRes = await client.connectSwagger(canvas.id, { specUrl, title: integration.title });
+      const s = canvasRes.swagger;
+      if (s) {
+        onChange(
+          setCanvasSwagger(canvas.id, {
+            specUrl: s.specUrl,
+            title: s.title,
+            connectedAt: s.connectedAt,
+            swaggerKey: s.swaggerKey,
+            specHash: s.specHash,
+          }),
+        );
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save swagger on the canvas.");
+    } finally {
+      setBusy(null);
+    }
   };
 
-  const disconnect = () => {
+  const disconnect = async () => {
+    setBusy("disconnect");
+    setError(null);
+    if (specUrl) clearToken(specUrl);
     clearCanvasSwagger(canvas.id);
     onChange(null);
+    try {
+      await client.disconnectSwagger(canvas.id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not disconnect swagger.");
+    } finally {
+      setBusy(null);
+    }
   };
 
   return (
@@ -534,13 +590,47 @@ function SwaggerStep({
       <p className="mt-3 text-[12px] leading-relaxed text-[#7E7E7E]">
         Adds an API Testing view to this canvas: the spec&apos;s modules and a quality check for every endpoint. It works on its own and doesn&apos;t depend on the Jira connection.
       </p>
+      <div className="mt-4 space-y-3">
+        <div>
+          <label className={fieldLabel} htmlFor="swagger-base-url">
+            Base URL for testing
+          </label>
+          <input
+            id="swagger-base-url"
+            className={fieldInput}
+            value={baseUrl}
+            onChange={(e) => setBaseUrl(e.target.value)}
+            placeholder="https://staging.example.com/api"
+            autoComplete="off"
+          />
+          {baseUrlError && <p className="mt-1 text-[11.5px] text-[#DC2626]">{baseUrlError}</p>}
+        </div>
+        <div>
+          <label className={fieldLabel} htmlFor="swagger-token">
+            Bearer token (optional)
+          </label>
+          <input
+            id="swagger-token"
+            className={fieldInput}
+            type="password"
+            value={token}
+            onChange={(e) => setTokenText(e.target.value)}
+            placeholder="Paste a token, or log in with a prerequisite later"
+            autoComplete="new-password"
+          />
+          <p className="mt-1 text-[11.5px] text-[#7E7E7E]">Kept in memory only: never saved, and gone when you reload the page.</p>
+        </div>
+      </div>
+      {error && <p className="mt-3 text-[12px] text-[#DC2626]">{error}</p>}
       <div className="mt-5 flex justify-end gap-3">
         {current && (
-          <button type="button" className={outlineButton} onClick={disconnect}>
+          <button type="button" className={outlineButton} onClick={() => void disconnect()} disabled={!!busy}>
+            {busy === "disconnect" ? <TbLoader2 size={14} className="animate-spin" /> : null}
             Disconnect
           </button>
         )}
-        <button type="button" className={primaryButton} onClick={connect} disabled={!specUrl}>
+        <button type="button" className={primaryButton} onClick={() => void connect()} disabled={!specUrl || !!baseUrlError || !!busy}>
+          {busy === "connect" ? <TbLoader2 size={14} className="animate-spin" /> : null}
           {current ? "Reconnect" : "Connect"}
         </button>
       </div>
