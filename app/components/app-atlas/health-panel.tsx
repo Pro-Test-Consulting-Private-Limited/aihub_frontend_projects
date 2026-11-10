@@ -53,11 +53,12 @@ export function HealthPanel({ node }: { node: CanvasNode }) {
   return (
     <div className="space-y-4 p-4">
       <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <ColorChip color={levelColor(h.level)} label={h.level} />
-          <span className="text-[13px] font-medium text-[#1F1F1F] dark:text-[#ededed]">
-            {node.path} · {h.level === "ok" ? "Healthy" : h.level === "warn" ? "Needs attention" : "Unhealthy"}
-          </span>
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="truncate text-[13px] font-medium text-[#1F1F1F] dark:text-[#ededed]">{node.path}</span>
+          <StatusTab
+            color={levelColor(h.level)}
+            label={h.level === "ok" ? "Healthy" : h.level === "warn" ? "Needs attention" : "Unhealthy"}
+          />
         </div>
         <button
           type="button"
@@ -67,8 +68,6 @@ export function HealthPanel({ node }: { node: CanvasNode }) {
           Scoring & a11y guide
         </button>
       </div>
-
-      <ScoringLegend level={h.level} />
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {metrics.map((m) => (
@@ -165,54 +164,26 @@ function ColorChip({
   );
 }
 
-function levelColor(level: SessionHealthSummary["level"]) {
-  return level === "ok" ? "#22C55E" : level === "warn" ? "#F59E0B" : "#EF4444";
+/** Coloured status pill (no hex) — used in the guide and panel header. */
+function StatusTab({ color, label }: { color: string; label: string }) {
+  return (
+    <button
+      type="button"
+      title={`${label}: ${color}`}
+      aria-label={`${label} colour ${color}`}
+      className="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-semibold text-white shadow-sm"
+      style={{ background: color }}
+      onClick={() => {
+        void navigator.clipboard?.writeText(color).catch(() => undefined);
+      }}
+    >
+      {label}
+    </button>
+  );
 }
 
-function ScoringLegend({ level }: { level: SessionHealthSummary["level"] }) {
-  return (
-    <div className="rounded-[10px] border border-[#E5E7EB] bg-[#FAFAFA] p-3 dark:border-[#2a2a2a] dark:bg-[#141414]">
-      <div className="mb-2 text-[12px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">How scoring works</div>
-      <p className="mb-2 text-[11px] leading-relaxed text-[#4B5563] dark:text-[#d1d5db]">
-        Badge colour comes from error / HTTP / image / accessibility counts on this screen. TTFB, LCP, and CLS are
-        context only.
-      </p>
-      <div className="space-y-1.5">
-        {(["ok", "warn", "bad"] as const).map((key) => {
-          const rule = HEALTH_BADGE_RULES[key];
-          const active = level === key;
-          return (
-            <div
-              key={key}
-              className={`rounded-md px-2 py-1.5 text-[11px] leading-snug ${
-                active ? "bg-white ring-1 ring-[#C7D2FE] dark:bg-[#0f0f0f] dark:ring-[#4338ca]" : ""
-              }`}
-            >
-              <div className="mb-0.5 flex flex-wrap items-center gap-1.5">
-                <ColorChip color={rule.color} label={rule.label} />
-                <span className="font-medium text-[#1F1F1F] dark:text-[#ededed]">{rule.label}</span>
-                {active && <span className="text-[9px] uppercase tracking-wide text-[#6366F1]">this screen</span>}
-              </div>
-              {"summary" in rule ? (
-                <p className="text-[#4B5563] dark:text-[#d1d5db]">{rule.summary}</p>
-              ) : (
-                <p className="text-[#4B5563] dark:text-[#d1d5db]">{rule.anyOf.join(" · ")}</p>
-              )}
-            </div>
-          );
-        })}
-      </div>
-      <div className="mt-2 border-t border-[#E5E7EB] pt-2 text-[11px] leading-relaxed text-[#4B5563] dark:border-[#2a2a2a] dark:text-[#d1d5db]">
-        <div className="mb-1 font-medium text-[#1F1F1F] dark:text-[#ededed]">Web Vitals bands</div>
-        {Object.values(WEB_VITAL_BANDS).map((v) => (
-          <p key={v.name} className="mb-1 last:mb-0">
-            <span className="font-medium">{v.name}</span>: good {v.good}; needs improvement {v.needsImprovement}; poor{" "}
-            {v.poor}.
-          </p>
-        ))}
-      </div>
-    </div>
-  );
+function levelColor(level: SessionHealthSummary["level"]) {
+  return level === "ok" ? "#22C55E" : level === "warn" ? "#F59E0B" : "#EF4444";
 }
 
 function GuideOverlay({ onClose }: { onClose: () => void }) {
@@ -244,9 +215,8 @@ function GuideOverlay({ onClose }: { onClose: () => void }) {
               const rule = HEALTH_BADGE_RULES[key];
               return (
                 <div key={key} className="rounded-lg border border-[#E5E7EB] p-2.5 dark:border-[#2a2a2a]">
-                  <div className="mb-1 flex items-center gap-2">
-                    <ColorChip color={rule.color} label={rule.label} size={14} />
-                    <span className="text-[13px] font-medium text-[#111827] dark:text-[#ededed]">{rule.label}</span>
+                  <div className="mb-1">
+                    <StatusTab color={rule.color} label={rule.label} />
                   </div>
                   {"summary" in rule ? (
                     <p className="text-[12px] text-[#4B5563] dark:text-[#d1d5db]">{rule.summary}</p>
@@ -428,8 +398,7 @@ type BuiltMetric = {
   label: string;
   display: string;
   tone: "neutral" | "ok" | "warn" | "bad" | "info";
-  body: string;
-  scoring?: string;
+  body?: string;
 };
 
 function buildMetrics(h: SessionHealthSummary): BuiltMetric[] {
@@ -440,9 +409,9 @@ function buildMetrics(h: SessionHealthSummary): BuiltMetric[] {
     countMetric("failedRequests", "Failed requests", h.failedRequests, { warnAt: 1 }),
     countMetric("httpErrors", "4xx / 5xx", h.httpErrors, { warnAt: 1, badAt: 4 }),
     countMetric("brokenImages", "Broken images", h.brokenImages, { warnAt: 1 }),
-    vitalMetric("ttfbMs", "TTFB", h.ttfbMs, (v) => `${Math.round(v)} ms`, WEB_VITAL_BANDS.ttfbMs),
-    vitalMetric("lcpMs", "LCP", h.lcpMs, (v) => `${Math.round(v)} ms`, WEB_VITAL_BANDS.lcpMs),
-    vitalMetric("cls", "CLS", h.cls, (v) => String(v), WEB_VITAL_BANDS.cls),
+    vitalMetric("ttfbMs", "TTFB", h.ttfbMs, (v) => `${Math.round(v)} ms`),
+    vitalMetric("lcpMs", "LCP", h.lcpMs, (v) => `${Math.round(v)} ms`),
+    vitalMetric("cls", "CLS", h.cls, (v) => String(v)),
     countMetric("a11yViolations", "Accessibility", h.a11yViolations, { warnAt: 1, badAt: 11 }),
     h.slowestRequestMs != null
       ? {
@@ -450,7 +419,6 @@ function buildMetrics(h: SessionHealthSummary): BuiltMetric[] {
           label: "Slowest request",
           display: `${h.slowestRequestMs} ms`,
           tone: "info",
-          body: METRIC_HELP.slowestRequestMs.body,
         }
       : null,
   ];
@@ -463,12 +431,11 @@ function countMetric(
   value: number,
   opts: { warnAt?: number; badAt?: number; infoOnly?: boolean },
 ): BuiltMetric {
-  const help = METRIC_HELP[key];
   let tone: BuiltMetric["tone"] = "ok";
   if (opts.infoOnly) tone = value > 0 ? "info" : "ok";
   else if (opts.badAt != null && value >= opts.badAt) tone = "bad";
   else if (opts.warnAt != null && value >= opts.warnAt) tone = "warn";
-  return { key, label, display: String(value), tone, body: help.body, scoring: help.scoring };
+  return { key, label, display: String(value), tone };
 }
 
 function vitalMetric(
@@ -476,19 +443,11 @@ function vitalMetric(
   label: string,
   value: number | null | undefined,
   fmt: (v: number) => string,
-  bands: { good: string; needsImprovement: string; poor: string; meaning: string },
-): BuiltMetric | null {
+): BuiltMetric {
   if (value == null) {
-    return {
-      key,
-      label,
-      display: "Not measured",
-      tone: "neutral",
-      body: `${bands.meaning} This visit did not report a value (common for LCP on quick navigations or SPA transitions).`,
-    };
+    return { key, label, display: "Not measured", tone: "neutral" };
   }
-  const help = METRIC_HELP[key];
-  return { key, label, display: fmt(value), tone: "info", body: help.body };
+  return { key, label, display: fmt(value), tone: "info" };
 }
 
 function MetricCard({ metric }: { metric: BuiltMetric }) {
@@ -504,33 +463,10 @@ function MetricCard({ metric }: { metric: BuiltMetric }) {
     <div className={`rounded-[10px] border px-2.5 py-2 ${border}`}>
       <div className="text-[10px] font-semibold uppercase tracking-wide text-[#6B7280]">{metric.label}</div>
       <div className="text-[16px] font-semibold text-[#111827] dark:text-[#ededed]">{metric.display}</div>
-      <p className="mt-1 text-[11px] leading-snug text-[#4B5563] dark:text-[#d1d5db]">{metric.body}</p>
-      {metric.scoring && <ScoringRuleLine text={metric.scoring} />}
+      {metric.body ? (
+        <p className="mt-1 text-[11px] leading-snug text-[#4B5563] dark:text-[#d1d5db]">{metric.body}</p>
+      ) : null}
     </div>
-  );
-}
-
-/** Inline colour chips next to yellow / red / green mentions in scoring rules. */
-function ScoringRuleLine({ text }: { text: string }) {
-  const COLOR_WORDS: Record<string, string> = {
-    yellow: "#F59E0B",
-    red: "#EF4444",
-    green: "#22C55E",
-  };
-  const parts = text.split(/(\byellow\b|\bred\b|\bgreen\b)/gi);
-  return (
-    <p className="mt-1 flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[10px] font-medium text-[#6366F1]">
-      {parts.map((part, i) => {
-        const color = COLOR_WORDS[part.toLowerCase()];
-        if (!color) return <span key={i}>{part}</span>;
-        return (
-          <span key={i} className="inline-flex items-center gap-1">
-            <ColorChip color={color} label={part} size={10} showHex={false} />
-            <span>{part}</span>
-          </span>
-        );
-      })}
-    </p>
   );
 }
 
