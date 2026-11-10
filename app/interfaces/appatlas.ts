@@ -210,6 +210,12 @@ export type CanvasState = {
   recordedAs?: string;
 };
 
+export type A11yNodeDetail = {
+  target: string;
+  failureSummary?: string;
+  screenshotUrl?: string;
+};
+
 export type A11yIssue = {
   id: string;
   help: string;
@@ -218,12 +224,14 @@ export type A11yIssue = {
   target?: string;
   failureSummary?: string;
   screenshotUrl?: string;
+  nodeDetails?: A11yNodeDetail[];
 };
 
 export type SessionHealthSummary = {
   level: "ok" | "warn" | "bad";
   consoleErrors: number;
   consoleWarnings: number;
+  consoleWarningSamples?: string[];
   pageErrors: number;
   failedRequests: number;
   httpErrors: number;

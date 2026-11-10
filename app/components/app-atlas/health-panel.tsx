@@ -258,9 +258,17 @@ function GuideOverlay({ onClose }: { onClose: () => void }) {
                     {rule.id}
                   </span>
                   <span className="font-medium text-[#111827] dark:text-[#ededed]">{rule.title}</span>
+                  {rule.wcagId && (
+                    <span className="rounded bg-[#F3F4F6] px-1.5 py-0.5 text-[10px] font-medium text-[#374151]">
+                      WCAG {rule.wcagId} {rule.wcagName} ({rule.wcagLevel})
+                    </span>
+                  )}
                 </div>
                 <p className="mt-1 text-[#4B5563] dark:text-[#d1d5db]">
                   <span className="font-medium">Definition:</span> {rule.definition}
+                </p>
+                <p className="mt-1 text-[#4B5563] dark:text-[#d1d5db]">
+                  <span className="font-medium">What is missing:</span> {rule.missing}
                 </p>
                 <p className="mt-1 text-[#4B5563] dark:text-[#d1d5db]">
                   <span className="font-medium">Example:</span> {rule.example}
@@ -268,11 +276,11 @@ function GuideOverlay({ onClose }: { onClose: () => void }) {
                 {rule.id === "color-contrast" && (
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <span className="text-[11px] text-[#6B7280]">Fail example</span>
-                    <ColorChip color="#A78BFA" label="light purple on white" />
+                    <ColorChip color="#0F9D58" label="light green on white" />
                     <span className="text-[11px] text-[#6B7280]">on</span>
                     <ColorChip color="#FFFFFF" label="white" />
                     <span className="text-[11px] text-[#6B7280]">Pass example</span>
-                    <ColorChip color="#4C1D95" label="deep purple on white" />
+                    <ColorChip color="#0B7A44" label="deeper green on white" />
                     <span className="text-[11px] text-[#6B7280]">on</span>
                     <ColorChip color="#FFFFFF" label="white" />
                   </div>
@@ -300,15 +308,29 @@ function A11yIssueOverlay({
   onClose: () => void;
   onFullscreen: (src: string) => void;
 }) {
-  const src = issue.screenshotUrl || screenShot;
   const guide = A11Y_RULE_GUIDE.find((g) => g.id === issue.id);
+  const details =
+    issue.nodeDetails && issue.nodeDetails.length
+      ? issue.nodeDetails
+      : issue.target || issue.screenshotUrl || issue.failureSummary
+        ? [
+            {
+              target: issue.target || "",
+              failureSummary: issue.failureSummary,
+              screenshotUrl: issue.screenshotUrl,
+            },
+          ]
+        : [];
+  const shown = details.length;
+  const hidden = Math.max(0, issue.nodes - shown);
+
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 p-4" onClick={onClose}>
       <div
         role="dialog"
         aria-modal="true"
         aria-label={`${issue.id} accessibility issue`}
-        className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-[12px] border border-[#E5E7EB] bg-white p-4 shadow-xl dark:border-[#333] dark:bg-[#0f0f0f]"
+        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[12px] border border-[#E5E7EB] bg-white p-4 shadow-xl dark:border-[#333] dark:bg-[#0f0f0f]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-start justify-between gap-3">
@@ -321,6 +343,11 @@ function A11yIssueOverlay({
               <span className="text-[11px] text-[#9ca3af]">
                 {issue.nodes} node{issue.nodes === 1 ? "" : "s"}
               </span>
+              {guide?.wcagId && (
+                <span className="rounded bg-[#F3F4F6] px-1.5 py-0.5 text-[10px] font-medium text-[#374151]">
+                  WCAG {guide.wcagId} · {guide.wcagName} ({guide.wcagLevel})
+                </span>
+              )}
             </div>
             <div className="mt-1 text-[14px] font-semibold text-[#111827] dark:text-[#ededed]">{issue.help}</div>
           </div>
@@ -329,43 +356,70 @@ function A11yIssueOverlay({
           </button>
         </div>
 
-        {src ? (
-          <button
-            type="button"
-            className="group relative mb-3 block w-full overflow-hidden rounded-lg border border-[#E5E7EB] dark:border-[#333]"
-            onClick={() => onFullscreen(atlasUrl(src))}
-            title="View full screen"
-          >
-            <img src={atlasUrl(src)} alt={`${issue.id} crop`} className="max-h-64 w-full object-contain bg-[#F8FAFC]" />
-            <span className="absolute right-2 bottom-2 rounded bg-black/65 px-2 py-1 text-[10px] text-white opacity-90 group-hover:opacity-100">
-              Full screen
-            </span>
-          </button>
-        ) : null}
+        {guide && (
+          <div className="mb-3 rounded-lg border border-[#E5E7EB] bg-[#FAFAFA] p-2.5 text-[12px] leading-relaxed text-[#4B5563] dark:border-[#2a2a2a] dark:bg-[#141414] dark:text-[#d1d5db]">
+            <div className="font-medium text-[#111827] dark:text-[#ededed]">{guide.title}</div>
+            <p className="mt-1">{guide.definition}</p>
+            <p className="mt-1">
+              <span className="font-medium text-[#111827] dark:text-[#ededed]">What is missing:</span> {guide.missing}
+            </p>
+            <p className="mt-1">
+              <span className="font-medium text-[#111827] dark:text-[#ededed]">Example:</span> {guide.example}
+            </p>
+            <p className="mt-1">
+              <span className="font-medium text-[#111827] dark:text-[#ededed]">Fix:</span> {guide.fix}
+            </p>
+          </div>
+        )}
 
-        <div className="space-y-2 text-[12px] leading-relaxed text-[#4B5563] dark:text-[#d1d5db]">
-          {issue.failureSummary && (
-            <p>
-              <span className="font-medium text-[#111827] dark:text-[#ededed]">Failure:</span> {issue.failureSummary}
-            </p>
+        <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#9ca3af]">
+          Failing nodes ({shown}
+          {hidden > 0 ? ` of ${issue.nodes}` : ""})
+        </div>
+        <div className="space-y-3">
+          {details.map((node, i) => {
+            const src = node.screenshotUrl || (i === 0 ? issue.screenshotUrl : undefined) || (i === 0 ? screenShot : undefined);
+            return (
+              <div key={`${node.target}-${i}`} className="rounded-lg border border-[#E5E7EB] p-2.5 dark:border-[#2a2a2a]">
+                <div className="mb-1 text-[11px] font-semibold text-[#6366F1]">Node {i + 1}</div>
+                {src ? (
+                  <button
+                    type="button"
+                    className="group relative mb-2 block w-full overflow-hidden rounded-md border border-[#E5E7EB] dark:border-[#333]"
+                    onClick={() => onFullscreen(atlasUrl(src))}
+                    title="View full screen"
+                  >
+                    <img
+                      src={atlasUrl(src)}
+                      alt={`${issue.id} node ${i + 1}`}
+                      className="max-h-48 w-full object-contain bg-[#F8FAFC]"
+                    />
+                    <span className="absolute right-2 bottom-2 rounded bg-black/65 px-2 py-1 text-[10px] text-white opacity-90 group-hover:opacity-100">
+                      Full screen
+                    </span>
+                  </button>
+                ) : null}
+                {node.failureSummary && (
+                  <p className="text-[12px] leading-relaxed text-[#4B5563] dark:text-[#d1d5db]">
+                    <span className="font-medium text-[#111827] dark:text-[#ededed]">Failure:</span> {node.failureSummary}
+                  </p>
+                )}
+                {node.target && (
+                  <p className="mt-1 break-all font-mono text-[11px] text-[#6B7280]">
+                    <span className="font-sans font-medium text-[#111827] dark:text-[#ededed]">Target: </span>
+                    {node.target}
+                  </p>
+                )}
+              </div>
+            );
+          })}
+          {details.length === 0 && (
+            <p className="text-[12px] text-[#6B7280]">No per-node crops were captured for this rule. Re-record to collect them.</p>
           )}
-          {issue.target && (
-            <p className="break-all font-mono text-[11px] text-[#6B7280]">
-              <span className="font-sans font-medium text-[#111827] dark:text-[#ededed]">Target: </span>
-              {issue.target}
+          {hidden > 0 && (
+            <p className="text-[11px] text-[#6B7280]">
+              +{hidden} more failing node{hidden === 1 ? "" : "s"} not shown (cap {shown} per rule).
             </p>
-          )}
-          <p>
-            <span className="font-medium text-[#111827] dark:text-[#ededed]">Fix hint:</span> {a11yFixHint(issue.id)}
-          </p>
-          {guide && (
-            <div className="rounded-lg border border-[#E5E7EB] bg-[#FAFAFA] p-2.5 dark:border-[#2a2a2a] dark:bg-[#141414]">
-              <div className="font-medium text-[#111827] dark:text-[#ededed]">{guide.title}</div>
-              <p className="mt-1">{guide.definition}</p>
-              <p className="mt-1">
-                <span className="font-medium">Example:</span> {guide.example}
-              </p>
-            </div>
           )}
         </div>
       </div>
@@ -402,9 +456,16 @@ type BuiltMetric = {
 };
 
 function buildMetrics(h: SessionHealthSummary): BuiltMetric[] {
+  const warnSamples = h.consoleWarningSamples || [];
   const rows: Array<BuiltMetric | null> = [
     countMetric("consoleErrors", "Console errors", h.consoleErrors, { warnAt: 1, badAt: 3 }),
-    countMetric("consoleWarnings", "Console warnings", h.consoleWarnings, { infoOnly: true }),
+    {
+      ...countMetric("consoleWarnings", "Console warnings", h.consoleWarnings, { infoOnly: true }),
+      body:
+        warnSamples.length > 0
+          ? `Context only (not badge colour). Samples: ${warnSamples.slice(0, 3).join(" · ")}${warnSamples.length > 3 ? "…" : ""}`
+          : METRIC_HELP.consoleWarnings.body,
+    },
     countMetric("pageErrors", "Page errors", h.pageErrors, { badAt: 1 }),
     countMetric("failedRequests", "Failed requests", h.failedRequests, { warnAt: 1 }),
     countMetric("httpErrors", "4xx / 5xx", h.httpErrors, { warnAt: 1, badAt: 4 }),
@@ -445,7 +506,11 @@ function vitalMetric(
   fmt: (v: number) => string,
 ): BuiltMetric {
   if (value == null) {
-    return { key, label, display: "Not measured", tone: "neutral" };
+    const why =
+      key === "lcpMs"
+        ? "Not measured on this visit. LCP often stays empty on SPA soft navigations or short dwell times; it is informational and not required for the badge."
+        : "Not measured on this visit.";
+    return { key, label, display: "Not measured", tone: "neutral", body: why };
   }
   return { key, label, display: fmt(value), tone: "info" };
 }
@@ -499,10 +564,4 @@ function ImpactPill({ impact }: { impact: string }) {
       {impact}
     </span>
   );
-}
-
-function a11yFixHint(id: string): string {
-  const guide = A11Y_RULE_GUIDE.find((g) => g.id === id);
-  if (guide) return guide.fix;
-  return "Review the failing nodes and apply the WCAG guidance for this rule.";
 }
