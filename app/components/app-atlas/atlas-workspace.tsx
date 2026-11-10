@@ -28,6 +28,7 @@ import { SessionSetupModal } from "./session-setup-modal";
 import { RecordingView } from "./recording-view";
 import { ReplayPlayer } from "./replay-player";
 import { PerformanceView } from "./performance-view";
+import { PhaseCToolsModal } from "./phase-c-tools";
 import {
   emulationBodyFromPrefs,
   loadEmulationPrefs,
@@ -110,6 +111,14 @@ export default function AtlasWorkspace() {
   const [focusNodeId, setFocusNodeId] = useState<string | null>(null);
   const [panelNodeId, setPanelNodeId] = useState<string | null>(null);
   const [connectFor, setConnectFor] = useState<CanvasSummary | null>(null);
+  const [phaseCOpen, setPhaseCOpen] = useState(false);
+  const [phaseCFlags, setPhaseCFlags] = useState({
+    visualDiff: false,
+    responsiveSheet: false,
+    shareExport: false,
+  });
+  const [changedNodeIds, setChangedNodeIds] = useState<string[]>([]);
+  const [changedSinceRelease, setChangedSinceRelease] = useState<string | null>(null);
 
   // Swagger is connected per canvas and is independent of Jira (canvas.jiraProjectKey).
   const [swagger, setSwagger] = useState<CanvasSwagger | null>(null);
@@ -120,7 +129,29 @@ export default function AtlasWorkspace() {
   useEffect(() => {
     setSwagger(selectedId ? getCanvasSwagger(selectedId) : null);
     setView("screens");
+    setChangedNodeIds([]);
+    setChangedSinceRelease(null);
   }, [selectedId]);
+
+  useEffect(() => {
+    const pid = project?.id || projectId;
+    if (!pid) return;
+    let cancelled = false;
+    void client
+      .getProjectFeatures(pid)
+      .then((r) => {
+        if (cancelled) return;
+        setPhaseCFlags({
+          visualDiff: Boolean(r.features.visualDiff),
+          responsiveSheet: Boolean(r.features.responsiveSheet),
+          shareExport: Boolean(r.features.shareExport),
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [client, project?.id, projectId]);
 
   const onSwaggerChange = (conn: CanvasSwagger | null) => {
     if (connectFor?.id === selectedId) {
@@ -571,12 +602,26 @@ export default function AtlasWorkspace() {
             <ApiTestingView spec={apiSpec} onReload={apiSpec.reload} specUrl={swagger.specUrl} />
           ) : canvas ? (
             <>
+              {(phaseCFlags.visualDiff || phaseCFlags.responsiveSheet || phaseCFlags.shareExport) && (
+                <div className="absolute top-3 right-4 z-10">
+                  <button
+                    type="button"
+                    data-testid="phase-c-tools"
+                    onClick={() => setPhaseCOpen(true)}
+                    className="rounded-[8px] border border-[#E6E1F5] bg-white px-3 py-1.5 text-[12px] font-medium text-[#8664F2] shadow-sm hover:border-[#8664F2] dark:border-[#2a2a2a] dark:bg-[#141414]"
+                  >
+                    Phase C tools
+                  </button>
+                </div>
+              )}
               <CanvasFlow
                 key={canvas.id}
                 nodes={canvas.nodes}
                 edges={canvas.edges}
                 editable={canvas.isMine}
                 focusNodeId={focusNodeId}
+                changedNodeIds={changedNodeIds}
+                changedSinceRelease={changedSinceRelease}
                 selectedNodeId={panelNodeId}
                 onSelectNode={setPanelNodeId}
               />
@@ -641,6 +686,20 @@ export default function AtlasWorkspace() {
             />
           )}
           {replayOpen && canvas && <ReplayPlayer canvas={canvas} onClose={() => setReplayOpen(false)} />}
+          {phaseCOpen && canvas && (
+            <PhaseCToolsModal
+              client={client}
+              canvasId={canvas.id}
+              canvasName={canvas.name}
+              canvases={canvases}
+              flags={phaseCFlags}
+              onClose={() => setPhaseCOpen(false)}
+              onChangedNodes={(ids, label) => {
+                setChangedNodeIds(ids);
+                setChangedSinceRelease(label);
+              }}
+            />
+          )}
         </div>
       </div>
 

@@ -11,6 +11,9 @@ type Flags = {
   simulate: boolean;
   jiraBug: boolean;
   savedLogins: boolean;
+  visualDiff: boolean;
+  responsiveSheet: boolean;
+  shareExport: boolean;
 };
 
 const PHASE_A: { key: keyof Flags; title: string; body: string }[] = [
@@ -23,6 +26,12 @@ const PHASE_B: { key: keyof Flags; title: string; body: string }[] = [
   { key: "simulate", title: "What if? simulation", body: "Arm one-shot API failures while recording (dev/test/staging only)." },
   { key: "jiraBug", title: "Jira bug report", body: "One-click Bug with evidence from an AC or state." },
   { key: "savedLogins", title: "Saved logins", body: "Record as a saved role; cookies encrypted at rest, never shared." },
+];
+
+const PHASE_C: { key: keyof Flags; title: string; body: string }[] = [
+  { key: "visualDiff", title: "Visual diff", body: "Compare screens across two canvases/releases with slider and % changed." },
+  { key: "responsiveSheet", title: "Responsive contact sheet", body: "Phone / tablet / laptop captures with overflow warnings." },
+  { key: "shareExport", title: "Share & export", body: "Read-only share link with expiry and PDF canvas poster." },
 ];
 
 const ENVS = ["dev", "test", "staging", "production", "unknown"] as const;
@@ -112,6 +121,9 @@ export function ProjectFeatureFlags({ projectId }: { projectId: string }) {
           simulate: Boolean((r.features as Flags).simulate),
           jiraBug: Boolean((r.features as Flags).jiraBug),
           savedLogins: Boolean((r.features as Flags).savedLogins),
+          visualDiff: Boolean((r.features as Flags).visualDiff),
+          responsiveSheet: Boolean((r.features as Flags).responsiveSheet),
+          shareExport: Boolean((r.features as Flags).shareExport),
         });
         setEnvironment((r as { environment?: string }).environment || "unknown");
         setDefaults({
@@ -121,6 +133,9 @@ export function ProjectFeatureFlags({ projectId }: { projectId: string }) {
           simulate: Boolean((r.defaults as Flags).simulate),
           jiraBug: Boolean((r.defaults as Flags).jiraBug),
           savedLogins: Boolean((r.defaults as Flags).savedLogins),
+          visualDiff: Boolean((r.defaults as Flags).visualDiff),
+          responsiveSheet: Boolean((r.defaults as Flags).responsiveSheet),
+          shareExport: Boolean((r.defaults as Flags).shareExport),
         });
       })
       .catch((err: unknown) => {
@@ -143,6 +158,9 @@ export function ProjectFeatureFlags({ projectId }: { projectId: string }) {
         simulate: Boolean(r.features.simulate),
         jiraBug: Boolean(r.features.jiraBug),
         savedLogins: Boolean(r.features.savedLogins),
+        visualDiff: Boolean(r.features.visualDiff),
+        responsiveSheet: Boolean(r.features.responsiveSheet),
+        shareExport: Boolean(r.features.shareExport),
       });
       setEnvironment(r.environment || nextEnv);
     } catch (err: unknown) {
@@ -219,6 +237,30 @@ export function ProjectFeatureFlags({ projectId }: { projectId: string }) {
               </span>
             </label>
             {PHASE_B.map((row) => (
+              <ToggleRow
+                key={row.key}
+                title={row.title}
+                body={row.body}
+                on={flags[row.key]}
+                disabled={saving}
+                onToggle={() => void toggle(row.key)}
+              />
+            ))}
+          </div>
+
+          <div
+            data-testid="phase-c-features"
+            style={{
+              marginTop: 18,
+              paddingTop: 14,
+              borderTop: "1px solid var(--line)",
+            }}
+          >
+            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>Phase C features</div>
+            <p style={{ fontSize: 12, color: "#6B7280", marginBottom: 12 }}>
+              Visual diff, responsive contact sheet, and share / PDF export. Default OFF.
+            </p>
+            {PHASE_C.map((row) => (
               <ToggleRow
                 key={row.key}
                 title={row.title}

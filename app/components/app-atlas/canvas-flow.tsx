@@ -77,11 +77,23 @@ type Props = {
   /** Highlighted node (its side panel is open). */
   selectedNodeId?: string | null;
   onSelectNode?: (id: string | null) => void;
+  /** Phase C visual-diff: node ids that changed vs a release. */
+  changedNodeIds?: string[];
+  changedSinceRelease?: string | null;
 };
 
 type Preview = { url: string; title: string };
 
-function Flow({ nodes, edges, editable, focusNodeId, selectedNodeId, onSelectNode }: Props) {
+function Flow({
+  nodes,
+  edges,
+  editable,
+  focusNodeId,
+  selectedNodeId,
+  onSelectNode,
+  changedNodeIds,
+  changedSinceRelease,
+}: Props) {
   const [filter, setFilter] = useState<LegendFilter>(null);
   const [legendOpen, setLegendOpen] = useState(false);
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -98,6 +110,8 @@ function Flow({ nodes, edges, editable, focusNodeId, selectedNodeId, onSelectNod
   const positions = useMemo(() => layout(nodes, edges), [nodes, edges]);
   const hl = useMemo(() => highlighted(nodes, edges, filter), [nodes, edges, filter]);
 
+  const changedSet = useMemo(() => new Set(changedNodeIds ?? []), [changedNodeIds]);
+
   const flowNodes = useMemo<AtlasScreenNode[]>(
     () =>
       nodes.map((screen) => ({
@@ -109,9 +123,10 @@ function Flow({ nodes, edges, editable, focusNodeId, selectedNodeId, onSelectNod
           dimmed: hl ? !hl.nodeIds.has(screen.id) : false,
           selected: (selectedNodeId ?? focusNodeId) === screen.id,
           onOpenShot: (url: string) => setPreview({ url, title: screen.title || screen.path }),
+          changedSinceRelease: changedSet.has(screen.id) ? changedSinceRelease || "baseline" : null,
         },
       })),
-    [nodes, positions, hl, focusNodeId, selectedNodeId],
+    [nodes, positions, hl, focusNodeId, selectedNodeId, changedSet, changedSinceRelease],
   );
 
   const flowEdges = useMemo<Edge[]>(

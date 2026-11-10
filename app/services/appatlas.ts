@@ -99,6 +99,9 @@ export function atlasClient({ instance, accounts }: Msal) {
           simulate?: boolean;
           jiraBug?: boolean;
           savedLogins?: boolean;
+          visualDiff?: boolean;
+          responsiveSheet?: boolean;
+          shareExport?: boolean;
         };
         environment?: string;
         defaults: {
@@ -108,6 +111,9 @@ export function atlasClient({ instance, accounts }: Msal) {
           simulate?: boolean;
           jiraBug?: boolean;
           savedLogins?: boolean;
+          visualDiff?: boolean;
+          responsiveSheet?: boolean;
+          shareExport?: boolean;
         };
       }>(`/project-features/${encodeURIComponent(projectId)}`),
     setProjectFeatures: (
@@ -119,6 +125,9 @@ export function atlasClient({ instance, accounts }: Msal) {
         simulate: boolean;
         jiraBug: boolean;
         savedLogins: boolean;
+        visualDiff: boolean;
+        responsiveSheet: boolean;
+        shareExport: boolean;
         environment: string;
       }>,
     ) =>
@@ -131,6 +140,9 @@ export function atlasClient({ instance, accounts }: Msal) {
           simulate: boolean;
           jiraBug: boolean;
           savedLogins: boolean;
+          visualDiff: boolean;
+          responsiveSheet: boolean;
+          shareExport: boolean;
         };
         environment: string;
       }>(`/project-features/${encodeURIComponent(projectId)}`, json("PUT", body)),
@@ -263,6 +275,77 @@ export function atlasClient({ instance, accounts }: Msal) {
         >;
       }>(`/sit/coverage${q}`);
     },
+
+    /** Phase C1: visual diff vs a baseline / release canvas (match by path). */
+    visualDiff: (
+      canvasId: string,
+      body: {
+        rightCanvasId: string;
+        releaseLabel?: string;
+        threshold?: number;
+        ignoreRegions?: Array<{ x: number; y: number; width: number; height: number }>;
+        nodeIds?: string[];
+      },
+    ) =>
+      request<{
+        leftCanvasId: string;
+        rightCanvasId: string;
+        releaseLabel: string | null;
+        pairs: Array<{
+          path: string;
+          leftNodeId: string;
+          rightNodeId: string;
+          leftUrl: string;
+          rightUrl: string;
+          diffUrl: string;
+          percentChanged: number;
+          changed: boolean;
+          width: number;
+          height: number;
+        }>;
+        changedNodeIds: string[];
+        summary: { compared: number; changed: number; skipped: number };
+      }>(`/canvases/${canvasId}/visual-diff`, json("POST", body)),
+    /** Phase C2: probe whether a Run engine exists, then build phone/tablet/laptop sheet. */
+    responsiveSheetEngine: (canvasId: string) =>
+      request<{
+        engine: {
+          actionRun: boolean;
+          videoReplay: boolean;
+          scriptedDrive: boolean;
+          contactSheetStrategy: string;
+          note: string;
+        };
+      }>(`/canvases/${canvasId}/responsive-sheet`),
+    responsiveSheet: (canvasId: string, body: { maxScreens?: number; savedLoginId?: string } = {}) =>
+      request<{
+        canvasId: string;
+        engine: { actionRun: boolean; note: string };
+        rows: Array<{
+          nodeId: string;
+          path: string;
+          url: string;
+          frames: Array<{
+            presetId: string;
+            label: string;
+            category: string;
+            width: number;
+            height: number;
+            screenshotUrl: string;
+            warnings: Array<{ kind: string; message: string; detail?: string }>;
+          }>;
+        }>;
+        posterPngUrl: string | null;
+        createdAt: number;
+      }>(`/canvases/${canvasId}/responsive-sheet`, json("POST", body)),
+    /** Phase C3: read-only share link + PDF poster. */
+    createShareLink: (canvasId: string, body: { expiresInHours?: number } = {}) =>
+      request<{ token: string; urlPath: string; expiresAt: number }>(
+        `/canvases/${canvasId}/share`,
+        json("POST", body),
+      ),
+    exportCanvasPoster: (canvasId: string) =>
+      request<{ pdfUrl: string; bytes: number }>(`/canvases/${canvasId}/poster`, json("POST", {})),
 
     /** Teams Phase 1: store team/channel ids on the canvas (config, not a second login). */
     connectTeams: (canvasId: string, body: { teamId: string; channelId: string; teamName?: string; channelName?: string }) =>

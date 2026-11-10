@@ -10,6 +10,8 @@ export type ScreenNodeData = {
   dimmed: boolean;
   selected: boolean;
   onOpenShot: (url: string) => void;
+  /** Phase C: set when visual-diff found a change vs a named release. */
+  changedSinceRelease?: string | null;
 };
 
 export type AtlasScreenNode = Node<ScreenNodeData, "screen">;
@@ -20,7 +22,7 @@ export const NODE_HEIGHT = 250;
 const MAX_CHIPS = 5;
 
 export function ScreenNode({ data }: NodeProps<AtlasScreenNode>) {
-  const { screen, dimmed, selected, onOpenShot } = data;
+  const { screen, dimmed, selected, onOpenShot, changedSinceRelease } = data;
   const chips = screen.pageObjects.slice(0, MAX_CHIPS);
   const more = screen.pageObjects.length - chips.length;
 
@@ -38,6 +40,14 @@ export function ScreenNode({ data }: NodeProps<AtlasScreenNode>) {
         </div>
         <div className="ml-2 flex shrink-0 items-center gap-1">
           {screen.health && <HealthBadge health={screen.health} />}
+          {changedSinceRelease && (
+            <span
+              title={`Changed since ${changedSinceRelease}`}
+              className="rounded-[4px] bg-[#FEE2E2] px-1.5 py-0.5 text-[9px] font-medium text-[#991B1B]"
+            >
+              Changed since {changedSinceRelease}
+            </span>
+          )}
           <span className="rounded-[4px] bg-[#F3F4F6] dark:bg-[#2a2a2a] px-1.5 py-0.5 text-[9px] text-[#5E6066] dark:text-[#9ca3af]">
             States · {screen.stateCount}
           </span>
