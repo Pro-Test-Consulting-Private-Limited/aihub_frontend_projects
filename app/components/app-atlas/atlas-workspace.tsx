@@ -509,7 +509,8 @@ export default function AtlasWorkspace() {
                 onClick={() => {
                   setTab(id);
                   if (id === "sit") setView("sit");
-                  if (id === "canvas") setView((v) => (v === "sit" ? "screens" : v));
+                  else if (id === "api") setView("api");
+                  else if (id === "canvas") setView((v) => (v === "sit" || v === "api" ? "screens" : v));
                 }}
                 className={`flex h-[32px] items-center gap-1.5 rounded-[8px] px-3 text-[13px] ${
                   tab === id
@@ -562,7 +563,7 @@ export default function AtlasWorkspace() {
       )}
 
       <div className="flex min-h-0 flex-1">
-        {(tab === "canvas" || tab === "sit") && explorerOpen && !recording && (
+        {(tab === "canvas" || tab === "sit" || tab === "api") && explorerOpen && !recording && (
           <Explorer
             canvases={visible}
             loading={canvasesLoading}
@@ -595,11 +596,12 @@ export default function AtlasWorkspace() {
             onView={(v) => {
               setView(v);
               if (v === "sit") setTab("sit");
+              else if (v === "api") setTab("api");
               else setTab("canvas");
             }}
           />
         )}
-        {(tab === "canvas" || tab === "sit") && !explorerOpen && !recording && (
+        {(tab === "canvas" || tab === "sit" || tab === "api") && !explorerOpen && !recording && (
           <button
             type="button"
             onClick={() => setExplorerOpen(true)}
@@ -630,6 +632,24 @@ export default function AtlasWorkspace() {
               focusTicketKey={sitFocus?.ticketKey}
               focusTestType={sitFocus?.testType}
             />
+          ) : tab === "api" || (tab === "canvas" && view === "api") ? (
+            swagger ? (
+              <ApiTestingView spec={apiSpec} onReload={apiSpec.reload} specUrl={swagger.specUrl} />
+            ) : (
+              <EmptyState
+                title="Connect Swagger to test APIs"
+                body={
+                  canvas
+                    ? "This canvas has no OpenAPI spec yet. Connect Swagger from the Explorer, then open API Testing again."
+                    : "Select a canvas in the Explorer, connect Swagger, then come back to API Testing."
+                }
+                action={
+                  canvas
+                    ? { label: "Connect apps", onClick: () => setConnectFor(canvas) }
+                    : undefined
+                }
+              />
+            )
           ) : tab === "coverage" ? (
             <CoverageOverview
               client={client}
@@ -658,8 +678,6 @@ export default function AtlasWorkspace() {
                 setRecording(null);
               }}
             />
-          ) : canvas && view === "api" && swagger ? (
-            <ApiTestingView spec={apiSpec} onReload={apiSpec.reload} specUrl={swagger.specUrl} />
           ) : canvas ? (
             <>
               {(phaseCFlags.visualDiff || phaseCFlags.responsiveSheet || phaseCFlags.shareExport) && (
