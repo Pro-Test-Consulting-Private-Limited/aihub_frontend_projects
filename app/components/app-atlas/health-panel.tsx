@@ -139,10 +139,12 @@ function ColorChip({
   color,
   label,
   size = 12,
+  showHex = true,
 }: {
   color: string;
   label: string;
   size?: number;
+  showHex?: boolean;
 }) {
   return (
     <button
@@ -158,7 +160,7 @@ function ColorChip({
         className="inline-block rounded-sm border border-black/15 dark:border-white/20"
         style={{ width: size, height: size, background: color }}
       />
-      <span className="font-mono">{color}</span>
+      {showHex && <span className="font-mono">{color}</span>}
     </button>
   );
 }
@@ -498,24 +500,37 @@ function MetricCard({ metric }: { metric: BuiltMetric }) {
         : metric.tone === "ok"
           ? "border-[#BBF7D0] bg-[#F0FDF4]"
           : "border-[#E5E7EB] bg-white dark:border-[#2a2a2a] dark:bg-[#141414]";
-  const chip =
-    metric.tone === "bad"
-      ? "#EF4444"
-      : metric.tone === "warn"
-        ? "#F59E0B"
-        : metric.tone === "ok"
-          ? "#22C55E"
-          : null;
   return (
     <div className={`rounded-[10px] border px-2.5 py-2 ${border}`}>
-      <div className="flex items-center justify-between gap-2">
-        <div className="text-[10px] font-semibold uppercase tracking-wide text-[#6B7280]">{metric.label}</div>
-        {chip && <ColorChip color={chip} label={metric.tone} size={10} />}
-      </div>
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-[#6B7280]">{metric.label}</div>
       <div className="text-[16px] font-semibold text-[#111827] dark:text-[#ededed]">{metric.display}</div>
       <p className="mt-1 text-[11px] leading-snug text-[#4B5563] dark:text-[#d1d5db]">{metric.body}</p>
-      {metric.scoring && <p className="mt-1 text-[10px] font-medium text-[#6366F1]">{metric.scoring}</p>}
+      {metric.scoring && <ScoringRuleLine text={metric.scoring} />}
     </div>
+  );
+}
+
+/** Inline colour chips next to yellow / red / green mentions in scoring rules. */
+function ScoringRuleLine({ text }: { text: string }) {
+  const COLOR_WORDS: Record<string, string> = {
+    yellow: "#F59E0B",
+    red: "#EF4444",
+    green: "#22C55E",
+  };
+  const parts = text.split(/(\byellow\b|\bred\b|\bgreen\b)/gi);
+  return (
+    <p className="mt-1 flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[10px] font-medium text-[#6366F1]">
+      {parts.map((part, i) => {
+        const color = COLOR_WORDS[part.toLowerCase()];
+        if (!color) return <span key={i}>{part}</span>;
+        return (
+          <span key={i} className="inline-flex items-center gap-1">
+            <ColorChip color={color} label={part} size={10} showHex={false} />
+            <span>{part}</span>
+          </span>
+        );
+      })}
+    </p>
   );
 }
 
