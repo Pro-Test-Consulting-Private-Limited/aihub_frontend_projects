@@ -12,17 +12,17 @@ export function HealthPanel({ node }: { node: CanvasNode }) {
   const [openIssue, setOpenIssue] = useState<string | null>(null);
 
   const metrics = useMemo(() => (h ? buildMetrics(h) : []), [h]);
-  const a11yIssues = useMemo(() => {
-    if (!h) return [] as A11yIssue[];
+  const a11yIssues = useMemo((): A11yIssue[] => {
+    if (!h) return [];
     if (h.a11yIssues?.length) return h.a11yIssues;
-    return (h.a11ySummary || []).map((line) => {
+    return (h.a11ySummary || []).map((line): A11yIssue => {
       const idx = line.indexOf(":");
       return {
         id: idx > 0 ? line.slice(0, idx).trim() : "a11y",
         help: idx > 0 ? line.slice(idx + 1).trim() : line,
         impact: null,
         nodes: 1,
-      } satisfies A11yIssue;
+      };
     });
   }, [h]);
 
