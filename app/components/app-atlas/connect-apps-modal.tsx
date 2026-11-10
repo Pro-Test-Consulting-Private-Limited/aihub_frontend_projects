@@ -58,14 +58,15 @@ export function ConnectAppsModal({
 }) {
   const router = useRouter();
   const { jira, swagger: swaggerIntegration, loading: statusLoading } = useIntegrationStatus();
-  // Teams uses the same Entra sign-in (Graph ChannelMessage.Send consent) — not a separate login.
+  // Teams uses the same Entra sign-in (Graph scopes) — not a separate login.
+  const teamsConnected = true;
   const integrated: Record<AppId, boolean> = {
     jira: jira.connected,
     swagger: swaggerIntegration.connected,
     linear: false,
     redocly: false,
     stoplight: false,
-    teams: true,
+    teams: teamsConnected,
     slack: false,
   };
   const [step, setStep] = useState<"apps" | "jira" | "swagger" | "teams">("apps");
@@ -102,7 +103,11 @@ export function ConnectAppsModal({
               <div className="mt-3 flex gap-3">
                 {cat.apps.map((app) => {
                   const ok = integrated[app.id];
-                  const connected = (app.id === "jira" && !!canvas.jiraProjectKey) || (app.id === "swagger" && !!swagger);
+                  const linkedTeams = (canvas as CanvasSummary & { teams?: { teamId?: string } | null }).teams;
+                  const connected =
+                    (app.id === "jira" && !!canvas.jiraProjectKey) ||
+                    (app.id === "swagger" && !!swagger) ||
+                    (app.id === "teams" && !!linkedTeams?.teamId);
                   const selected = picked === app.id;
                   return (
                     <button
@@ -162,7 +167,13 @@ export function ConnectAppsModal({
       ) : step === "jira" ? (
         <JiraStep client={client} canvas={canvas} siteName={jira.siteName} onBack={() => setStep("apps")} onConnected={onConnected} />
       ) : step === "teams" ? (
-        <TeamsStep client={client} canvas={canvas} onBack={() => setStep("apps")} onConnected={onConnected} />
+        <TeamsStep
+          client={client}
+          canvas={canvas}
+          teamsConnected={teamsConnected}
+          onBack={() => setStep("apps")}
+          onConnected={onConnected}
+        />
       ) : (
         <SwaggerStep canvas={canvas} integration={swaggerIntegration} current={swagger} onBack={() => setStep("apps")} onChange={onSwaggerChange} />
       )}
@@ -173,29 +184,97 @@ export function ConnectAppsModal({
 function TeamsStep({
   client,
   canvas,
+  teamsConnected,
   onBack,
   onConnected,
 }: {
   client: AtlasClient;
-  canvas: CanvasSummary;
+  canvas: CanvasSummary & {
+    teams?: { teamId: string; channelId: string; teamName?: string | null; channelName?: string | null } | null;
+  };
+  teamsConnected: boolean;
   onBack: () => void;
   onConnected: (c: Canvas) => void;
 }) {
-  const [teamId, setTeamId] = useState("");
-  const [channelId, setChannelId] = useState("");
-  const [channelName, setChannelName] = useState("requirement-clarifications");
-  const [busy, setBusy] = useState<"link" | "disconnect" | null>(null);
+  const router = useRouter();
+  const linked = canvas.teams ?? null;
+  const [teamsList, setTeamsList] = useState<Array<{ id: string; displayName: string }> | null>(null);
+  const [channels, setChannels] = useState<Array<{ id: string; displayName: string }> | null>(null);
+  const [teamId, setTeamId] = useState(linked?.teamId ?? "");
+  const [channelId, setChannelId] = useState(linked?.channelId ?? "");
+  const [busy, setBusy] = useState<"load" | "channels" | "link" | "disconnect" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!teamsConnected) return;
+    let cancelled = false;
+    setBusy("load");
+    setError(null);
+    client
+      .listJoinedTeams()
+      .then((res) => {
+        if (cancelled) return;
+        const items = res.items ?? [];
+        setTeamsList(items);
+        setTeamId((prev) => prev || items[0]?.id || "");
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Could not load Teams.");
+      })
+      .finally(() => {
+        if (!cancelled) setBusy(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, teamsConnected]);
+
+  useEffect(() => {
+    if (!teamsConnected || !teamId) {
+      setChannels(null);
+      return;
+    }
+    let cancelled = false;
+    setBusy("channels");
+    setError(null);
+    setChannelId("");
+    client
+      .listTeamChannels(teamId)
+      .then((res) => {
+        if (cancelled) return;
+        const items = res.items ?? [];
+        setChannels(items);
+        const prefer =
+          (linked?.teamId === teamId && linked.channelId && items.find((c) => c.id === linked.channelId)?.id) ||
+          items[0]?.id ||
+          "";
+        setChannelId(prefer);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Could not load channels.");
+      })
+      .finally(() => {
+        if (!cancelled) setBusy((b) => (b === "channels" ? null : b));
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload channels when the selected team changes
+  }, [client, teamsConnected, teamId]);
+
   const link = async () => {
+    const team = teamsList?.find((t) => t.id === teamId);
+    const channel = channels?.find((c) => c.id === channelId);
+    if (!team || !channel) return;
     setBusy("link");
     setError(null);
     try {
       onConnected(
         await client.connectTeams(canvas.id, {
-          teamId: teamId.trim(),
-          channelId: channelId.trim(),
-          channelName: channelName.trim() || undefined,
+          teamId: team.id,
+          channelId: channel.id,
+          teamName: team.displayName,
+          channelName: channel.displayName,
         }),
       );
     } catch (err) {
@@ -226,24 +305,77 @@ function TeamsStep({
         </span>
         <div className="min-w-0 text-[12.5px]">
           <div className="font-medium text-[#1F1F1F] dark:text-[#ededed]">Microsoft Teams</div>
-          <div className="text-[#7E7E7E]">Same Microsoft account as AI Hub. Link a channel to post clarifications (Phase 1).</div>
+          <div className="text-[#7E7E7E]">
+            {linked
+              ? `Linked: ${linked.teamName || linked.teamId} / ${linked.channelName || linked.channelId}`
+              : "Link a channel on this canvas to post clarifications (canvas owner only)."}
+          </div>
         </div>
       </div>
-      <label className={fieldLabel}>Team ID</label>
-      <input className={fieldInput} value={teamId} onChange={(e) => setTeamId(e.target.value)} placeholder="GUID from Teams admin / Graph" disabled={!!busy} />
-      <label className={fieldLabel}>Channel ID</label>
-      <input className={fieldInput} value={channelId} onChange={(e) => setChannelId(e.target.value)} placeholder="19:….@thread.tacv2" disabled={!!busy} />
-      <label className={fieldLabel}>Channel name (display)</label>
-      <input className={fieldInput} value={channelName} onChange={(e) => setChannelName(e.target.value)} disabled={!!busy} />
-      {error && <div className="mt-3 rounded-[8px] bg-[#FDF1F1] px-3 py-2 text-[12px] text-[#991B1B]">{error}</div>}
-      <div className="mt-5 flex justify-end gap-3">
-        <button type="button" className={outlineButton} onClick={disconnect} disabled={!!busy}>
-          {busy === "disconnect" ? "Disconnecting…" : "Disconnect"}
-        </button>
-        <button type="button" className={primaryButton} onClick={link} disabled={!!busy || !teamId.trim() || !channelId.trim()}>
-          {busy === "link" ? "Linking…" : "Link channel"}
-        </button>
-      </div>
+
+      {!teamsConnected ? (
+        <div className="mt-4 space-y-3">
+          <p className="text-[12.5px] leading-relaxed text-[#5E6066]">
+            Connect Microsoft Teams on the Integrations page first (one-time for your account). Then come back here to pick the team and channel for this canvas.
+          </p>
+          <button
+            type="button"
+            className={primaryButton}
+            onClick={() => {
+              onBack();
+              router.push("/integrations");
+            }}
+          >
+            Open Integrations
+          </button>
+        </div>
+      ) : (
+        <>
+          <label className={fieldLabel}>Team</label>
+          {busy === "load" && !teamsList ? (
+            <div className="flex items-center gap-2 py-2 text-[13px] text-[#7E7E7E]">
+              <TbLoader2 size={15} className="animate-spin" /> Loading your teams…
+            </div>
+          ) : (
+            <select className={fieldInput} value={teamId} onChange={(e) => setTeamId(e.target.value)} disabled={!!busy || !teamsList?.length}>
+              {teamsList?.length === 0 && <option value="">No teams found</option>}
+              {teamsList?.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.displayName}
+                </option>
+              ))}
+            </select>
+          )}
+
+          <label className={fieldLabel}>Channel</label>
+          {busy === "channels" && !channels ? (
+            <div className="flex items-center gap-2 py-2 text-[13px] text-[#7E7E7E]">
+              <TbLoader2 size={15} className="animate-spin" /> Loading channels…
+            </div>
+          ) : (
+            <select className={fieldInput} value={channelId} onChange={(e) => setChannelId(e.target.value)} disabled={!!busy || !channels?.length}>
+              {channels?.length === 0 && <option value="">No channels found</option>}
+              {channels?.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.displayName}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {error && <div className="mt-3 rounded-[8px] bg-[#FDF1F1] px-3 py-2 text-[12px] text-[#991B1B]">{error}</div>}
+          <div className="mt-5 flex justify-end gap-3">
+            {linked && (
+              <button type="button" className={outlineButton} onClick={disconnect} disabled={!!busy}>
+                {busy === "disconnect" ? "Disconnecting…" : "Unlink channel"}
+              </button>
+            )}
+            <button type="button" className={primaryButton} onClick={link} disabled={!!busy || !teamId || !channelId}>
+              {busy === "link" ? "Linking…" : linked ? "Update channel" : "Link channel"}
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

@@ -268,10 +268,36 @@ export function atlasClient({ instance, accounts }: Msal) {
     connectTeams: (canvasId: string, body: { teamId: string; channelId: string; teamName?: string; channelName?: string }) =>
       request<Canvas>(`/canvases/${canvasId}/teams`, json("POST", body)),
     disconnectTeams: (canvasId: string) => request<Canvas>(`/canvases/${canvasId}/teams`, json("DELETE")),
+    listJoinedTeams: async () => {
+      const graph = await getGraphAccessToken(instance, accounts);
+      return request<{ items: Array<{ id: string; displayName: string }> }>("/teams", {
+        headers: { "X-Graph-Access-Token": graph },
+      });
+    },
+    listTeamChannels: async (teamId: string) => {
+      const graph = await getGraphAccessToken(instance, accounts);
+      return request<{ items: Array<{ id: string; displayName: string }> }>(
+        `/teams/${encodeURIComponent(teamId)}/channels`,
+        { headers: { "X-Graph-Access-Token": graph } },
+      );
+    },
+    listCanvasTeamMembers: async (canvasId: string) => {
+      const graph = await getGraphAccessToken(instance, accounts);
+      return request<{ items: Array<{ id: string; displayName: string; email: string | null }> }>(
+        `/canvases/${canvasId}/teams/members`,
+        { headers: { "X-Graph-Access-Token": graph } },
+      );
+    },
     /** Posts with Graph access token (ChannelMessage.Send); AppAtlas still uses the ID token. */
     sendTeamsMessage: async (
       canvasId: string,
-      body: { text: string; subject?: string; replyToId?: string; issueKey?: string },
+      body: {
+        text: string;
+        subject?: string;
+        replyToId?: string;
+        issueKey?: string;
+        mentions?: Array<{ id: string; displayName: string }>;
+      },
     ) => {
       const graph = await getGraphAccessToken(instance, accounts);
       return request<{ graphMessageId: string; id: string }>(

@@ -279,6 +279,8 @@ export type CanvasSummary = {
   pageObjects: number;
   thumbnailUrl: string | null;
   jiraProjectKey: string | null;
+  /** Linked Teams channel (Phase 1), when configured. */
+  teams?: CanvasTeams | null;
   createdAt: number;
   updatedAt: number;
 };
@@ -300,6 +302,8 @@ export type Canvas = CanvasSummary & {
   jira: JiraMapping | null;
   /** One entry per Jira ticket mapped to a screen; filled in the background after connecting Jira. */
   clarifications?: CanvasClarification[];
+  teams: CanvasTeams | null;
+  teamsMessages?: CanvasTeamsMessage[];
 };
 
 export type ClarificationQuestion = {
@@ -415,6 +419,17 @@ export type CanvasTeams = {
   teamName: string | null;
   channelName: string | null;
   connectedAt: number;
+};
+
+export type CanvasTeamsMessage = {
+  id: string;
+  canvasId: string;
+  issueKey: string | null;
+  subject: string | null;
+  text: string;
+  graphMessageId: string;
+  createdAt: number;
+  createdBy: { id: string; name: string; email: string };
 };
 
 export type SitTicket = {

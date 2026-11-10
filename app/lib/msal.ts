@@ -28,11 +28,16 @@ export const loginRequest = {
 };
 
 /**
- * Incremental consent on the same Entra account when linking a Teams channel or posting.
- * Not a separate Teams login. Entra app needs ChannelMessage.Send + admin consent.
+ * Incremental consent on the same Entra account when listing teams/channels or posting.
+ * Not a separate Teams login. Entra app needs these Graph permissions + admin consent.
  */
 export const graphTeamsRequest = {
-  scopes: ["ChannelMessage.Send"],
+  scopes: [
+    "Team.ReadBasic.All",
+    "Channel.ReadBasic.All",
+    "TeamMember.Read.All",
+    "ChannelMessage.Send",
+  ],
 };
 
 export const msalInstance = new PublicClientApplication(msalConfig);
