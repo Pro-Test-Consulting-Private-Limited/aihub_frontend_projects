@@ -62,13 +62,13 @@ export function HealthPanel({ node }: { node: CanvasNode }) {
         <button
           type="button"
           onClick={() => setGuideOpen(true)}
-          className="shrink-0 rounded-md border border-[#E5E7EB] px-2 py-1 text-[11px] font-medium text-[#4B5563] hover:bg-[#F9FAFB] dark:border-[#333] dark:text-[#d1d5db] dark:hover:bg-[#1a1a1a]"
+          className="shrink-0 rounded-md border border-[#C7D2FE] bg-[#EEF2FF] px-2 py-1 text-[11px] font-medium text-[#5B3FD1] hover:bg-[#E0E7FF] dark:border-[#4338ca] dark:bg-[#1e1b4b] dark:text-[#c7d2fe] dark:hover:bg-[#312e81]"
         >
           Scoring & a11y guide
         </button>
       </div>
 
-      <ScoringLegend level={h.level} onOpenGuide={() => setGuideOpen(true)} />
+      <ScoringLegend level={h.level} />
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {metrics.map((m) => (
@@ -167,21 +167,10 @@ function levelColor(level: SessionHealthSummary["level"]) {
   return level === "ok" ? "#22C55E" : level === "warn" ? "#F59E0B" : "#EF4444";
 }
 
-function ScoringLegend({
-  level,
-  onOpenGuide,
-}: {
-  level: SessionHealthSummary["level"];
-  onOpenGuide: () => void;
-}) {
+function ScoringLegend({ level }: { level: SessionHealthSummary["level"] }) {
   return (
     <div className="rounded-[10px] border border-[#E5E7EB] bg-[#FAFAFA] p-3 dark:border-[#2a2a2a] dark:bg-[#141414]">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <div className="text-[12px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">How scoring works</div>
-        <button type="button" onClick={onOpenGuide} className="text-[11px] font-medium text-[#6366F1] hover:underline">
-          Full guide
-        </button>
-      </div>
+      <div className="mb-2 text-[12px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">How scoring works</div>
       <p className="mb-2 text-[11px] leading-relaxed text-[#4B5563] dark:text-[#d1d5db]">
         Badge colour comes from error / HTTP / image / accessibility counts on this screen. TTFB, LCP, and CLS are
         context only.
