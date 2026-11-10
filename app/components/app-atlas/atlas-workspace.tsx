@@ -15,6 +15,7 @@ import {
   TbBrandSpeedtest,
   TbWorld,
   TbListCheck,
+  TbGitBranch,
 } from "react-icons/tb";
 import { useProjects } from "@/app/lib/projectsStore";
 import type { Canvas, CanvasSummary, PresenceUser, SessionSnapshot } from "@/app/interfaces/appatlas";
@@ -35,22 +36,24 @@ import {
   type SessionEmulationPrefs,
 } from "@/app/lib/session-emulation";
 import { ApiTestingView } from "./api-testing-view";
+import { CicdView } from "./cicd-view";
 import { SitTestingView } from "./sit-testing-view";
 import { CoverageOverview } from "./coverage-overview";
 import { useApiSpec, useApiSpecView } from "@/app/hooks/use-api-spec";
 import { clearCanvasSwagger, getCanvasSwagger, type CanvasSwagger } from "@/app/lib/canvas-swagger";
 import { isLocalAuthBypassEnabled } from "@/app/lib/auth-bypass";
 
-const TABS = [
+const BASE_TABS = [
   { id: "canvas", label: "Canvas", icon: TbLayoutGrid },
   { id: "api", label: "API Testing", icon: TbNetwork },
   { id: "sit", label: "SIT Testing", icon: TbListCheck },
+  { id: "cicd", label: "CI/CD", icon: TbGitBranch, trial: "cicdPage" as const },
   { id: "coverage", label: "Coverage", icon: TbChartLine },
   { id: "security", label: "Security", icon: TbShieldCheck },
   { id: "performance", label: "Performance", icon: TbBrandSpeedtest },
 ] as const;
 
-type TabId = (typeof TABS)[number]["id"];
+type TabId = (typeof BASE_TABS)[number]["id"];
 
 const hostOf = (url: string) => {
   try {
@@ -123,8 +126,33 @@ export default function AtlasWorkspace() {
   // Swagger is connected per canvas and is independent of Jira (canvas.jiraProjectKey).
   const [swagger, setSwagger] = useState<CanvasSwagger | null>(null);
   const [view, setView] = useState<"screens" | "api" | "sit">("screens");
+  const [cicdPageTrial, setCicdPageTrial] = useState(false);
   const apiSpec = useApiSpec(swagger?.specUrl ?? null);
   const apiSpecView = useApiSpecView(apiSpec);
+
+  const TABS = useMemo(
+    () => BASE_TABS.filter((t) => !("trial" in t && t.trial === "cicdPage") || cicdPageTrial),
+    [cicdPageTrial],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    client
+      .getSettings()
+      .then((s) => {
+        if (!cancelled) setCicdPageTrial(!!s.cicdPageTrial);
+      })
+      .catch(() => {
+        if (!cancelled) setCicdPageTrial(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
+
+  useEffect(() => {
+    if (tab === "cicd" && !cicdPageTrial) setTab("canvas");
+  }, [tab, cicdPageTrial]);
 
   useEffect(() => {
     setSwagger(selectedId ? getCanvasSwagger(selectedId) : null);
@@ -398,7 +426,7 @@ export default function AtlasWorkspace() {
   };
 
   const canStart = !!appUrl && !recording && !starting;
-  const tabLabel = TABS.find((t) => t.id === tab)!.label;
+  const tabLabel = TABS.find((t) => t.id === tab)?.label ?? BASE_TABS.find((t) => t.id === tab)?.label ?? "App Atlas";
   const apiSummary =
     apiSpec.status === "ready" && apiSpec.data
       ? `${apiSpecView.modules.length} Modules, ${apiSpec.data.endpoints.length} End-Points`
@@ -577,7 +605,9 @@ export default function AtlasWorkspace() {
         )}
 
         <div className="relative min-w-0 flex-1">
-          {tab === "sit" || (tab === "canvas" && view === "sit") ? (
+          {tab === "cicd" ? (
+            <CicdView client={client} />
+          ) : tab === "sit" || (tab === "canvas" && view === "sit") ? (
             <SitTestingView client={client} canvasId={canvas?.id ?? null} canvasName={canvas?.name} />
           ) : tab === "coverage" ? (
             <CoverageOverview client={client} canvasId={canvas?.id ?? null} />

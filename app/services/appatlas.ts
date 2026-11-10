@@ -5,9 +5,16 @@ import { getFreshIdToken, getGraphAccessToken } from "@/app/lib/auth-client";
 import { siteOrigin } from "@/app/config/urls";
 import type {
   AtlasConfig,
+  AtlasSettings,
   Canvas,
+  CanvasCicd,
   CanvasClarifications,
+  CanvasGithub,
   CanvasTeams,
+  CicdPipeline,
+  CicdRun,
+  CicdSnippets,
+  PipelineRun,
   PresenceUser,
   CanvasSummary,
   JiraProject,
@@ -392,6 +399,60 @@ export function atlasClient({ instance, accounts }: Msal) {
         },
       );
     },
+
+    getSettings: () => request<AtlasSettings>("/settings"),
+
+    /** Canvas GitHub trial (logs `cicdCanvasTrial`) — secondary; prefer CI/CD page. */
+    connectGithub: (
+      canvasId: string,
+      body: { owner: string; repo: string; openapiPath?: string; smokeBaseUrl?: string },
+    ) =>
+      request<Canvas & { github: CanvasGithub; webhookPath: string }>(
+        `/canvases/${canvasId}/github`,
+        json("POST", body),
+      ),
+    disconnectGithub: (canvasId: string) => request<Canvas>(`/canvases/${canvasId}/github`, json("DELETE")),
+
+    /** CI/CD page: enable trigger secret for Jenkins/Actions (uses canvas Swagger). */
+    enableCicd: (canvasId: string, body: { smokeBaseUrl?: string } = {}) =>
+      request<Canvas & { cicd: CanvasCicd; triggerPath: string; snippets: CicdSnippets }>(
+        `/canvases/${canvasId}/cicd`,
+        json("POST", body),
+      ),
+    disableCicd: (canvasId: string) => request<Canvas>(`/canvases/${canvasId}/cicd`, json("DELETE")),
+    rotateCicdSecret: (canvasId: string) =>
+      request<Canvas & { cicd: CanvasCicd; snippets: CicdSnippets }>(
+        `/canvases/${canvasId}/cicd/rotate`,
+        json("POST", {}),
+      ),
+    listCicdRuns: (canvasId: string) =>
+      request<{ items: CicdRun[]; cicd: CanvasCicd | null }>(`/canvases/${canvasId}/cicd/runs`),
+    getCicdRun: (canvasId: string, runId: string) => request<CicdRun>(`/canvases/${canvasId}/cicd/runs/${runId}`),
+    startCicdRun: (canvasId: string, body: { ref?: string; title?: string } = {}) =>
+      request<CicdRun>(`/canvases/${canvasId}/cicd/run`, json("POST", body)),
+
+    /** Standalone pipelines (base URL + Swagger — no canvas required). */
+    listCicdPipelines: () => request<{ items: CicdPipeline[] }>("/cicd/pipelines"),
+    createCicdPipeline: (body: { name: string; baseUrl: string; swaggerUrl: string; mode?: "live" | "demo" }) =>
+      request<{ pipeline: CicdPipeline; triggerSecret: string; snippets: CicdSnippets }>(
+        "/cicd/pipelines",
+        json("POST", body),
+      ),
+    createWalletCicdDemo: () =>
+      request<{
+        pipeline: CicdPipeline;
+        triggerSecret: string;
+        snippets: CicdSnippets;
+        runs: PipelineRun[];
+      }>("/cicd/pipelines/demo/wallet", json("POST", {})),
+    deleteCicdPipeline: (id: string) => request<void>(`/cicd/pipelines/${id}`, json("DELETE")),
+    listPipelineRuns: (id: string) => request<{ items: PipelineRun[] }>(`/cicd/pipelines/${id}/runs`),
+    getPipelineRun: (pipelineId: string, runId: string) =>
+      request<PipelineRun>(`/cicd/pipelines/${pipelineId}/runs/${runId}`),
+    startPipelineRun: (id: string, body: { title?: string; event?: string; branch?: string } = {}) =>
+      request<PipelineRun>(`/cicd/pipelines/${id}/run`, json("POST", body)),
+    rotatePipelineSecret: (id: string) =>
+      request<{ triggerSecret: string; snippets: CicdSnippets }>(`/cicd/pipelines/${id}/rotate`, json("POST", {})),
   };
 }
 

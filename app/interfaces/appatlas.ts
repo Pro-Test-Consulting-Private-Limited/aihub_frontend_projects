@@ -323,6 +323,8 @@ export type Canvas = CanvasSummary & {
   clarifications?: CanvasClarification[];
   teams: CanvasTeams | null;
   teamsMessages?: CanvasTeamsMessage[];
+  github?: CanvasGithub | null;
+  cicd?: CanvasCicd | null;
 };
 
 export type ClarificationQuestion = {
@@ -449,6 +451,109 @@ export type CanvasTeamsMessage = {
   graphMessageId: string;
   createdAt: number;
   createdBy: { id: string; name: string; email: string };
+};
+
+/** GitHub repo linked for CI/CD canvas trial. Secret masked after connect. */
+export type CanvasGithub = {
+  owner: string;
+  repo: string;
+  openapiPath: string;
+  smokeBaseUrl: string;
+  webhookSecret: string;
+  connectedAt: number;
+  connectedBy: { id: string; name: string };
+};
+
+/** CI/CD page: Jenkins/Actions trigger binding. Secret masked after enable (full only once). */
+export type CanvasCicd = {
+  triggerSecret: string;
+  smokeBaseUrl: string;
+  enabledAt: number;
+  enabledBy: { id: string; name: string };
+};
+
+export type CicdSnippets = { curl: string; githubActions: string; jenkins: string };
+
+export type SuiteLayer = "contract" | "functional" | "data_driven" | "schema" | "chain";
+
+export type SuiteCase = {
+  id: string;
+  layer: SuiteLayer;
+  name: string;
+  method: string;
+  path: string;
+};
+
+export type SuiteSnapshot = {
+  specHash: string;
+  generatedAt: number;
+  counts: Record<SuiteLayer, number>;
+  cases: SuiteCase[];
+};
+
+export type CaseResult = SuiteCase & {
+  status: "passed" | "failed" | "skipped";
+  detail: string;
+  ms: number;
+};
+
+export type CicdPipeline = {
+  id: string;
+  name: string;
+  baseUrl: string;
+  swaggerUrl: string;
+  mode: "live" | "demo";
+  triggerSecret: string;
+  suite: SuiteSnapshot | null;
+  ownerId: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type PipelineRun = {
+  id: string;
+  pipelineId: string;
+  event: "pull_request" | "push" | "release" | "manual";
+  status: "queued" | "running" | "passed" | "failed" | "skipped";
+  title: string;
+  branch: string | null;
+  sha: string | null;
+  prNumber: number | null;
+  specHashBefore: string | null;
+  specHashAfter: string | null;
+  summary: string | null;
+  error: string | null;
+  results: CaseResult[] | null;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type CicdRun = {
+  id: string;
+  canvasId: string;
+  event: "pull_request" | "push" | "release" | "manual";
+  status: "queued" | "running" | "passed" | "failed" | "skipped";
+  title: string;
+  branch: string | null;
+  sha: string | null;
+  prNumber: number | null;
+  specHashBefore: string | null;
+  specHashAfter: string | null;
+  delta: { added: string[]; removed: string[]; changed: string[] } | null;
+  summary: string | null;
+  error: string | null;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type AtlasSettings = {
+  notesCarryOver: boolean;
+  notesWithoutQuestions: boolean;
+  shareDataAcrossEnvironments?: boolean;
+  securityLiveChecks: boolean;
+  securityCheckEnabled: Record<string, boolean>;
+  cicdPageTrial: boolean;
+  cicdCanvasTrial: boolean;
 };
 
 export type SitTicket = {
