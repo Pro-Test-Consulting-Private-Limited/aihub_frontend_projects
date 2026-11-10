@@ -12,6 +12,21 @@ export const EISENHOWER_LABEL: Record<Exclude<EisenhowerQ, "Untriaged">, string>
   Q4: "Later / drop",
 };
 
+/** What each quadrant means for a tester / release window. */
+export const EISENHOWER_MEANING: Record<Exclude<EisenhowerQ, "Untriaged">, string> = {
+  Q1: "Urgent and important — run or fix before ship",
+  Q2: "Important but not urgent — plan for next sprint",
+  Q3: "Urgent but low impact — automate or handle after core",
+  Q4: "Neither urgent nor important — defer or drop (noise)",
+};
+
+export const EISENHOWER_AXES: Record<Exclude<EisenhowerQ, "Untriaged">, string> = {
+  Q1: "Important · Urgent",
+  Q2: "Important · Not urgent",
+  Q3: "Not important · Urgent",
+  Q4: "Not important · Not urgent",
+};
+
 export const EISENHOWER_CHIP: Record<EisenhowerQ, string> = {
   Q1: "border-[#FECACA] bg-[#FEF2F2] text-[#B91C1C]",
   Q2: "border-[#FDE68A] bg-[#FFFBEB] text-[#B45309]",

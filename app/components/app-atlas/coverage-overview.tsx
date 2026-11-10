@@ -15,8 +15,10 @@ import {
 import type { SitEpic, SitJob, SitWorkbook } from "@/app/interfaces/appatlas";
 import {
   dominantQuadrant,
+  EISENHOWER_AXES,
   EISENHOWER_CHIP,
   EISENHOWER_LABEL,
+  EISENHOWER_MEANING,
   type EisenhowerQ,
 } from "@/app/lib/sit-eisenhower";
 import type { AtlasClient } from "@/app/services/appatlas";
@@ -372,53 +374,120 @@ function SegmentBar({
   );
 }
 
-function EisenhowerCell({ byQuadrant }: { byQuadrant: Record<string, number> }) {
-  const q = dominantQuadrant(byQuadrant);
-  const total = Object.values(byQuadrant).reduce((n, v) => n + v, 0);
-  if (!total) return <span className="text-[#9ca3af]">-</span>;
-  const tip = (["Q1", "Q2", "Q3", "Q4", "Untriaged"] as EisenhowerQ[])
-    .map((k) => `${k}${k !== "Untriaged" ? ` ${EISENHOWER_LABEL[k]}` : ""}: ${byQuadrant[k] || 0}`)
-    .join(" · ");
+function EisenhowerMiniGrid({
+  byQuadrant,
+  compact,
+}: {
+  byQuadrant: Record<string, number>;
+  compact?: boolean;
+}) {
+  const cell = (q: Exclude<EisenhowerQ, "Untriaged">) => {
+    const n = byQuadrant[q] || 0;
+    return (
+      <div
+        className={`rounded-[8px] border ${EISENHOWER_CHIP[q]} ${compact ? "p-1.5" : "p-2"}`}
+        title={`${q} · ${EISENHOWER_LABEL[q]} — ${EISENHOWER_MEANING[q]} (${EISENHOWER_AXES[q]})`}
+      >
+        <div className={`font-semibold ${compact ? "text-[10px]" : "text-[11px]"}`}>
+          {q} · {EISENHOWER_LABEL[q]}
+        </div>
+        {!compact ? (
+          <div className="mt-0.5 text-[10px] leading-snug opacity-90">{EISENHOWER_MEANING[q]}</div>
+        ) : (
+          <div className="mt-0.5 text-[9px] leading-snug opacity-80">{EISENHOWER_AXES[q]}</div>
+        )}
+        <div className={`mt-1 font-semibold tabular-nums ${compact ? "text-[14px]" : "text-[18px]"}`}>{n}</div>
+        <div className="text-[9px] opacity-70">{n === 1 ? "case" : "cases"}</div>
+      </div>
+    );
+  };
   return (
-    <div className="flex flex-col gap-1" title={tip}>
-      <span className={`inline-flex w-fit rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${EISENHOWER_CHIP[q]}`}>
-        {q}
-        {q !== "Untriaged" ? ` · ${EISENHOWER_LABEL[q]}` : ""}
-      </span>
-      <span className="text-[10px] tabular-nums text-[#8a93a8]">
-        Q1 {byQuadrant.Q1 || 0} · Q2 {byQuadrant.Q2 || 0} · Q3 {byQuadrant.Q3 || 0} · Q4 {byQuadrant.Q4 || 0}
-      </span>
+    <div className={`grid grid-cols-2 ${compact ? "gap-1" : "gap-2"}`}>
+      {/* Layout matches classic Eisenhower: Urgent on top row, Important on left */}
+      {cell("Q1")}
+      {cell("Q3")}
+      {cell("Q2")}
+      {cell("Q4")}
     </div>
   );
 }
 
-function EisenhowerBoard({ byQuadrant }: { byQuadrant: Record<string, number> }) {
-  const cell = (q: Exclude<EisenhowerQ, "Untriaged">, extra: string) => (
-    <div className={`rounded-[10px] border p-3 ${EISENHOWER_CHIP[q]} ${extra}`}>
-      <div className="text-[11px] font-semibold uppercase tracking-wide">{q}</div>
-      <div className="mt-0.5 text-[12px] font-medium">{EISENHOWER_LABEL[q]}</div>
-      <div className="mt-2 text-[22px] font-semibold tabular-nums">{byQuadrant[q] || 0}</div>
-    </div>
-  );
+function EisenhowerCell({ byQuadrant }: { byQuadrant: Record<string, number> }) {
+  const q = dominantQuadrant(byQuadrant);
+  const total = Object.values(byQuadrant).reduce((n, v) => n + v, 0);
+  if (!total) return <span className="text-[#9ca3af]">-</span>;
   return (
-    <div className="mb-4 rounded-[12px] border border-[#E6E1F5] bg-white p-3 dark:border-[#2a2a2a] dark:bg-[#0f0f0f]">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <div>
-          <div className="text-[13px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">Eisenhower triage</div>
-          <p className="text-[11.5px] text-[#6b7280]">Urgent × Important from Priority × Severity. Does not replace Prio/Sev.</p>
-        </div>
+    <div className="min-w-[200px] max-w-[280px]">
+      <div className="mb-1.5 flex flex-wrap items-center gap-1">
+        <span className={`inline-flex rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${EISENHOWER_CHIP[q]}`}>
+          Focus: {q}
+          {q !== "Untriaged" ? ` · ${EISENHOWER_LABEL[q]}` : " · Untriaged"}
+        </span>
         {(byQuadrant.Untriaged || 0) > 0 ? (
-          <span className="rounded-full border border-[#E5E7EB] px-2 py-0.5 text-[11px] text-[#6B7280]">
-            Untriaged {byQuadrant.Untriaged}
-          </span>
+          <span className="text-[10px] text-[#9CA3AF]">+{byQuadrant.Untriaged} untriaged</span>
         ) : null}
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        {cell("Q1", "")}
-        {cell("Q3", "")}
-        {cell("Q2", "")}
-        {cell("Q4", "")}
+      {q !== "Untriaged" ? (
+        <p className="mb-1.5 text-[10px] leading-snug text-[#6b7280]">{EISENHOWER_MEANING[q]}</p>
+      ) : (
+        <p className="mb-1.5 text-[10px] leading-snug text-[#6b7280]">No Priority/Severity assessed yet for these cases.</p>
+      )}
+      <EisenhowerMiniGrid byQuadrant={byQuadrant} compact />
+    </div>
+  );
+}
+
+function EisenhowerBoard({
+  byQuadrant,
+  title,
+  subtitle,
+}: {
+  byQuadrant: Record<string, number>;
+  title?: string;
+  subtitle?: string;
+}) {
+  const total = Object.values(byQuadrant).reduce((n, v) => n + v, 0);
+  return (
+    <div className="mb-4 rounded-[12px] border border-[#E6E1F5] bg-white p-3 dark:border-[#2a2a2a] dark:bg-[#0f0f0f]">
+      <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <div className="text-[13px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">
+            {title || "Eisenhower triage — all tickets"}
+          </div>
+          <p className="mt-0.5 text-[11.5px] text-[#6b7280]">
+            {subtitle ||
+              "Urgent × Important from Priority × Severity. Q1–Q4 say what to do with each case — not just how many."}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-[#6B7280]">
+          <span className="rounded-full border border-[#E5E7EB] px-2 py-0.5 tabular-nums">{total} cases</span>
+          {(byQuadrant.Untriaged || 0) > 0 ? (
+            <span className="rounded-full border border-[#E5E7EB] px-2 py-0.5">
+              Untriaged {byQuadrant.Untriaged} (not assessed)
+            </span>
+          ) : null}
+        </div>
       </div>
+      <div className="mb-2 flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-wide text-[#9ca3af]">
+        <span>← Important | Not important →</span>
+        <span>↑ Urgent / ↓ Not urgent</span>
+      </div>
+      <EisenhowerMiniGrid byQuadrant={byQuadrant} />
+      <ul className="mt-3 space-y-1.5 border-t border-[#EEE] pt-2 text-[11px] text-[#5b647a] dark:border-[#1a1a1a]">
+        {(["Q1", "Q2", "Q3", "Q4"] as const).map((q) => (
+          <li key={q} className="leading-snug">
+            <span className={`mr-1.5 inline-flex rounded border px-1 py-px text-[10px] font-semibold ${EISENHOWER_CHIP[q]}`}>
+              {q} · {EISENHOWER_LABEL[q]}
+            </span>
+            <span className="text-[#9ca3af]">{EISENHOWER_AXES[q]}</span>
+            {" — "}
+            {EISENHOWER_MEANING[q]}
+            <span className="ml-1 font-semibold tabular-nums text-[#1F1F1F] dark:text-[#ededed]">
+              · {byQuadrant[q] || 0} {(byQuadrant[q] || 0) === 1 ? "case" : "cases"}
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -1415,7 +1484,7 @@ export function CoverageOverview({
 
             {prioSevView === "matrix" ? <EisenhowerBoard byQuadrant={eisenhowerTotals} /> : null}
 
-            <table className="w-full min-w-[1100px] border-collapse text-[13px]">
+            <table className={`w-full border-collapse text-[13px] ${prioSevView === "matrix" ? "min-w-[1280px]" : "min-w-[1100px]"}`}>
               <thead>
                 <tr className="border-b border-[#E5E7EB] dark:border-[#2a2a2a]">
                   <th className={th}>Epic / Ticket</th>
