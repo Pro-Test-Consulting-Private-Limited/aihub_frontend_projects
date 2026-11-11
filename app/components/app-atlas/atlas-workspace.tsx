@@ -39,6 +39,7 @@ import { ApiTestingView } from "./api-testing-view";
 import { CicdView } from "./cicd-view";
 import { SitTestingView } from "./sit-testing-view";
 import { CoverageOverview } from "./coverage-overview";
+import { ReportsView } from "./reports-view";
 import { SecurityOverview } from "./security-overview";
 import { useApiSpec, useApiSpecView } from "@/app/hooks/use-api-spec";
 import { clearCanvasSwagger, getCanvasSwagger, setCanvasSwagger, type CanvasSwagger } from "@/app/lib/canvas-swagger";
@@ -50,6 +51,7 @@ const BASE_TABS = [
   { id: "sit", label: "SIT Testing", icon: TbListCheck },
   { id: "cicd", label: "CI/CD", icon: TbGitBranch, trial: "cicdPage" as const },
   { id: "coverage", label: "Coverage", icon: TbChartLine },
+  { id: "reports", label: "Reports", icon: TbReportSearch },
   { id: "security", label: "Security", icon: TbShieldCheck },
   { id: "performance", label: "Performance", icon: TbBrandSpeedtest },
 ] as const;
@@ -654,6 +656,16 @@ export default function AtlasWorkspace() {
             <CoverageOverview
               client={client}
               canvasId={canvas?.id ?? null}
+              onOpenSit={(opts) => {
+                setSitFocus(opts ?? null);
+                setTab("sit");
+              }}
+            />
+          ) : tab === "reports" ? (
+            <ReportsView
+              client={client}
+              canvasId={canvas?.id ?? null}
+              onOpenCoverage={() => setTab("coverage")}
               onOpenSit={(opts) => {
                 setSitFocus(opts ?? null);
                 setTab("sit");

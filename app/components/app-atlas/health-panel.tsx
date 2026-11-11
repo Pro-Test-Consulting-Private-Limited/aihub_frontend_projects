@@ -409,10 +409,9 @@ function A11yIssueOverlay({
           )}
           {hidden > 0 && (
             <p className="text-[11px] text-[#6B7280]">
-              +{hidden} more failing node{hidden === 1 ? "" : "s"} not listed here
-              {shown <= 1
-                ? " — this recording only stored one sample. Re-record to capture up to 8 nodes per rule."
-                : " (showing up to 8 per rule)."}
+              +{hidden} more failing node{hidden === 1 ? "" : "s"} were counted but not stored on this
+              recording (axe reported {issue.nodes}, this session kept {shown}). Re-record the screen
+              to capture every failing node.
             </p>
           )}
         </div>
