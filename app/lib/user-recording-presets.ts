@@ -15,6 +15,8 @@ export type DevicePresetPayload = {
   orientation: Orientation;
   /** Optional; older presets omit this. */
   deviceScaleFactor?: number;
+  /** Optional custom UA persisted with the W×H profile. */
+  userAgent?: string;
 };
 
 export type NetworkPresetPayload = {
@@ -79,6 +81,8 @@ export function devicePayloadFromPrefs(prefs: SessionEmulationPrefs): DevicePres
   if (prefs.deviceScaleFactor && prefs.deviceScaleFactor !== 1) {
     payload.deviceScaleFactor = prefs.deviceScaleFactor;
   }
+  const ua = (prefs as SessionEmulationPrefs & { userAgent?: string }).userAgent?.trim();
+  if (ua) payload.userAgent = ua.slice(0, 512);
   return payload;
 }
 

@@ -239,7 +239,14 @@ export function atlasClient({ instance, accounts }: Msal) {
       body: { url: string; method?: string; authorization?: string; jsonBody?: Record<string, unknown> },
     ) =>
       request<{ status: number; body: unknown; bodyPreview: string }>(`/sessions/${id}/http-probe`, json("POST", body)),
-    listCanvases: () => request<CanvasSummary[]>("/canvases"),
+    listCanvases: (opts?: { mine?: boolean; q?: string; limit?: number }) => {
+      const q = new URLSearchParams();
+      if (opts?.mine) q.set("mine", "1");
+      if (opts?.q) q.set("q", opts.q);
+      if (opts?.limit) q.set("limit", String(opts.limit));
+      const qs = q.toString();
+      return request<CanvasSummary[]>(`/canvases${qs ? `?${qs}` : ""}`);
+    },
     getCanvas: (id: string) => request<Canvas>(`/canvases/${id}`),
     saveCanvas: (body: { sessionId: string; name: string; description?: string }) =>
       request<Canvas>("/canvases", json("POST", body)),
@@ -268,6 +275,9 @@ export function atlasClient({ instance, accounts }: Msal) {
     /** Owner only; stored per canvas and ticket in App Atlas, never sent to Jira. */
     saveTicketNote: (canvasId: string, issueKey: string, text: string) =>
       request<TicketNote>(`/canvases/${canvasId}/notes/${encodeURIComponent(issueKey)}`, json("PUT", { text })),
+    /** Pin / unpin tickets on a screen. `issueKeys: null` resets that screen to the matcher. */
+    setNodeTickets: (canvasId: string, nodeId: string, body: { issueKeys: string[] | null; note?: string }) =>
+      request<Canvas>(`/canvases/${canvasId}/nodes/${encodeURIComponent(nodeId)}`, json("PUT", body)),
     /** EventSource can't send headers, so the token goes in the query string. */
     openEvents: async (id: string) => {
       const bypass = isLocalAuthBypassEnabled();

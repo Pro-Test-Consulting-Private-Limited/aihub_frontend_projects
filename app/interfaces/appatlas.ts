@@ -107,6 +107,11 @@ export type EmulationSummary = {
     downloadKbps: number;
     uploadKbps: number;
   } | null;
+  /** Saved user device/setup preset that launched this session. */
+  recordingPresetId?: string;
+  recordingPresetName?: string;
+  /** Stable tag for per-device coverage: name|preset:WxH */
+  deviceKey?: string;
 };
 
 export type ReplayTimelineEvent = {
@@ -279,6 +284,16 @@ export type CanvasEdge = {
 
 export type CanvasTestData = { nodeId: string; path: string; field: string; value: string };
 
+export type CanvasDeviceProfile = {
+  key: string;
+  label: string;
+  width: number;
+  height: number;
+  devicePreset: string;
+  recordingPresetId?: string;
+  userAgent?: string;
+};
+
 export type CanvasSummary = {
   id: string;
   name: string;
@@ -300,6 +315,8 @@ export type CanvasSummary = {
   jiraProjectKey: string | null;
   /** Linked Teams channel (Phase 1), when configured. */
   teams?: CanvasTeams | null;
+  /** Device W×H profile stamped when the recording was saved. */
+  deviceProfile?: CanvasDeviceProfile | null;
   createdAt: number;
   updatedAt: number;
 };
@@ -430,7 +447,7 @@ export type JiraMapping = {
   /** nodeId -> tickets shown on the screen: the matcher's picks, or the manual list where there is one. */
   nodes: Record<string, JiraNodeMatch[]>;
   /** nodeId -> manual mapping that overrides the matcher for that screen. */
-  manual?: Record<string, { issueKeys: string[]; by: string; at: number }>;
+  manual?: Record<string, { issueKeys: string[]; by: string; at: number; note?: string }>;
   /** issueKey -> nodeIds whose best/possible matches include it. Epics roll up from their children. */
   coverage: Record<string, string[]>;
 };

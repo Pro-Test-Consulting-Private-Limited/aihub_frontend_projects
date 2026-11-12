@@ -54,8 +54,10 @@ export const apiAgent = {
   executeChain: (req: RunRequest, signal?: AbortSignal) => post<RunResponse>("/api/execute-chain", req, signal),
   suggestPrerequisites: (swaggerUrl: string, path: string, method: string, signal?: AbortSignal) =>
     post<{ suggestions: PrerequisiteSuggestion[] }>("/api/prerequisites/suggest", { swaggerUrl, path, method }, signal),
-  generateRows: (swaggerUrl: string, path: string, method: string, signal?: AbortSignal) =>
-    post<{ rows: DataRow[] }>("/api/test-data/rows", { swaggerUrl, path, method, valid: 1, invalid: 4 }, signal),
+  generateRows: (swaggerUrl: string, path: string, method: string, opts?: { valid?: number; invalid?: number; statusNegatives?: boolean }, signal?: AbortSignal) =>
+    post<{ rows: DataRow[]; catalog?: import("@/app/interfaces/api-testing").NegativeCatalog }>("/api/test-data/rows", {
+      swaggerUrl, path, method, valid: opts?.valid ?? 1, invalid: opts?.invalid ?? 4, statusNegatives: opts?.statusNegatives ?? true,
+    }, signal),
   /** Which endpoints stand on their own and which need another call first. */
   dependencies: (swaggerUrl: string, signal?: AbortSignal) => post<DependenciesResponse>("/api/endpoints/dependencies", { swaggerUrl }, signal),
   /** Suggested accounts for a spec (customer, fresh customer, admin, verified customer, second user). Heuristics: the person edits them. */

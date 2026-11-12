@@ -33,6 +33,10 @@ export type StartSessionOptions = {
   offline?: boolean;
   /** Optional; custom sizes only. */
   deviceScaleFactor?: number;
+  customUserAgent?: string;
+  /** Tag session for per-device coverage. */
+  recordingPresetId?: string;
+  recordingPresetName?: string;
   locale?: string;
   timezoneId?: string;
   colorScheme?: "light" | "dark" | "no-preference";
@@ -386,6 +390,9 @@ export function emulationBodyFromPrefs(
     if (personaFields.reducedMotion) body.reducedMotion = personaFields.reducedMotion;
     if (personaFields.geolocation !== undefined) body.geolocation = personaFields.geolocation;
     if (personaFields.permissions?.length) body.permissions = personaFields.permissions;
+    if (personaFields.customUserAgent) body.customUserAgent = personaFields.customUserAgent;
+    if (personaFields.recordingPresetId) body.recordingPresetId = personaFields.recordingPresetId;
+    if (personaFields.recordingPresetName) body.recordingPresetName = personaFields.recordingPresetName;
   }
   return body;
 }

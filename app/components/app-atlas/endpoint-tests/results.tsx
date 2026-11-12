@@ -48,6 +48,7 @@ const SCHEMA_CHECK_IDS = new Set([
   "undocumented-fields",
   "example-mismatch",
   "error-envelope",
+  "golden-snapshot",
   "content-type",
   "status-documented",
 ]);
@@ -61,7 +62,8 @@ const SCHEMA_CHIP: Record<CheckResult["status"], string> = {
 
 /** Pin schema / contract checks above the fold so they are not buried in the Checks list. */
 function SchemaAssertChips({ checks }: { checks: CheckResult[] }) {
-  const schema = checks.filter((c) => SCHEMA_CHECK_IDS.has(c.id));
+  // Hide golden-snapshot when nothing is pinned (skip) so the chip row stays focused on live schema asserts.
+  const schema = checks.filter((c) => SCHEMA_CHECK_IDS.has(c.id) && !(c.id === "golden-snapshot" && c.status === "skip"));
   if (!schema.length) return null;
   return (
     <div>

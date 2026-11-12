@@ -56,6 +56,25 @@ const initials = (name?: string) =>
 
 type Ticket = { issue: JiraIssue; match?: JiraNodeMatch; epic?: JiraIssue };
 
+function whyMatched(match?: JiraNodeMatch): string | null {
+  if (!match) return null;
+  if (match.via === "manual") {
+    return match.evidence?.[0] || "Pinned manually to this screen";
+  }
+  if (match.via === "entry") {
+    return match.evidence?.[0] || "Matched via entry point on this screen";
+  }
+  if (match.evidence?.[0]) return match.evidence[0];
+  const pct = Math.round((match.confidence || 0) * 100);
+  const parts = [
+    pct ? `${pct}% confidence` : null,
+    match.signals?.keyword ? `keyword ${Math.round(match.signals.keyword * 100)}%` : null,
+    match.signals?.semantic != null ? `semantic ${Math.round(match.signals.semantic * 100)}%` : null,
+    match.signals?.structure ? `structure ${Math.round(match.signals.structure * 100)}%` : null,
+  ].filter(Boolean);
+  return parts.length ? `Why matched: ${parts.join(" · ")}` : null;
+}
+
 export function JiraPanel({
   canvas,
   nodeId,
@@ -63,6 +82,7 @@ export function JiraPanel({
   onClose,
   onConnect,
   onSaveNote,
+  onSetNodeTickets,
   onPostToTeams,
   loadTeamsMembers,
 }: {
@@ -73,6 +93,8 @@ export function JiraPanel({
   onClose: () => void;
   onConnect?: () => void;
   onSaveNote: (issueKey: string, text: string) => Promise<TicketNote>;
+  /** Pin / unpin tickets on this screen (manual override). */
+  onSetNodeTickets?: (nodeId: string, issueKeys: string[] | null, note?: string) => Promise<void>;
   /** Compose + post clarification questions to the linked Teams channel (same Entra account). */
   onPostToTeams?: (payload: PostToTeamsPayload) => Promise<void>;
   loadTeamsMembers?: () => Promise<Array<{ id: string; displayName: string; email?: string | null }>>;
@@ -256,6 +278,7 @@ export function JiraPanel({
                   clarification={t.match ? clarifications.get(t.issue.key) : undefined}
                   editable={editable}
                   onSaveNote={onSaveNote}
+                  onSetNodeTickets={onSetNodeTickets}
                   onPostToTeams={onPostToTeams}
                   loadTeamsMembers={loadTeamsMembers}
                   teamsChannelLabel={teamsChannelLabel}
@@ -274,6 +297,7 @@ function TicketCard({
   clarification,
   editable,
   onSaveNote,
+  onSetNodeTickets,
   onPostToTeams,
   loadTeamsMembers,
   teamsChannelLabel,
@@ -284,17 +308,44 @@ function TicketCard({
   clarification?: CanvasClarification;
   editable: boolean;
   onSaveNote: (issueKey: string, text: string) => Promise<TicketNote>;
+  onSetNodeTickets?: (nodeId: string, issueKeys: string[] | null, note?: string) => Promise<void>;
   onPostToTeams?: (payload: PostToTeamsPayload) => Promise<void>;
   loadTeamsMembers?: () => Promise<Array<{ id: string; displayName: string; email?: string | null }>>;
   teamsChannelLabel?: string | null;
   canvas: Canvas;
   nodeId: string;
 }) {
-  const { issue, epic } = ticket;
+  const { issue, epic, match } = ticket;
   const { instance, accounts } = useMsal();
   const client = useMemo(() => atlasClient({ instance, accounts }), [instance, accounts]);
   const [bugOpen, setBugOpen] = useState(false);
   const [bugChip, setBugChip] = useState<string | null>(null);
+  const [pinBusy, setPinBusy] = useState(false);
+  const why = whyMatched(match);
+  const pinned = match?.via === "manual" || Boolean(canvas.jira?.manual?.[nodeId]?.issueKeys?.includes(issue.key));
+  const currentKeys = () =>
+    (canvas.jira?.nodes?.[nodeId] ?? []).map((m) => m.key).filter(Boolean);
+
+  const togglePin = async () => {
+    if (!onSetNodeTickets || pinBusy) return;
+    setPinBusy(true);
+    try {
+      const keys = currentKeys();
+      if (pinned) {
+        const next = keys.filter((k) => k !== issue.key);
+        if (next.length === 0 && canvas.jira?.manual?.[nodeId]) {
+          await onSetNodeTickets(nodeId, null, "Unpinned last ticket — reset to matcher");
+        } else {
+          await onSetNodeTickets(nodeId, next, `Unpinned ${issue.key}`);
+        }
+      } else {
+        const next = [...new Set([...keys, issue.key])];
+        await onSetNodeTickets(nodeId, next, `Pinned ${issue.key}`);
+      }
+    } finally {
+      setPinBusy(false);
+    }
+  };
 
   return (
     <div className="mb-3 rounded-[12px] border border-[#E6E1F5] p-3 shadow-sm dark:border-[#2a2a2a]">
@@ -304,6 +355,9 @@ function TicketCard({
             {issue.key} <TbExternalLink size={12} />
           </a>
           <span className="rounded-[4px] bg-[#EEF2FF] px-1.5 py-0.5 text-[10px] text-[#4F46E5]">{issue.type.toLowerCase()}</span>
+          {pinned && (
+            <span className="rounded-[4px] bg-[#F3E8FF] px-1.5 py-0.5 text-[10px] font-medium text-[#7C3AED]">Pinned</span>
+          )}
           {bugChip && (
             <span className="rounded-[4px] bg-[#FEE2E2] px-1.5 py-0.5 text-[10px] font-medium text-[#B91C1C]">Bug {bugChip}</span>
           )}
@@ -315,6 +369,11 @@ function TicketCard({
         )}
       </div>
       <div className="mt-1.5 text-[13.5px] font-semibold leading-snug text-[#1F1F1F] dark:text-[#ededed]">{issue.summary}</div>
+      {why && (
+        <div className="mt-1.5 text-[11px] leading-snug text-[#6B7280] dark:text-[#9ca3af]" title={why}>
+          {why}
+        </div>
+      )}
       <div className="mt-2 flex items-center justify-between text-[11px] text-[#5E6066] dark:text-[#9ca3af]">
         <div className="flex min-w-0 items-center gap-3">
           <span className="flex items-center gap-1" title={issue.assignee ?? "Unassigned"}>
@@ -328,15 +387,29 @@ function TicketCard({
         </div>
         {issue.priority && <span className={`font-semibold uppercase ${PRIORITY_STYLE(issue.priority)}`}>{issue.priority}</span>}
       </div>
-      {(editable || isLocalAuthBypassEnabled()) && (
-        <button
-          type="button"
-          className="mt-2 text-[11px] font-medium text-[#8664F2] underline-offset-2 hover:underline"
-          onClick={() => setBugOpen(true)}
-        >
-          Report bug
-        </button>
-      )}
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        {(editable || isLocalAuthBypassEnabled()) && (
+          <button
+            type="button"
+            className="text-[11px] font-medium text-[#8664F2] underline-offset-2 hover:underline"
+            onClick={() => setBugOpen(true)}
+          >
+            Report bug
+          </button>
+        )}
+        {editable && onSetNodeTickets && (
+          <button
+            type="button"
+            disabled={pinBusy}
+            className="inline-flex items-center gap-1 text-[11px] font-medium text-[#5B21B6] underline-offset-2 hover:underline disabled:opacity-50"
+            onClick={() => void togglePin()}
+            title={pinned ? "Remove manual pin (or reset screen to matcher)" : "Pin this ticket to the screen"}
+          >
+            {pinBusy ? <TbLoader2 size={12} className="animate-spin" /> : <TbLink size={12} />}
+            {pinned ? "Unpin" : "Pin to screen"}
+          </button>
+        )}
+      </div>
 
       {clarification && (
         <Clarifications

@@ -120,10 +120,14 @@ export type DataRow = {
   expectedStatus: string;
   assertions: Assertion[];
   origin: DataRowOrigin;
+  /** Mutation / OpenAPI status kind from the negative catalog (missing, type, status-401, …). */
+  catalogKind?: string;
   /** The spec sets no limit for this value: only a 5xx fails. */
   soft?: boolean;
   runAs?: string;
 };
+
+export type ScenarioGroup = "happy" | "auth" | "edge" | "negative" | "other";
 
 export type FunctionalScenario = {
   id: string;
@@ -135,7 +139,11 @@ export type FunctionalScenario = {
   generated?: boolean;
   /** An account id, or none (no Authorization header), expired (a generated expired token), otherUser (the second account). Empty = the run's account. */
   runAs?: string;
-  from?: { scenarioId: string; expectedStatusCode: string; assumed: boolean };
+  /** Rule category from the agent (functional, authentication, …). */
+  category?: string;
+  /** Polish group header: happy / auth / edge / negative. */
+  group?: ScenarioGroup;
+  from?: { scenarioId: string; expectedStatusCode: string; assumed: boolean; category?: string; ruleId?: string };
 };
 
 export type TestMode = "contract" | "data" | "functional";
@@ -157,7 +165,13 @@ export type RunRequest = {
   /** Overrides the inferred requirement of the target endpoint. */
   requirement?: RequirementKind;
   refresh?: boolean;
-  contract?: { expect: string; request?: RequestOverrides; runAs?: string };
+  contract?: {
+    expect: string;
+    request?: RequestOverrides;
+    runAs?: string;
+    /** Pinned happy-path snapshot (hash + top-level keys). Compared on 2xx contract runs. */
+    golden?: { hash: string; shapeKeys?: string[]; status?: number; pinnedAt?: string; body?: unknown };
+  };
   rows?: DataRow[];
   scenarios?: FunctionalScenario[];
 };
@@ -230,10 +244,19 @@ export type GeneratedScenario = {
   requestCondition: string;
   expectedStatusCode: string;
   assumed: boolean;
+  category?: string;
+  ruleId?: string;
   request?: { headers?: Record<string, string>; pathParams?: Record<string, string>; query?: Record<string, string>; body?: unknown; rawBody?: string; contentType?: string };
 };
 
 export type GenerationResponse = { scenarios: GeneratedScenario[] };
+
+export type NegativeCatalog = {
+  available: number;
+  selected: number;
+  items: { kind: string; name: string; expectedStatus: string; soft?: boolean }[];
+  statusCodes?: string[];
+};
 
 /** What an endpoint needs from another call. `optional` needs (a body field the spec does not require) do not make it dependent. */
 export type DependencyNeed = { kind: "auth" | "path-param" | "query-param" | "body-field"; name: string; providedBy: string | null; optional?: boolean; confidence?: number; level?: "high" | "possible"; reason?: string };

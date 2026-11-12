@@ -181,7 +181,7 @@ function PassRateChart({
   );
 }
 
-export function CicdView({ client }: { client: AtlasClient }) {
+export function CicdView({ client, canvasId = null }: { client: AtlasClient; canvasId?: string | null }) {
   const [pipelines, setPipelines] = useState<CicdPipeline[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [runs, setRuns] = useState<PipelineRun[] | null>(null);
@@ -198,6 +198,7 @@ export function CicdView({ client }: { client: AtlasClient }) {
   const [baseUrl, setBaseUrl] = useState("");
   const [swaggerUrl, setSwaggerUrl] = useState("");
   const [chartRunId, setChartRunId] = useState<string | null>(null);
+  const [sitGate, setSitGate] = useState<{ q1Open: number; highOpen: number; q1: number; high: number } | null>(null);
 
   const selected = pipelines.find((p) => p.id === selectedId) ?? null;
   const openRun = runs?.find((r) => r.id === openRunId) ?? null;
@@ -245,6 +246,44 @@ export function CicdView({ client }: { client: AtlasClient }) {
     const t = setInterval(() => void loadRuns(), 5000);
     return () => clearInterval(t);
   }, [loadRuns, selectedId]);
+
+  useEffect(() => {
+    if (!canvasId) {
+      setSitGate(null);
+      return;
+    }
+    let cancelled = false;
+    void client
+      .sitCoverage(canvasId)
+      .then((cov) => {
+        if (cancelled) return;
+        let q1 = 0;
+        let high = 0;
+        let q1Open = 0;
+        let highOpen = 0;
+        for (const t of Object.values(cov.tickets || {})) {
+          const q1n = Number(t.byQuadrant?.Q1 || 0);
+          const highN =
+            Number(t.bySeverity?.High || 0) +
+            Number(t.bySeverity?.Critical || 0) +
+            Number(t.bySeverity?.Highest || 0);
+          const passed = Number(t.byExecutionStatus?.Passed || 0);
+          const tests = Number(t.tests || 0);
+          const open = Math.max(0, tests - passed);
+          q1 += q1n;
+          high += highN;
+          if (q1n > 0 && open > 0) q1Open += q1n;
+          if (highN > 0 && open > 0) highOpen += highN;
+        }
+        setSitGate({ q1, high, q1Open, highOpen });
+      })
+      .catch(() => {
+        if (!cancelled) setSitGate(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, canvasId]);
 
   const passPoints = useMemo((): PassPoint[] => {
     return (runs ?? [])
@@ -369,23 +408,47 @@ export function CicdView({ client }: { client: AtlasClient }) {
 
   const gate = useMemo(() => {
     const qualityBlocked = rows.filter((r) => !r.pass).length;
+    const sitBlocked = (sitGate?.q1Open || 0) > 0 || (sitGate?.highOpen || 0) > 0;
     const runOk = latest?.status === "passed";
     const runFail = latest?.status === "failed";
     const live = latest?.status === "running" || latest?.status === "queued";
     if (live) return { state: "running" as const, label: "Run in progress", detail: latest?.title ?? "" };
-    if (!latest) return { state: "idle" as const, label: "No gate yet", detail: "Run a suite or wait for CI" };
-    if (runFail || qualityBlocked > 0) {
+    if (!latest && !sitGate) return { state: "idle" as const, label: "No gate yet", detail: "Run a suite or wait for CI" };
+    if (runFail || qualityBlocked > 0 || sitBlocked) {
+      const sitDetail =
+        sitBlocked && sitGate
+          ? [
+              sitGate.q1Open > 0 ? `${sitGate.q1Open} Q1 case(s) not Passed` : null,
+              sitGate.highOpen > 0 ? `${sitGate.highOpen} High/Critical case(s) not Passed` : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")
+          : null;
       return {
         state: "blocked" as const,
         label: "Release gate blocked",
         detail: runFail
-          ? latest.summary || "Suite failures"
-          : `${qualityBlocked} endpoints below spec quality bar`,
+          ? latest?.summary || "Suite failures"
+          : qualityBlocked > 0
+            ? `${qualityBlocked} endpoints below spec quality bar`
+            : sitDetail || "SIT promote gate",
       };
     }
-    if (runOk) return { state: "green" as const, label: "Release gate green", detail: latest.summary || "All suite layers passed" };
+    if (runOk || (!latest && sitGate && !sitBlocked)) {
+      const sitOk =
+        sitGate && sitGate.q1 + sitGate.high > 0
+          ? ` · SIT Q1 ${sitGate.q1} / High ${sitGate.high} clear`
+          : sitGate
+            ? " · SIT clear"
+            : "";
+      return {
+        state: "green" as const,
+        label: "Release gate green",
+        detail: (latest?.summary || "All suite layers passed") + sitOk,
+      };
+    }
     return { state: "idle" as const, label: "Waiting", detail: "" };
-  }, [latest, rows]);
+  }, [latest, rows, sitGate]);
 
   const suiteCases: SuiteCase[] = useMemo(() => {
     const cases = selected?.suite?.cases ?? [];

@@ -58,7 +58,9 @@ import {
   resolveResetPrefs,
   savePresetCache,
   setupPayloadFromPrefs,
+  type DevicePresetPayload,
   type PresetKind,
+  type SetupPresetPayload,
   type UserRecordingPreset,
 } from "@/app/lib/user-recording-presets";
 import {
@@ -714,9 +716,20 @@ export function SessionSetupModal({
     rememberCanvasViewport(canvasId, next.width, next.height);
     setRecent(loadRecentDevices());
     savePersona(persona);
+    const selectedPreset = selectedPresetId ? presets.find((p) => p.id === selectedPresetId) : undefined;
+    const devicePayload =
+      selectedPreset?.kind === "device"
+        ? (selectedPreset.payload as DevicePresetPayload)
+        : selectedPreset?.kind === "setup"
+          ? (selectedPreset.payload as SetupPresetPayload).device
+          : null;
     onStart(next, {
       ...personaToSessionFields(persona),
       ...(savedLoginId ? { savedLoginId } : {}),
+      ...(selectedPreset && (selectedPreset.kind === "device" || selectedPreset.kind === "setup")
+        ? { recordingPresetId: selectedPreset.id, recordingPresetName: selectedPreset.name }
+        : {}),
+      ...(devicePayload?.userAgent?.trim() ? { customUserAgent: devicePayload.userAgent.trim() } : {}),
     });
   };
 

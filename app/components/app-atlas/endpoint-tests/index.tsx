@@ -146,7 +146,20 @@ export function EndpointTests({
 
       {runner.error && <div className="rounded-[8px] border border-[#DC2626] bg-[#FEF2F2] px-3 py-2 text-[12.5px] text-[#B91C1C] dark:bg-[#2a1212] dark:text-[#FCA5A5]">{runner.error}</div>}
 
-      {view !== "setup" && tab === "contract" && <ContractTab {...common} expect={state.contract.expect} onExpect={(expect) => patch({ contract: { ...state.contract, expect } })} request={state.contract.request} onRequest={(request) => patch({ contract: { ...state.contract, request } })} isLogin={/login|signin|auth/i.test(row.path) && row.method === "POST"} />}
+      {view !== "setup" && tab === "contract" && (
+        <ContractTab
+          {...common}
+          expect={state.contract.expect}
+          onExpect={(expect) => patch({ contract: { ...state.contract, expect } })}
+          request={state.contract.request}
+          onRequest={(request) => patch({ contract: { ...state.contract, request } })}
+          golden={state.contract.golden}
+          onGolden={(golden) => patch({ contract: { ...state.contract, golden: golden || undefined } })}
+          specUrl={specUrl}
+          target={target}
+          isLogin={/login|signin|auth/i.test(row.path) && row.method === "POST"}
+        />
+      )}
       {view !== "setup" && tab === "data" && <DataDrivenTab {...common} rows={state.rows} onRows={(r) => patch({ rows: r })} detail={detail} specUrl={specUrl} target={target} seeded={state.rowsSeeded} onSeeded={() => patch({ rowsSeeded: true })} />}
       {view !== "setup" && tab === "functional" && <FunctionalTab {...common} scenarios={state.scenarios} onScenarios={(scenarios) => patch({ scenarios })} specUrl={specUrl} target={target} accountIds={getRunAccounts(specUrl).map((a) => a.id)} />}
     </div>

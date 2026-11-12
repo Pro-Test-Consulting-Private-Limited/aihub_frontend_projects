@@ -2,7 +2,7 @@
 
 export type EisenhowerQ = "Q1" | "Q2" | "Q3" | "Q4" | "Untriaged";
 
-export const EXECUTION_STATUSES = ["Draft", "Passed", "Failed", "Blocked", "Skipped"] as const;
+export const EXECUTION_STATUSES = ["Draft", "Passed", "Failed", "Blocked", "Skipped", "Stale"] as const;
 export type SitExecutionStatus = (typeof EXECUTION_STATUSES)[number];
 
 export const EISENHOWER_LABEL: Record<Exclude<EisenhowerQ, "Untriaged">, string> = {

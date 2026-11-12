@@ -7,16 +7,18 @@ import { validateBaseUrl } from "@/app/lib/api-testing/environment";
 import { getRunAccounts, setStatuses } from "@/app/lib/api-testing/identities";
 import { cloneSteps, getSharedSetup, getSharedVariables, setSharedVariables } from "@/app/lib/api-testing/shared-setup";
 import { clearSession, getSession, mergeSession, sessionKey } from "@/app/lib/api-testing/session-cache";
+import { goldenForRequest, loadGolden, type GoldenPin } from "@/app/lib/api-testing/golden";
 
 /**
  * Per-endpoint test setup and last results. Module memory only: nothing here is written to browser storage, because
  * prerequisite bodies and data rows can hold passwords. A page reload starts clean.
+ * Exception: golden response pins use localStorage (hash/shape only).
  */
 export type TestState = {
   prerequisites: PrerequisiteStep[];
   /** Headers added to every test call, e.g. Authorization: Bearer {{token}}. */
   defaultHeaders: Record<string, string>;
-  contract: { expect: string; request: RequestOverrides };
+  contract: { expect: string; request: RequestOverrides; golden?: GoldenPin | null };
   rows: DataRow[];
   rowsSeeded: boolean;
   scenarios: FunctionalScenario[];
@@ -35,13 +37,26 @@ const fresh = (): TestState => ({ prerequisites: [], defaultHeaders: {}, contrac
 // The id is `${specUrl}|${endpointKey}`; what is shared by the whole spec is looked up by the first part.
 const specOf = (id: string) => id.slice(0, id.lastIndexOf("|"));
 
+/** Endpoint key after `|` is `METHOD /path`. */
+function endpointOf(id: string): { method: string; path: string } | null {
+  const key = id.slice(id.lastIndexOf("|") + 1);
+  const m = /^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+(\/\S*)$/i.exec(key.trim());
+  return m ? { method: m[1].toUpperCase(), path: m[2] } : null;
+}
+
 /** The state of an endpoint the first time it is opened: the spec's shared steps (if any) and variables are its starting point. */
 function initial(id: string): TestState {
   const own = store.get(id);
   const spec = specOf(id);
   const variables = getSharedVariables(spec);
-  if (own) return variables ? { ...own, variables } : own;
+  const ep = endpointOf(id);
+  const golden = ep ? loadGolden(spec, ep.method, ep.path) : null;
+  if (own) {
+    const withVars = variables ? { ...own, variables } : own;
+    return golden && !withVars.contract.golden ? { ...withVars, contract: { ...withVars.contract, golden } } : withVars;
+  }
   const base = fresh();
+  if (golden) base.contract = { ...base.contract, golden };
   const sharedSetup = getSharedSetup(spec);
   return { ...base, ...(sharedSetup ? { prerequisites: cloneSteps(sharedSetup.prerequisites), defaultHeaders: { ...sharedSetup.defaultHeaders } } : {}), ...(variables ? { variables } : {}) };
 }
@@ -103,7 +118,15 @@ export function useEndpointRun({
       requirement: state.requirement || undefined,
       variables: { ...state.variables },
       refresh: !!opts.refresh,
-      ...(mode === "contract" ? { contract: { expect: state.contract.expect, request: nonEmpty(state.contract.request) ? state.contract.request : undefined } } : {}),
+      ...(mode === "contract"
+        ? {
+            contract: {
+              expect: state.contract.expect,
+              request: nonEmpty(state.contract.request) ? state.contract.request : undefined,
+              golden: goldenForRequest(state.contract.golden),
+            },
+          }
+        : {}),
       ...(mode === "data" ? { rows: state.rows } : {}),
       ...(mode === "functional" ? { scenarios: state.scenarios.filter((s) => s.enabled) } : {}),
     };

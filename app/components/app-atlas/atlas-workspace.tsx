@@ -624,7 +624,7 @@ export default function AtlasWorkspace() {
 
         <div className="relative min-w-0 flex-1">
           {tab === "cicd" ? (
-            <CicdView client={client} />
+            <CicdView client={client} canvasId={canvas?.id ?? null} />
           ) : tab === "sit" || (tab === "canvas" && view === "sit") ? (
             <SitTestingView
               client={client}
@@ -759,6 +759,14 @@ export default function AtlasWorkspace() {
                     );
                     return note;
                   }}
+                  onSetNodeTickets={
+                    canvas.isMine
+                      ? async (nid, issueKeys, note) => {
+                          const next = await client.setNodeTickets(canvas.id, nid, { issueKeys, note });
+                          setCanvas((prev) => (prev && prev.id === canvas.id ? { ...prev, ...next, clarifications: prev.clarifications } : prev));
+                        }
+                      : undefined
+                  }
                 />
               )}
             </>

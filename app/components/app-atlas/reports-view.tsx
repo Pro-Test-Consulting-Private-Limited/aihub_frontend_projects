@@ -86,6 +86,7 @@ export function ReportsView({
 }) {
   const [epics, setEpics] = useState<SitEpic[]>([]);
   const [sit, setSit] = useState<Record<string, SitCov>>({});
+  const [deviceRows, setDeviceRows] = useState<{ key: string; label: string; screens: number; canvases: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -96,11 +97,27 @@ export function ReportsView({
     void Promise.all([
       client.listSitTickets(canvasId),
       client.sitCoverage(canvasId).catch(() => ({ tickets: {} as Record<string, SitCov> })),
+      client.listCanvases({ limit: 200 }).catch(() => [] as Awaited<ReturnType<AtlasClient["listCanvases"]>>),
     ])
-      .then(([tickets, cov]) => {
+      .then(([tickets, cov, canvases]) => {
         if (cancelled) return;
         setEpics(tickets.epics || []);
         setSit((cov.tickets || {}) as Record<string, SitCov>);
+        const by: Record<string, { key: string; label: string; screens: number; canvases: number }> = {};
+        for (const c of canvases || []) {
+          const dp = c.deviceProfile;
+          if (!dp?.key) continue;
+          const cur = by[dp.key] || {
+            key: dp.key,
+            label: `${dp.label} · ${dp.width}×${dp.height}`,
+            screens: 0,
+            canvases: 0,
+          };
+          cur.screens += Number(c.screens || 0);
+          cur.canvases += 1;
+          by[dp.key] = cur;
+        }
+        setDeviceRows(Object.values(by).sort((a, b) => b.screens - a.screens));
       })
       .catch((err) => {
         if (!cancelled) setError(err instanceof Error ? err.message : "Could not load reports");
@@ -268,7 +285,7 @@ export function ReportsView({
         <section className={`${card} p-4`}>
           <div className={label}>Execution status</div>
           <div className="mt-3 flex flex-wrap gap-2">
-            {["Draft", "Passed", "Failed", "Blocked", "Skipped"].map((s) => (
+            {["Draft", "Passed", "Failed", "Blocked", "Skipped", "Stale"].map((s) => (
               <div
                 key={s}
                 className="rounded-full border border-[#E5E7EB] bg-[#F9FAFB] px-2.5 py-1 text-[12px] dark:border-[#2a2a2a] dark:bg-[#141414]"
@@ -278,6 +295,29 @@ export function ReportsView({
               </div>
             ))}
           </div>
+          {deviceRows.length > 0 && (
+            <div className="mt-4">
+              <div className={`${label} mb-2`}>Per-device coverage</div>
+              <div className="flex flex-wrap gap-2">
+                {deviceRows.map((d) => {
+                  const pct = Math.round((d.screens / Math.max(1, deviceRows.reduce((a, x) => a + x.screens, 0))) * 100);
+                  return (
+                    <div
+                      key={d.key}
+                      className="min-w-[140px] flex-1 rounded-[8px] border border-[#E5E7EB] bg-[#F9FAFB] px-3 py-2 dark:border-[#2a2a2a] dark:bg-[#141414]"
+                      title={d.key}
+                    >
+                      <div className="truncate text-[12px] font-medium text-[#1F1F1F] dark:text-[#ededed]">{d.label}</div>
+                      <div className="mt-0.5 text-[18px] font-semibold tabular-nums text-[#8664F2]">{pct}%</div>
+                      <div className="text-[10.5px] text-[#7E7E7E]">
+                        {d.screens} screen{d.screens === 1 ? "" : "s"} · {d.canvases} canvas{d.canvases === 1 ? "" : "es"}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           {totals.dead > 0 && (
             <p className="mt-3 text-[12px] text-[#92400E]">
               Dead Test Finder flagged <b>{totals.dead}</b> case{totals.dead === 1 ? "" : "s"} — open SIT Results to filter.
