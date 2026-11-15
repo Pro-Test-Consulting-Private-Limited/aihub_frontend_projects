@@ -220,14 +220,35 @@ export function Explorer(props: Props) {
                     </div>
                   )}
                   {active && (c.isMine || c.jiraProjectKey || props.swagger) && (
-                    <div className="mt-2.5">
-                      <ConnectedAppsRow
-                        canvas={c}
-                        jiraKey={c.jiraProjectKey}
-                        swaggerTitle={props.swagger?.title ?? null}
-                        hasSwagger={!!props.swagger}
-                        onConnect={props.onConnect}
-                      />
+                    <div className="mt-2.5 flex flex-col gap-1.5">
+                      {c.jiraProjectKey && (
+                        <ConnectedAppButton
+                          canvas={c}
+                          label={`Jira · ${c.jiraProjectKey}`}
+                          icon={<SiJira size={12} color="#2684FF" />}
+                          title="Manage connected apps"
+                          onConnect={props.onConnect}
+                        />
+                      )}
+                      {props.swagger && (
+                        <ConnectedAppButton
+                          canvas={c}
+                          label="Swagger"
+                          icon={<SiSwagger size={12} color="#85EA2D" />}
+                          title={props.swagger.title ? `Swagger: ${props.swagger.title}` : "Manage connected apps"}
+                          onConnect={props.onConnect}
+                        />
+                      )}
+                      {!c.jiraProjectKey && !props.swagger && (
+                        <ConnectedAppButton
+                          canvas={c}
+                          label="Connect"
+                          icon={<TbLink size={15} />}
+                          bare
+                          title="Connect apps to this canvas"
+                          onConnect={props.onConnect}
+                        />
+                      )}
                     </div>
                   )}
                   {menuFor === c.id && (
@@ -334,71 +355,39 @@ function ViewRow({ active, icon, label, meta, onClick }: { active: boolean; icon
   );
 }
 
-/**
- * Single Connected control: icons only (name/project live in the tooltip).
- * Opens the connect modal so Jira / Swagger stay independent under one entry point.
- */
-function ConnectedAppsRow({
+/** One button per app connected to the canvas (Jira and Swagger are independent); owner-only, opens the connect modal. */
+function ConnectedAppButton({
   canvas,
-  jiraKey,
-  swaggerTitle,
-  hasSwagger,
+  label,
+  icon,
+  title,
+  bare,
   onConnect,
 }: {
   canvas: CanvasSummary;
-  jiraKey: string | null | undefined;
-  swaggerTitle: string | null;
-  hasSwagger: boolean;
+  label: string;
+  icon: React.ReactNode;
+  title: string;
+  bare?: boolean;
   onConnect: (c: CanvasSummary) => void;
 }) {
-  const chips: { key: string; icon: React.ReactNode; tip: string }[] = [];
-  if (jiraKey) {
-    chips.push({
-      key: "jira",
-      icon: <SiJira size={14} color="#2684FF" />,
-      tip: `Jira · ${jiraKey}`,
-    });
-  }
-  if (hasSwagger) {
-    chips.push({
-      key: "swagger",
-      icon: <SiSwagger size={14} color="#85EA2D" />,
-      tip: swaggerTitle ? `Swagger · ${swaggerTitle}` : "Swagger",
-    });
-  }
-
-  const title = canvas.isMine
-    ? chips.length
-      ? `Connected: ${chips.map((c) => c.tip).join(", ")}. Click to manage.`
-      : "Connect apps to this canvas"
-    : chips.length
-      ? `Connected: ${chips.map((c) => c.tip).join(", ")}`
-      : "Connected apps";
-
   return (
     <button
       type="button"
       disabled={!canvas.isMine}
-      title={title}
+      title={canvas.isMine ? title : "Connected apps"}
       onClick={(e) => {
         e.stopPropagation();
         onConnect(canvas);
       }}
-      className="inline-flex items-center gap-1.5 rounded-[8px] border border-[#C9B8F7] bg-[#F4EFFE] px-2 py-1.5 hover:bg-[#EDE4FD] disabled:cursor-default disabled:hover:bg-[#F4EFFE] dark:border-[#3a3060] dark:bg-[#1e1a2e]"
+      className="flex min-w-0 items-center justify-center gap-2 rounded-[8px] border border-[#C9B8F7] bg-[#F4EFFE] py-2 text-[12.5px] font-medium text-[#8664F2] hover:bg-[#EDE4FD] disabled:cursor-default disabled:hover:bg-[#F4EFFE] dark:border-[#3a3060] dark:bg-[#1e1a2e]"
     >
-      {chips.length === 0 ? (
-        <TbLink size={14} className="text-[#8664F2]" />
+      {bare ? (
+        icon
       ) : (
-        chips.map((chip) => (
-          <span
-            key={chip.key}
-            title={chip.tip}
-            className="flex h-[22px] w-[22px] items-center justify-center rounded-[6px] bg-white shadow-sm dark:bg-[#2a2440]"
-          >
-            {chip.icon}
-          </span>
-        ))
+        <span className="flex h-[20px] w-[20px] items-center justify-center rounded-[5px] bg-white shadow-sm dark:bg-[#2a2440]">{icon}</span>
       )}
+      <span>{label}</span>
     </button>
   );
 }

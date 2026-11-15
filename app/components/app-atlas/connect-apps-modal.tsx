@@ -46,31 +46,12 @@ const CATEGORIES: { title: string; apps: { id: AppId; name: string; icon: React.
 
 const CAN_MAP: AppId[] = ["jira", "swagger", "teams"];
 
-type StatusKind = "linked" | "active" | "expired" | "error" | "none" | "soon";
-
-function statusOf(health: ConnectionHealth, linkedOnCanvas: boolean, mappable: boolean): {
-  kind: StatusKind;
-  label: string;
-  tip: string;
-} {
-  if (!mappable) return { kind: "soon", label: "Soon", tip: "Coming soon" };
-  if (linkedOnCanvas && health === "active") {
-    return { kind: "linked", label: "On canvas", tip: "Linked to this canvas" };
-  }
-  if (health === "active") return { kind: "active", label: "Active", tip: "Integrated and ready to connect" };
-  if (health === "expired") return { kind: "expired", label: "Expired", tip: "Token expired. Open Integrations to reconnect." };
-  if (health === "error") return { kind: "error", label: "Error", tip: "Integration error. Open Integrations to fix." };
-  return { kind: "none", label: "Not connected", tip: "Not integrated. Open Integrations to connect." };
+function healthLabel(health: ConnectionHealth, linkedOnCanvas: boolean): string {
+  if (health === "active") return linkedOnCanvas ? "Active · linked to this canvas" : "Active · ready to connect";
+  if (health === "expired") return "Expired · reconnect in Integrations";
+  if (health === "error") return "Error · check Integrations";
+  return "Not integrated · open Integrations";
 }
-
-const STATUS_PILL: Record<StatusKind, string> = {
-  linked: "bg-[#DBEAFE] text-[#1D4ED8]",
-  active: "bg-[#DCFCE7] text-[#15803D]",
-  expired: "bg-[#FEF3C7] text-[#B45309]",
-  error: "bg-[#FEE2E2] text-[#B91C1C]",
-  none: "bg-[#F3F4F6] text-[#6B7280]",
-  soon: "bg-[#F3F4F6] text-[#9CA3AF]",
-};
 
 export function ConnectAppsModal({
   client,
@@ -135,9 +116,9 @@ export function ConnectAppsModal({
             <p className="text-[11.5px] text-[#7E7E7E]">Checking integrations…</p>
           )}
           {CATEGORIES.map((cat) => (
-            <div key={cat.title} className="rounded-[12px] border border-[#ECECEC] bg-[#FAFAFA] p-3 dark:border-[#2a2a2a] dark:bg-[#101010]">
-              <div className="px-1 text-[12.5px] font-medium text-[#5E6066] dark:text-[#9ca3af]">{cat.title}</div>
-              <div className="mt-2 space-y-1.5">
+            <div key={cat.title} className="rounded-[12px] border border-[#ECECEC] bg-[#FAFAFA] p-4 dark:border-[#2a2a2a] dark:bg-[#101010]">
+              <div className="text-[14px] font-medium text-[#1F1F1F] dark:text-[#ededed]">{cat.title}</div>
+              <div className="mt-3 flex flex-wrap gap-3">
                 {cat.apps.map((app) => {
                   const health = healthOf(app.id);
                   const ok = canUse(app.id);
@@ -148,19 +129,24 @@ export function ConnectAppsModal({
                     (app.id === "swagger" && !!swagger) ||
                     (app.id === "teams" && !!linkedTeams?.teamId);
                   const selected = picked === app.id;
-                  const needsIntegrate =
-                    mappable && (health === "disconnected" || health === "error" || health === "expired");
-                  const status = statusOf(health, linkedOnCanvas, mappable);
+                  const expired = health === "expired";
+                  const needsIntegrate = mappable && (health === "disconnected" || health === "error" || expired);
+
+                  const statusText = mappable
+                    ? healthLabel(health, linkedOnCanvas)
+                    : "Coming soon";
                   const tooltip = selected
-                    ? `${app.name}: ${status.tip}. Selected. Click again to unselect.`
-                    : `${app.name}: ${status.tip}`;
+                    ? `${app.name}: ${statusText}. Selected. Click again to unselect.`
+                    : `${app.name}: ${statusText}`;
 
                   const onAppClick = () => {
                     if (needsIntegrate) {
                       router.push("/integrations");
                       return;
                     }
-                    if (!mappable || !ok) return;
+                    if (!mappable) return;
+                    if (!ok) return;
+                    // Toggle: clicking the already-selected icon unselects it.
                     setPicked((prev) => (prev === app.id ? null : app.id));
                   };
 
@@ -172,42 +158,46 @@ export function ConnectAppsModal({
                       title={tooltip}
                       aria-label={tooltip}
                       aria-pressed={selected}
-                      disabled={!mappable && !needsIntegrate}
-                      className={`flex w-full items-center gap-3 rounded-[10px] border bg-white px-3 py-2.5 text-left transition dark:bg-[#1a1a1a] ${
+                      className={`relative flex h-[56px] w-[56px] items-center justify-center rounded-[10px] bg-white shadow-sm transition dark:bg-[#1a1a1a] ${
                         selected && ok
-                          ? "border-[#8664F2] ring-2 ring-[#8664F2]/25"
+                          ? "border-2 border-[#8664F2] ring-2 ring-[#8664F2]/35 scale-105"
                           : ok
-                            ? "border-[#E5E7EB] hover:border-[#8664F2]/60 dark:border-[#2a2a2a]"
-                            : needsIntegrate
-                              ? "border-dashed border-[#C4B5E8] hover:border-[#8664F2] dark:border-[#3a3060]"
-                              : "cursor-default border-[#E5E7EB] opacity-55 dark:border-[#2a2a2a]"
+                            ? "border-2 border-[#22C55E] hover:scale-105"
+                            : expired
+                              ? "border-2 border-[#F59E0B] hover:ring-2 hover:ring-[#F59E0B]/30"
+                              : needsIntegrate
+                                ? "border border-dashed border-[#C4B5E8] opacity-70 hover:border-[#8664F2] hover:opacity-100"
+                                : "cursor-default border border-[#E5E7EB] opacity-40 grayscale dark:border-[#2a2a2a]"
                       }`}
                     >
-                      <span
-                        className={`flex h-[40px] w-[40px] shrink-0 items-center justify-center rounded-[9px] border bg-[#FAFAFA] dark:bg-[#141414] ${
-                          status.kind === "linked" || status.kind === "active"
-                            ? "border-[#86EFAC]"
-                            : status.kind === "expired"
-                              ? "border-[#FCD34D]"
-                              : "border-[#E5E7EB] dark:border-[#2a2a2a]"
-                        }`}
-                      >
-                        {app.icon}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[13.5px] font-medium text-[#1F1F1F] dark:text-[#ededed]">
-                          {app.name}
+                      {app.icon}
+                      {/* Connection status: corner chip (green / amber / +) */}
+                      {ok && (
+                        <span
+                          className="absolute -right-1 -top-1 h-[12px] w-[12px] rounded-full border-2 border-white bg-[#22C55E]"
+                          title={statusText}
+                        />
+                      )}
+                      {expired && (
+                        <span
+                          className="absolute -right-1 -top-1 h-[12px] w-[12px] rounded-full border-2 border-white bg-[#F59E0B]"
+                          title={statusText}
+                        />
+                      )}
+                      {needsIntegrate && !expired && (
+                        <span
+                          className="absolute -right-1 -top-1 flex h-[14px] w-[14px] items-center justify-center rounded-full border-2 border-white bg-[#8664F2] text-[9px] font-bold text-white"
+                          title={statusText}
+                        >
+                          +
                         </span>
-                        <span className="mt-0.5 block truncate text-[11.5px] text-[#7E7E7E]">
-                          {status.tip}
-                          {selected ? " · Selected" : ""}
-                        </span>
-                      </span>
-                      <span
-                        className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${STATUS_PILL[status.kind]}`}
-                      >
-                        {status.label}
-                      </span>
+                      )}
+                      {linkedOnCanvas && ok && (
+                        <span
+                          className="absolute -bottom-1 left-1/2 h-[3px] w-[18px] -translate-x-1/2 rounded-full bg-[#2563EB]"
+                          title="Linked to this canvas"
+                        />
+                      )}
                     </button>
                   );
                 })}
@@ -217,7 +207,7 @@ export function ConnectAppsModal({
           {picked && canUse(picked) && (
             <p className="text-[12px] font-medium text-[#8664F2]">
               Selected: {CATEGORIES.flatMap((c) => c.apps).find((a) => a.id === picked)?.name}. Click Connect
-              (or click again to unselect).
+              (or click the icon again to unselect).
             </p>
           )}
           <button
