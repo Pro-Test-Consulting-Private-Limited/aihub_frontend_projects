@@ -3,10 +3,26 @@
 import { useEffect, useRef, useState } from "react";
 import Avatar from "react-avatar";
 import { useMsal } from "@azure/msal-react";
+import type { AccountInfo } from "@azure/msal-browser";
 import { fetchGraphProfilePhotoUrl } from "@/app/lib/auth-client";
 
+/** Human name only — never raw UPN / @microsoft / onmicrosoft strings in chrome. */
+function friendlyDisplayName(user: AccountInfo | undefined): string {
+  const raw = (user?.name || "").trim();
+  if (raw && !raw.includes("@") && !/onmicrosoft|\.ms\b/i.test(raw)) return raw;
+  const upn = (user?.username || "").trim();
+  const local = upn.split("@")[0] || "";
+  if (local) {
+    return local
+      .replace(/[._]+/g, " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase())
+      .trim();
+  }
+  return "Account";
+}
+
 /**
- * Shared signed-in user control (photo + name hover + logout).
+ * Shared signed-in user control (photo + logout).
  * Used by Home TopNav and App Atlas header so both stay in sync.
  */
 export function UserProfileMenu({ size = 40 }: { size?: number }) {
@@ -16,7 +32,7 @@ export function UserProfileMenu({ size = 40 }: { size?: number }) {
   const cardRef = useRef<HTMLDivElement | null>(null);
   const photoUrlRef = useRef<string | null>(null);
   const user = accounts[0];
-  const displayName = user?.name || user?.username || "Account";
+  const displayName = friendlyDisplayName(user);
 
   useEffect(() => {
     let cancelled = false;
@@ -58,16 +74,16 @@ export function UserProfileMenu({ size = 40 }: { size?: number }) {
     <div className="relative" ref={cardRef}>
       <button
         type="button"
-        className="group relative cursor-pointer select-none"
+        className="cursor-pointer select-none"
         onClick={() => setOpen((v) => !v)}
         title={displayName}
-        aria-label={displayName}
+        aria-label={`Account · ${displayName}`}
       >
         {photoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={photoUrl}
-            alt={displayName}
+            alt=""
             width={size}
             height={size}
             className="rounded-full object-cover"
@@ -80,16 +96,13 @@ export function UserProfileMenu({ size = 40 }: { size?: number }) {
             textSizeRatio={2}
             round={`${Math.round(size / 2)}px`}
             color="#8664f2"
-            maxInitials={3}
+            maxInitials={2}
           />
         )}
-        <span className="pointer-events-none absolute right-0 top-[calc(100%+8px)] z-50 hidden whitespace-nowrap rounded-[8px] border border-[#E5E7EB] bg-white px-2.5 py-1.5 text-[12.5px] font-medium text-[#1F1F1F] shadow-md group-hover:block dark:border-[#2a2a2a] dark:bg-[#141414] dark:text-[#ededed]">
-          {displayName}
-        </span>
       </button>
 
       {open && (
-        <div className="absolute right-0 top-[calc(100%+10px)] z-50 min-w-[180px] rounded-[7px] border border-[#E5E7EB] bg-white shadow-xl dark:border-[#2a2a2a] dark:bg-[#141414]">
+        <div className="absolute right-0 top-[calc(100%+10px)] z-50 min-w-[160px] rounded-[7px] border border-[#E5E7EB] bg-white shadow-xl dark:border-[#2a2a2a] dark:bg-[#141414]">
           <div className="border-b border-[#E5E7EB] px-[17px] py-[10px] text-[13px] font-medium text-[#1F1F1F] dark:border-[#2a2a2a] dark:text-[#ededed]">
             {displayName}
           </div>

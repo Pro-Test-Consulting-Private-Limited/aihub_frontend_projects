@@ -583,35 +583,46 @@ export default function AtlasWorkspace() {
             ))}
           </nav>
         </div>
-        <div className="flex shrink-0 items-center gap-4 text-[13px] text-[#1F1F1F] dark:text-[#ededed]">
-          <div className="h-[24px] w-px bg-[#E5E7EB] dark:bg-[#2a2a2a]" />
+        <div className="flex shrink-0 items-center gap-2 text-[13px] text-[#1F1F1F] dark:text-[#ededed]">
+          <div className="mx-1 h-[24px] w-px bg-[#E5E7EB] dark:bg-[#2a2a2a]" />
           <button
             type="button"
-            className={`flex items-center gap-1.5 hover:text-[#8664F2] ${mineOnly ? "text-[#8664F2]" : ""}`}
+            className={`inline-flex h-8 w-8 items-center justify-center rounded-full hover:bg-[#F4EFFE] hover:text-[#8664F2] ${mineOnly ? "bg-[#F4EFFE] text-[#8664F2]" : ""}`}
             onClick={() => setMineOnly((m) => !m)}
-            title={mineOnly ? "Showing only your canvases" : "Show only your canvases"}
+            title={mineOnly ? "Showing only your canvases — click for all" : "Show only your canvases"}
+            aria-label={mineOnly ? "My History on" : "History"}
+            aria-pressed={mineOnly}
           >
-            <TbHistory size={15} />
-            {mineOnly ? "My History" : "History"}
+            <TbHistory size={16} />
           </button>
-          <div className="flex -space-x-2" title={online.length ? `On this page now: ${online.map((u) => u.name || u.email).join(", ")}` : undefined}>
-            {online.slice(0, 3).map((u, i) => (
-              <span
-                key={u.id}
-                title={`${u.name || u.email}${u.email && u.name ? ` (${u.email})` : ""} · on this page now`}
-                className={`relative flex h-[28px] w-[28px] items-center justify-center rounded-full border-2 border-white text-[10px] font-semibold text-white dark:border-[#0a0a0a] ${AVATAR_COLORS[i % AVATAR_COLORS.length]}`}
-              >
-                {initials(u.name || u.email)}
-                <span className="absolute -right-0.5 -bottom-0.5 h-[8px] w-[8px] rounded-full border-[1.5px] border-white bg-[#22C55E] dark:border-[#0a0a0a]" />
-              </span>
-            ))}
-            {online.length > 3 && (
-              <span className="flex h-[28px] w-[28px] items-center justify-center rounded-full border-2 border-white bg-[#E5E7EB] text-[10px] font-semibold text-[#4B5563] dark:border-[#0a0a0a]">
-                +{online.length - 3}
-              </span>
-            )}
-          </div>
-          {/* Same signed-in profile control as Home TopNav (Graph photo + logout). */}
+          {online.length > 0 ? (
+            <div
+              className="flex -space-x-2"
+              title={online.map((u) => u.name || "Someone").filter(Boolean).join(", ")}
+            >
+              {online.slice(0, 2).map((u, i) => (
+                <span
+                  key={u.id}
+                  title={u.name || "On this page"}
+                  className={`relative flex h-[28px] w-[28px] items-center justify-center rounded-full border-2 border-white text-[10px] font-semibold text-white dark:border-[#0a0a0a] ${AVATAR_COLORS[i % AVATAR_COLORS.length]}`}
+                >
+                  {initials(u.name || "U")}
+                  <span className="absolute -right-0.5 -bottom-0.5 h-[8px] w-[8px] rounded-full border-[1.5px] border-white bg-[#22C55E] dark:border-[#0a0a0a]" />
+                </span>
+              ))}
+              {online.length > 2 ? (
+                <span
+                  className="flex h-[28px] w-[28px] items-center justify-center rounded-full border-2 border-white bg-[#E5E7EB] text-[10px] font-semibold text-[#4B5563] dark:border-[#0a0a0a]"
+                  title={online
+                    .slice(2)
+                    .map((u) => u.name || "Someone")
+                    .join(", ")}
+                >
+                  +{online.length - 2}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
           <UserProfileMenu size={32} />
         </div>
       </div>

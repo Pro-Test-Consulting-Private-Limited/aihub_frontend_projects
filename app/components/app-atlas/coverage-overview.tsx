@@ -388,24 +388,22 @@ function EisenhowerMiniGrid({
     const n = byQuadrant[q] || 0;
     return (
       <div
-        className={`rounded-[8px] border ${EISENHOWER_CHIP[q]} ${compact ? "p-1.5" : "p-2"}`}
-        title={`${q} · ${EISENHOWER_LABEL[q]}  -  ${EISENHOWER_MEANING[q]} (${EISENHOWER_AXES[q]})`}
+        className={`overflow-hidden rounded-[8px] border ${EISENHOWER_CHIP[q]} ${compact ? "p-1" : "p-2"}`}
+        title={`${q} · ${EISENHOWER_LABEL[q]} — ${EISENHOWER_MEANING[q]} (${EISENHOWER_AXES[q]})`}
       >
-        <div className={`font-semibold ${compact ? "text-[10px]" : "text-[11px]"}`}>
-          {q} · {EISENHOWER_LABEL[q]}
+        <div className={`truncate font-semibold ${compact ? "text-[9px]" : "text-[11px]"}`}>
+          {q}
+          {!compact ? ` · ${EISENHOWER_LABEL[q]}` : ""}
         </div>
         {!compact ? (
-          <div className="mt-0.5 text-[10px] leading-snug opacity-90">{EISENHOWER_MEANING[q]}</div>
-        ) : (
-          <div className="mt-0.5 text-[9px] leading-snug opacity-80">{EISENHOWER_AXES[q]}</div>
-        )}
-        <div className={`mt-1 font-semibold tabular-nums ${compact ? "text-[14px]" : "text-[18px]"}`}>{n}</div>
-        <div className="text-[9px] opacity-70">{n === 1 ? "case" : "cases"}</div>
+          <div className="mt-0.5 line-clamp-2 text-[10px] leading-snug opacity-90">{EISENHOWER_MEANING[q]}</div>
+        ) : null}
+        <div className={`mt-0.5 font-semibold tabular-nums ${compact ? "text-[12px]" : "text-[18px]"}`}>{n}</div>
       </div>
     );
   };
   return (
-    <div className={`grid grid-cols-2 ${compact ? "gap-1" : "gap-2"}`}>
+    <div className={`grid grid-cols-2 ${compact ? "gap-0.5" : "gap-2"}`}>
       {/* Layout matches classic Eisenhower: Urgent on top row, Important on left */}
       {cell("Q1")}
       {cell("Q3")}
@@ -429,22 +427,15 @@ function EisenhowerCell({ byQuadrant, tests = 0 }: { byQuadrant: Record<string, 
   const q = dominantQuadrant(map);
   const total = Object.values(map).reduce((n, v) => n + v, 0);
   if (!total) return <span className="text-[#9ca3af]">-</span>;
+  const focusLabel = q === "Untriaged" ? "Untriaged" : `${q} · ${EISENHOWER_LABEL[q]}`;
   return (
-    <div className="min-w-[200px] max-w-[280px]">
-      <div className="mb-1.5 flex flex-wrap items-center gap-1">
-        <span className={`inline-flex rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${EISENHOWER_CHIP[q]}`}>
-          Focus: {q}
-          {q !== "Untriaged" ? ` · ${EISENHOWER_LABEL[q]}` : " · Untriaged"}
-        </span>
-        {(map.Untriaged || 0) > 0 && q !== "Untriaged" ? (
-          <span className="text-[10px] text-[#9CA3AF]">+{map.Untriaged} untriaged</span>
-        ) : null}
-      </div>
-      {q !== "Untriaged" ? (
-        <p className="mb-1.5 text-[10px] leading-snug text-[#6b7280]">{EISENHOWER_MEANING[q]}</p>
-      ) : (
-        <p className="mb-1.5 text-[10px] leading-snug text-[#6b7280]">No Priority/Severity assessed yet for these cases.</p>
-      )}
+    <div
+      className="w-[148px]"
+      title={q === "Untriaged" ? "No Priority/Severity assessed yet" : EISENHOWER_MEANING[q]}
+    >
+      <span className={`mb-1 inline-flex max-w-full truncate rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${EISENHOWER_CHIP[q]}`}>
+        {focusLabel}
+      </span>
       <EisenhowerMiniGrid byQuadrant={map} compact />
     </div>
   );
@@ -461,15 +452,15 @@ function EisenhowerBoard({
 }) {
   const total = Object.values(byQuadrant).reduce((n, v) => n + v, 0);
   return (
-    <div className="mb-4 rounded-[12px] border border-[#E6E1F5] bg-white p-3 dark:border-[#2a2a2a] dark:bg-[#0f0f0f]">
+    <div className="mb-4 overflow-hidden rounded-[12px] border border-[#E6E1F5] bg-white p-3 dark:border-[#2a2a2a] dark:bg-[#0f0f0f]">
       <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
-        <div>
+        <div className="min-w-0">
           <div className="text-[13px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">
-            {title || "Eisenhower triage  -  all tickets"}
+            {title || "Eisenhower triage — all tickets"}
           </div>
           <p className="mt-0.5 text-[11.5px] text-[#6b7280]">
             {subtitle ||
-              "Urgent × Important from Priority × Severity. Q1-Q4 say what to do with each case  -  not just how many."}
+              "Urgent × Important from Priority × Severity. Q1–Q4 say what to do with each case — not just how many."}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-[#6B7280]">
@@ -1167,11 +1158,11 @@ export function CoverageOverview({
         <span className="ml-auto flex items-center gap-3">
           {modelInactive ? (
             <span
-              title="Hugging Face endpoint is paused or scaled to zero"
-              className="inline-flex items-center gap-1.5 rounded-full border border-[#fecaca] bg-[#fff5f5] px-2.5 py-0.5 text-[11px] font-medium text-[#b91c1c]"
+              title="Model inactive — Hugging Face endpoint is paused or scaled to zero"
+              className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[#fecaca] bg-[#fff5f5] text-[#b91c1c]"
+              aria-label="Model inactive"
             >
-              <span className="h-1.5 w-1.5 rounded-full bg-[#ef4444]" />
-              Model inactive
+              <span className="h-2 w-2 rounded-full bg-[#ef4444]" />
             </span>
           ) : null}
           <button
@@ -1579,16 +1570,14 @@ export function CoverageOverview({
             </div>
 
             {prioSevView === "matrix" ? (
-              <div
-                ref={eisenhowerBoardRef}
-                className="sticky top-0 z-[5] -mx-1 mb-4 bg-[#f8f9fc]/95 px-1 py-1 backdrop-blur-sm dark:bg-[#0a0a0a]/95"
-              >
+              <div ref={eisenhowerBoardRef} className="mb-4 scroll-mt-2">
                 <EisenhowerBoard byQuadrant={eisenhowerTotals} />
               </div>
             ) : null}
 
+            <div className="overflow-x-auto rounded-[10px] border border-[#E5E7EB] dark:border-[#2a2a2a]">
             <table className={`w-full border-collapse text-[13px] ${prioSevView === "matrix" ? "min-w-[1480px]" : "min-w-[1320px]"}`}>
-              <thead>
+              <thead className="sticky top-0 z-[1] bg-white dark:bg-[#0a0a0a]">
                 <tr className="border-b border-[#E5E7EB] dark:border-[#2a2a2a]">
                   <th className={th}>Epic / Ticket</th>
                   <th className={th}>SIT cases</th>
@@ -1864,12 +1853,12 @@ export function CoverageOverview({
                         const templateOnly = t.tests > 0 && t.templateCases === t.tests;
                         return (
                           <tr key={t.key} className="border-b border-[#EEE] hover:bg-[#F8F9FB] dark:border-[#1a1a1a] dark:hover:bg-[#101010]">
-                              <td className="px-3 py-3 pl-8">
-                                <div className="flex items-center gap-2 font-medium text-[#1F1F1F] dark:text-[#ededed]">
+                              <td className="px-3 py-3 pl-8 align-middle">
+                                <div className="flex min-w-0 max-w-[320px] items-center gap-2 font-medium text-[#1F1F1F] dark:text-[#ededed]">
                                   <StoryIcon />
                                   <i className={`h-2 w-2 shrink-0 rounded-full ${tb.dot}`} title={`Test depth ${t.depth}%`} />
                                   <span className="shrink-0 text-[12px] font-semibold text-[#2563EB]">{t.key}</span>
-                                  <span className="truncate">{t.name}</span>
+                                  <span className="min-w-0 truncate" title={t.name}>{t.name}</span>
                                   {templateOnly ? (
                                     <Tip text="Test depth for this ticket is based on template cases">
                                       <span className="shrink-0 rounded border border-[#D1D5DB] bg-[#F3F4F6] px-1.5 py-0.5 text-[10px] font-semibold text-[#4B5563]">
@@ -1887,13 +1876,13 @@ export function CoverageOverview({
                                 </div>
                               </td>
                               <td className="px-3 py-3">{t.tests || "-"}</td>
-                              <td className="px-3 py-3">
-                                <div className="flex max-w-[220px] flex-wrap gap-1">
+                              <td className="px-3 py-3 align-middle">
+                                <div className="flex max-w-[240px] flex-wrap content-center gap-1">
                                   {DEPTH_TYPES.some((ty) => t.byType[ty])
                                     ? DEPTH_TYPES.filter((ty) => t.byType[ty]).map((k) => (
                                         <span
                                           key={k}
-                                          className={`rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${TYPE_CHIP[k]}`}
+                                          className={`whitespace-nowrap rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${TYPE_CHIP[k]}`}
                                         >
                                           {k} {t.byType[k]}
                                         </span>
@@ -1901,12 +1890,12 @@ export function CoverageOverview({
                                     : "-"}
                                 </div>
                               </td>
-                              <td className="px-3 py-3">
-                                <div className="w-[120px]">
+                              <td className="px-3 py-3 align-middle">
+                                <div className="flex w-[120px] flex-col justify-center gap-1">
                                   <div className="h-[6px] overflow-hidden rounded-full bg-[#E5E7EB] dark:bg-[#2a2a2a]">
                                     <div className={`h-full ${tb.bar}`} style={{ width: `${t.depth}%` }} />
                                   </div>
-                                  <div className="mt-1 text-[10.5px] text-[#7E7E7E]">{t.depth}%</div>
+                                  <div className="text-[10.5px] leading-none text-[#7E7E7E]">{t.depth}%</div>
                                 </div>
                               </td>
                               <td
@@ -2084,6 +2073,7 @@ export function CoverageOverview({
                 })}
               </tbody>
             </table>
+            </div>
           </>
         )}
       </div>
