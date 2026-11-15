@@ -94,7 +94,7 @@ export function UserProfileMenu({ size = 40 }: { size?: number }) {
     <div className="relative shrink-0" ref={cardRef}>
       <button
         type="button"
-        className="flex shrink-0 cursor-pointer select-none items-center justify-center overflow-hidden rounded-full bg-[#8664F2] text-white"
+        className="flex shrink-0 cursor-pointer select-none items-center justify-center overflow-hidden rounded-full border-2 border-[#8664F2] bg-[#8664F2] text-white shadow-sm ring-2 ring-white dark:ring-[#0a0a0a]"
         style={{ width: size, height: size, minWidth: size, minHeight: size }}
         onClick={() => setOpen((v) => !v)}
         title={displayName}

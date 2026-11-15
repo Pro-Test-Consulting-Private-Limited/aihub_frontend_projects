@@ -39,6 +39,7 @@ import { useApiSpec, useApiSpecView } from "@/app/hooks/use-api-spec";
 import { clearCanvasSwagger, getCanvasSwagger, setCanvasSwagger, type CanvasSwagger } from "@/app/lib/canvas-swagger";
 import { isLocalAuthBypassEnabled } from "@/app/lib/auth-bypass";
 import { UserProfileMenu } from "@/app/components/user-profile-menu";
+import { msalSelfKeys } from "@/app/lib/auth-client";
 
 const tabFallback = (
   <div className="flex h-full items-center justify-center gap-2 text-[13px] text-[#7E7E7E]">
@@ -596,20 +597,14 @@ export default function AtlasWorkspace() {
             <TbHistory size={16} />
           </button>
           {(() => {
-            const me = accounts[0];
-            const meIds = new Set(
-              [me?.localAccountId, me?.homeAccountId, me?.username, me?.name]
-                .filter(Boolean)
-                .map((x) => String(x).toLowerCase()),
-            );
-            // Hide yourself — UserProfileMenu already shows your avatar.
+            // Presence User.id is Entra oid — match MSAL oid/localAccountId/email/name so you never appear twice.
+            const meIds = msalSelfKeys(accounts[0]);
             const others = online.filter((u) => {
               const id = (u.id || "").toLowerCase();
               const email = (u.email || "").toLowerCase();
               const name = (u.name || "").toLowerCase();
               return !meIds.has(id) && !meIds.has(email) && !meIds.has(name);
             });
-            // Same box size as UserProfileMenu (32) so the header circles match.
             const AVATAR = 32;
             if (!others.length) return null;
             return (
