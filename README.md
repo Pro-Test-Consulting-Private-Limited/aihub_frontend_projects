@@ -10,18 +10,22 @@ for the things the browser must not hold (Jira / GitHub credentials, the Postgre
 
 | Environment | URL | Container (host port) | Built from |
 |---|---|---|---|
-| Prod | https://ai-hub.protestcorp.com | `frontend` (3000) | `main` (currently an older build **without** App Atlas) |
-| SIT | https://ai-hub-sit.protestcorp.com | `frontend-sit` (3200) | `dev` |
-| Dev | https://ai-hub-dev.protestcorp.com | `frontend-dev` (3100) | `dev` |
+| Prod | https://ai-hub.protestcorp.com | `frontend` (3000) | `main` / last promote from sit (may lag dig) |
+| SIT | https://ai-hub-sit.protestcorp.com | `frontend-sit` (3200) | promote from dig, or `dev` |
+| Dig (dev) | https://ai-hub-dev.protestcorp.com | `frontend-dev` (3100) | `dev` |
+
+**Frontends are per env. App Atlas API is one shared container** for dig/sit/prod (`/atlas-api/` → `appatlas-backend`).
+Ops/logs UI is **not** in this repo: https://logs.protestcorp.com/admin/ (see appatlas-backend architecture docs).
 
 **More documentation**
 
 | Doc | What's in it |
 |---|---|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Route map, state and data flow, Microsoft sign-in flow, how App Atlas pages work, error handling, design choices |
+| [docs/ONBOARDING.md](docs/ONBOARDING.md) | **Start here** if you are new to this frontend |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Route map, state and data flow, Microsoft sign-in, App Atlas workspace, design choices |
 | [docs/ENDPOINTS.md](docs/ENDPOINTS.md) | Every backend endpoint the app calls (by service), plus the app's own pages and API routes |
 | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Every environment variable, what it does, and which environment needs it |
-| `API.md` and `FRONTEND.md` in [appatlas-backend](https://github.com/Pro-Test-Consulting-Private-Limited/appatlas-backend) | The App Atlas API contract this app consumes |
+| `API.md`, `FRONTEND.md`, `docs/architecture/` in [appatlas-backend](https://github.com/Pro-Test-Consulting-Private-Limited/appatlas-backend) | Atlas API contract + ops dashboard (Phase 4 watchdog) |
 
 ---
 
@@ -39,7 +43,7 @@ for the things the browser must not hold (Jira / GitHub credentials, the Postgre
 | Debugger | `/projects/debugger` | Upload a screenshot and get a markdown analysis | AI Hub backend |
 | Action-driven test case generation | `/projects/action-driven-test-case-generator-new-run`, `/projects/action-driven-test-case-generator-rerun` | Record a journey in a remote browser (noVNC), save it, generate manual test cases; list and re-run past executions | Playwright codegen service |
 | Self Healing | `/projects/self-healing` | Run a Cypress spec with a streamed log; when a selector breaks, ask the AI to heal it | AI Hub backend |
-| App Atlas | `/app-atlas?projectId=<id>` | Record a journey in a live remote browser, save it as a canvas of screens, connect the canvas to a Jira project, see matched tickets and clarification questions per screen | App Atlas backend (plus this app's Jira proxy routes) |
+| App Atlas | `/app-atlas?projectId=<id>` | Record a journey, canvas map, Connect apps (Jira/Swagger/Teams/…), explorer Connected row, tabs for SIT / API Testing / Coverage / Security / Performance / Reports / CI/CD (flags apply), shared profile menu | Shared App Atlas backend + this app's Jira proxy; see [docs/ONBOARDING.md](docs/ONBOARDING.md) |
 | Integrations | `/integrations` | Connect Jira (site, email, API token), GitHub (personal access token) or a Swagger/OpenAPI spec | This app's `/api/auth/*` and `/api/integrations` |
 | Metrics | `/metrics/business-usage`, `/metrics/performance-reliability`, `/metrics/model-quality-operational` | Charts of invocations, tokens, latency, error rate, validity, healing | AI Hub backend |
 | Error log | `/workplace/error-log` | Paged list of backend errors | AI Hub backend |
@@ -271,10 +275,10 @@ What `aihub-deploy frontend <env>` does:
 | Branch | Deployed to | Notes |
 |---|---|---|
 | `dev` | Dev and SIT | Integration branch. Merge feature branches here, deploy dev, then promote dev → SIT. |
-| `main` | Prod | Today `main` predates App Atlas, so **prod has no App Atlas**. Merging `dev` into `main` and deploying prod ships App Atlas to prod. |
-| `sit` | SIT, once it exists | Not created yet. When it exists, `aihub-deploy frontend sit` builds it instead of `dev`. |
+| `main` | Prod | Prefer `aihub-deploy promote frontend sit prod` so prod matches tested dig/sit commits. |
+| `sit` | Optional | If present, `aihub-deploy frontend sit` may prefer it; otherwise dig/sit use `dev`. |
 
-Prefer `promote` (dev → SIT → prod) over building prod from a branch, so prod gets exactly what was tested.
+Prefer `promote` (dig → sit → prod) over building prod from a random branch, so prod gets exactly what was tested.
 
 ---
 

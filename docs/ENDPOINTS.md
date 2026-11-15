@@ -4,6 +4,9 @@ Every HTTP endpoint this frontend calls, found by reading the code, plus the pag
 Request and response shapes are described **as the frontend uses them**. The owning service may return more fields;
 check that service's own docs for the full contract.
 
+New FE developers: start with [ONBOARDING.md](ONBOARDING.md). App Atlas API detail also lives in appatlas-backend
+`FRONTEND.md` / `API.md`.
+
 **Contents:** [How base URLs are resolved](#how-base-urls-are-resolved) ·
 [AI Hub backend](#1-ai-hub-backend-backend_ai_agents) ·
 [Playwright codegen service](#2-playwright-codegen-service-playwright-action-based) ·
@@ -36,7 +39,7 @@ appatlas-backend `deploy/VM-GUIDE.md`):
 | `/api/v1/...`, `/upload`, `/upload-excel`, `/process-image`, `/manual-test`, `/cypress/...`, `/repo-structure`, `/file-content`, `/health`, `/stats...`, `/error-logs` | AI Hub backend (`aihub-backend`, `-sit`, `-dev`) |
 | `/api/v1/clarify/...` | Requirement clarification agent (the VM guide lists this route for prod; confirm it exists on SIT/dev) |
 | `/sessions/...`, `/vnc/`, `/websockify`, noVNC page | Playwright codegen service (`playwright-codegen-cloud`, `-sit`, `-dev`) |
-| `/atlas-api/...` | App Atlas backend (one container for all sites) |
+| `/atlas-api/...` | App Atlas backend (**one** `appatlas-backend` container for dig, sit and prod) |
 
 > `/sessions/...` (Playwright, called through `BASE_URL`) and `/atlas-api/sessions/...` (App Atlas) are different
 > services. Don't confuse them.
@@ -161,7 +164,7 @@ repo's `API.md` and `FRONTEND.md`.
 | POST | `/sessions/:id/finish` | `finishSession` | `recording-view.tsx` ("Finish & Save") | none | Final `SessionSnapshot` |
 | DELETE | `/sessions/:id` | `discardSession` | `recording-view.tsx` (Discard), `atlas-workspace.tsx` (viewer switch) | none | 204 |
 | GET | `/canvases` | `listCanvases` | `atlas-workspace.tsx` | none | `CanvasSummary[]` (filtered in the UI by the project's host and "My History") |
-| GET | `/canvases/:id` | `getCanvas` | `atlas-workspace.tsx` | none | `Canvas` (nodes, edges, test data, `jira` mapping, `clarifications`). 404 means it was deleted. |
+| GET | `/canvases/:id?view=lite\|full` | `getCanvas` | `atlas-workspace.tsx` | `view` query (`lite` preferred when opening a canvas) | `Canvas` (lite omits heavy fields). 404 means it was deleted. |
 | POST | `/canvases` | `saveCanvas` | `save-execution-modal.tsx` through `atlas-workspace.tsx` | `{ sessionId, name, description? }` | `Canvas` |
 | PATCH | `/canvases/:id` | `renameCanvas` | Explorer rename | `{ name?, description? }` | `Canvas` |
 | DELETE | `/canvases/:id` | `deleteCanvas` | Explorer delete | none | 204 |
@@ -242,7 +245,8 @@ with `resolveJiraCredentials` (`lib/jira-credentials.ts`): API token (site + ema
 | Method | Path | Auth | Request | Response |
 |---|---|---|---|---|
 | GET | `/api/app-atlas/jira/projects` | Entra + Jira cookies | none | `{ projects: [{ key, name }] }`, paged from Jira `/rest/api/3/project/search` (50 per page, up to 1000). 409 if Jira isn't connected, 401 if Jira rejects the credentials or the session expired, 502 for other Jira errors. Used by `listJiraProjects` in the Connect apps modal. |
-| POST | `/api/app-atlas/canvases/:id/jira` | Entra token forwarded + Jira cookies | `{ projectKey, regenerate? }` | Forwards `POST <atlas>/canvases/:id/jira` with `{ projectKey, regenerate, jira: <credentials> }` and the caller's `Authorization` and `Origin` headers (App Atlas uses the Origin to pick the environment's clarification agent). Returns App Atlas's status and body (the updated `Canvas`). 400 without `projectKey`, 409 or 401 for Jira problems, 502 if App Atlas is unreachable. Used by `connectJira`. |
+| POST | `/api/app-atlas/canvases/:id/jira` | Entra token forwarded + Jira cookies | `{ projectKey, regenerate? }` | Forwards to App Atlas with Jira credentials + `Origin`. May return **200** with `Canvas` or **202** `{ jobId }` for async map. `connectJira` polls the job route then reloads lite canvas. 400 / 409 / 401 / 502 as before. |
+| GET | `/api/app-atlas/canvases/:id/jira/jobs/:jobId` | Entra token forwarded | none | Job status for async Jira map (`pending` / `running` / `done` / `error`). Used by `connectJira` polling. |
 | DELETE | `/api/app-atlas/canvases/:id/jira` | Entra token forwarded | none | Forwards `DELETE <atlas>/canvases/:id/jira`. Returns the updated `Canvas`. Used by `disconnectJira`. |
 
 ---

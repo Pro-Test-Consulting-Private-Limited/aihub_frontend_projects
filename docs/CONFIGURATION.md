@@ -3,6 +3,8 @@
 Every environment variable the AI Hub frontend reads, collected from `.env.example` and from every `process.env.*`
 usage in the code. **This file lists names and purposes only. Never put real values in docs, issues or commits.**
 
+New FE developers: [ONBOARDING.md](ONBOARDING.md) first, then this file when wiring local or VM env.
+
 ## Where values come from
 
 | Context | File | Notes |
