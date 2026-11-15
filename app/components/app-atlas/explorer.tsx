@@ -335,8 +335,8 @@ function ViewRow({ active, icon, label, meta, onClick }: { active: boolean; icon
 }
 
 /**
- * Single Connected row: all linked apps as compact chips in one control.
- * Opens the connect modal (owner) so Jira / Swagger stay independent under one entry point.
+ * Single Connected control: icons only (name/project live in the tooltip).
+ * Opens the connect modal so Jira / Swagger stay independent under one entry point.
  */
 function ConnectedAppsRow({
   canvas,
@@ -351,28 +351,28 @@ function ConnectedAppsRow({
   hasSwagger: boolean;
   onConnect: (c: CanvasSummary) => void;
 }) {
-  const chips: { key: string; icon: React.ReactNode; label: string }[] = [];
+  const chips: { key: string; icon: React.ReactNode; tip: string }[] = [];
   if (jiraKey) {
     chips.push({
       key: "jira",
-      icon: <SiJira size={11} color="#2684FF" />,
-      label: jiraKey,
+      icon: <SiJira size={14} color="#2684FF" />,
+      tip: `Jira · ${jiraKey}`,
     });
   }
   if (hasSwagger) {
     chips.push({
       key: "swagger",
-      icon: <SiSwagger size={11} color="#85EA2D" />,
-      label: swaggerTitle || "Swagger",
+      icon: <SiSwagger size={14} color="#85EA2D" />,
+      tip: swaggerTitle ? `Swagger · ${swaggerTitle}` : "Swagger",
     });
   }
 
   const title = canvas.isMine
     ? chips.length
-      ? `Connected: ${chips.map((c) => c.label).join(", ")}. Click to manage.`
+      ? `Connected: ${chips.map((c) => c.tip).join(", ")}. Click to manage.`
       : "Connect apps to this canvas"
     : chips.length
-      ? `Connected: ${chips.map((c) => c.label).join(", ")}`
+      ? `Connected: ${chips.map((c) => c.tip).join(", ")}`
       : "Connected apps";
 
   return (
@@ -384,30 +384,20 @@ function ConnectedAppsRow({
         e.stopPropagation();
         onConnect(canvas);
       }}
-      className="flex w-full min-w-0 items-center gap-2 rounded-[8px] border border-[#C9B8F7] bg-[#F4EFFE] px-2.5 py-1.5 text-left hover:bg-[#EDE4FD] disabled:cursor-default disabled:hover:bg-[#F4EFFE] dark:border-[#3a3060] dark:bg-[#1e1a2e]"
+      className="inline-flex items-center gap-1.5 rounded-[8px] border border-[#C9B8F7] bg-[#F4EFFE] px-2 py-1.5 hover:bg-[#EDE4FD] disabled:cursor-default disabled:hover:bg-[#F4EFFE] dark:border-[#3a3060] dark:bg-[#1e1a2e]"
     >
       {chips.length === 0 ? (
-        <>
-          <TbLink size={14} className="shrink-0 text-[#8664F2]" />
-          <span className="text-[12px] font-medium text-[#8664F2]">Connect apps</span>
-        </>
+        <TbLink size={14} className="text-[#8664F2]" />
       ) : (
-        <>
-          <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-[#8664F2]/80">
-            Connected
+        chips.map((chip) => (
+          <span
+            key={chip.key}
+            title={chip.tip}
+            className="flex h-[22px] w-[22px] items-center justify-center rounded-[6px] bg-white shadow-sm dark:bg-[#2a2440]"
+          >
+            {chip.icon}
           </span>
-          <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
-            {chips.map((chip) => (
-              <span
-                key={chip.key}
-                className="inline-flex max-w-full items-center gap-1 rounded-[6px] bg-white px-1.5 py-0.5 text-[11px] font-medium text-[#1F1F1F] shadow-sm dark:bg-[#2a2440] dark:text-[#ededed]"
-              >
-                {chip.icon}
-                <span className="truncate">{chip.label}</span>
-              </span>
-            ))}
-          </span>
-        </>
+        ))
       )}
     </button>
   );

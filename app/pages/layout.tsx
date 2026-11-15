@@ -14,6 +14,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [savedCollapsed, setSavedCollapsed] = useState(false);
   const [animate, setAnimate] = useState(false);
+  /** While width is animating, sidenav hides overflow so a temporary scrollbar cannot flash. */
+  const [widthAnimating, setWidthAnimating] = useState(false);
 
   useEffect(() => {
     setSavedCollapsed(localStorage.getItem(SIDENAV_COLLAPSED_KEY) === "true");
@@ -23,6 +25,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   }, []);
 
   const transition = animate ? "ease-in-out duration-500" : "duration-0";
+  const SIDE_MS = 500;
 
   // App Atlas is a full-screen workspace: icon rail only, unless expanded for this visit.
   const isAtlas = pathname?.startsWith("/app-atlas") ?? false;
@@ -31,6 +34,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const collapsed = isAtlas ? !atlasExpanded : savedCollapsed;
 
   const toggleCollapsed = (value: boolean) => {
+    if (animate) {
+      setWidthAnimating(true);
+      window.setTimeout(() => setWidthAnimating(false), SIDE_MS + 40);
+    }
     if (isAtlas) return setAtlasExpanded(!value);
     setSavedCollapsed(value);
     localStorage.setItem(SIDENAV_COLLAPSED_KEY, String(value));
@@ -42,6 +49,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <SideNav
           collapsed={collapsed}
           transition={transition}
+          lockOverflow={widthAnimating}
           onExpand={() => toggleCollapsed(false)}
         />
 
