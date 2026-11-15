@@ -157,20 +157,28 @@ async function isBlankProfileSilhouette(blob: Blob): Promise<boolean> {
   }
 }
 
-async function graphPhotoBlob(token: string, path: string): Promise<Blob | null> {
-  const res = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
+type GraphPhotoResult = { blob: Blob | null; missing: boolean };
+
+async function graphPhotoBlob(
+  token: string,
+  path: string,
+  api: "v1.0" | "beta" = "v1.0",
+): Promise<GraphPhotoResult> {
+  const res = await fetch(`https://graph.microsoft.com/${api}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (res.status === 401 || res.status === 403) throw Object.assign(new Error("graph-auth"), { status: res.status });
-  if (!res.ok) return null;
+  // Graph returns 404 when this mailbox/user has no profile photo — stop hammering sizes.
+  if (res.status === 404) return { blob: null, missing: true };
+  if (!res.ok) return { blob: null, missing: false };
   const buf = await res.arrayBuffer();
-  if (!buf.byteLength) return null;
+  if (!buf.byteLength) return { blob: null, missing: false };
   const headerType = (res.headers.get("content-type") || "").split(";")[0]!.trim().toLowerCase();
   const typed = headerType.startsWith("image/") ? headerType : looksLikeImage(buf) ? "image/jpeg" : "";
-  if (!typed) return null;
+  if (!typed) return { blob: null, missing: false };
   const blob = new Blob([buf], { type: typed });
-  if (await isBlankProfileSilhouette(blob)) return null;
-  return blob;
+  if (await isBlankProfileSilhouette(blob)) return { blob: null, missing: false };
+  return { blob, missing: false };
 }
 
 async function listPhotoSizes(token: string, userPath: string): Promise<string[]> {
@@ -178,6 +186,7 @@ async function listPhotoSizes(token: string, userPath: string): Promise<string[]
     const res = await fetch(`https://graph.microsoft.com/v1.0${userPath}/photos`, {
       headers: { Authorization: `Bearer ${token}` },
     });
+    if (res.status === 404) return [];
     if (!res.ok) return [];
     const body = (await res.json()) as { value?: Array<{ id?: string }> };
     const ids = (body.value || []).map((v) => v.id).filter((id): id is string => !!id);
@@ -192,68 +201,122 @@ async function listPhotoSizes(token: string, userPath: string): Promise<string[]
   }
 }
 
-/**
- * Fetch the signed-in user's Graph profile photo as a blob URL.
- * Lists available sizes first, skips Graph's empty gray-person placeholder, retries with a fresh token.
- */
-export async function fetchGraphProfilePhotoUrl(
+async function fetchGraphProfilePhotoBlob(
   instance: IPublicClientApplication,
   accounts: AccountInfo[],
-): Promise<string | null> {
-  const account = accounts[0];
+): Promise<Blob | null> {
+  const account = instance.getActiveAccount() || accounts[0];
   if (!account) return null;
-  const oid = String(
-    (account.idTokenClaims as { oid?: string; sub?: string } | undefined)?.oid ||
-      (account.idTokenClaims as { oid?: string; sub?: string } | undefined)?.sub ||
-      account.localAccountId ||
-      "",
-  );
+  const claims = (account.idTokenClaims || {}) as Record<string, unknown>;
+  const oid = String(claims.oid || claims.sub || account.localAccountId || "");
+  const upn = String(
+    account.username || claims.preferred_username || claims.upn || claims.email || "",
+  ).trim();
 
-  const tryWithToken = async (accessToken: string): Promise<string | null> => {
-    const bases = ["/me", ...(oid ? [`/users/${encodeURIComponent(oid)}`] : [])];
-    for (const base of bases) {
-      const sizes = await listPhotoSizes(accessToken, base);
-      const paths = [
-        ...sizes.map((id) => `${base}/photos/${id}/$value`),
-        `${base}/photos/240x240/$value`,
-        `${base}/photos/96x96/$value`,
-        `${base}/photos/64x64/$value`,
-        `${base}/photos/48x48/$value`,
-        `${base}/photo/$value`,
-      ];
-      // De-dupe while preserving order.
-      const seen = new Set<string>();
-      for (const path of paths) {
-        if (seen.has(path)) continue;
-        seen.add(path);
-        try {
-          const blob = await graphPhotoBlob(accessToken, path);
-          if (blob) return URL.createObjectURL(blob);
-        } catch (err) {
-          if (err && typeof err === "object" && "status" in err) throw err;
+  const tryWithToken = async (accessToken: string): Promise<Blob | null> => {
+    const bases = [
+      "/me",
+      ...(oid ? [`/users/${encodeURIComponent(oid)}`] : []),
+      ...(upn ? [`/users/${encodeURIComponent(upn)}`] : []),
+    ];
+    for (const api of ["v1.0", "beta"] as const) {
+      for (const base of bases) {
+        // Prefer whatever sizes Graph says exist; if the collection 404s, try a few defaults once.
+        const sizes = api === "v1.0" ? await listPhotoSizes(accessToken, base) : [];
+        const paths =
+          sizes.length > 0
+            ? [...sizes.map((id) => `${base}/photos/${id}/$value`), `${base}/photo/$value`]
+            : [
+                `${base}/photo/$value`,
+                `${base}/photos/240x240/$value`,
+                `${base}/photos/96x96/$value`,
+              ];
+        const seen = new Set<string>();
+        for (const path of paths) {
+          if (seen.has(path)) continue;
+          seen.add(path);
+          try {
+            const { blob, missing } = await graphPhotoBlob(accessToken, path, api);
+            if (blob) return blob;
+            // No photo on this user/base — don't keep probing sizes / other bases for the same api.
+            if (missing && path.endsWith("/photo/$value")) break;
+          } catch (err) {
+            if (err && typeof err === "object" && "status" in err) throw err;
+          }
         }
       }
     }
     return null;
   };
 
-  let token = await getGraphUserReadToken(instance, accounts);
+  // Keep token acquisition on the same account we resolve the photo for.
+  const accountList = [account, ...accounts.filter((a) => a.homeAccountId !== account.homeAccountId)];
+
+  let token = await getGraphUserReadToken(instance, accountList);
   if (!token) return null;
 
   try {
-    const url = await tryWithToken(token);
-    if (url) return url;
+    const blob = await tryWithToken(token);
+    if (blob) return blob;
   } catch {
     /* refresh below */
   }
 
-  token = await getGraphUserReadToken(instance, accounts, true);
+  token = await getGraphUserReadToken(instance, accountList, true);
   if (!token) return null;
   try {
     return await tryWithToken(token);
   } catch {
     return null;
   }
+}
+
+/**
+ * Fetch the signed-in user's Graph profile photo as a blob URL.
+ * Uses the active MSAL account, tries v1.0 then beta, skips empty gray placeholders,
+ * and stops after Graph 404 (no photo) instead of spamming every size.
+ */
+export async function fetchGraphProfilePhotoUrl(
+  instance: IPublicClientApplication,
+  accounts: AccountInfo[],
+): Promise<string | null> {
+  const blob = await fetchGraphProfilePhotoBlob(instance, accounts);
+  return blob ? URL.createObjectURL(blob) : null;
+}
+
+/** Shrink a Graph photo to a small JPEG data-URL for presence heartbeats (other users can render it). */
+async function blobToPresenceDataUrl(blob: Blob, edge = 48): Promise<string | null> {
+  try {
+    const bmp = await createImageBitmap(blob);
+    const canvas = document.createElement("canvas");
+    canvas.width = edge;
+    canvas.height = edge;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      bmp.close();
+      return null;
+    }
+    ctx.drawImage(bmp, 0, 0, edge, edge);
+    bmp.close();
+    const url = canvas.toDataURL("image/jpeg", 0.72);
+    // Match backend MAX_PHOTO_CHARS.
+    return url.length <= 16_000 ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Own Graph photo as a tiny data-URL for App Atlas presence — so other signed-in users
+ * can show your face without needing User.Read.All.
+ */
+export async function fetchGraphProfilePhotoDataUrl(
+  instance: IPublicClientApplication,
+  accounts: AccountInfo[],
+): Promise<string | null> {
+  const blob = await fetchGraphProfilePhotoBlob(instance, accounts);
+  if (!blob) return null;
+  return blobToPresenceDataUrl(blob);
 }
 
 /** Identifiers for the signed-in MSAL user — match against Atlas presence `User.id` (oid) / email / name. */

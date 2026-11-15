@@ -39,7 +39,7 @@ import { useApiSpec, useApiSpecView } from "@/app/hooks/use-api-spec";
 import { clearCanvasSwagger, getCanvasSwagger, setCanvasSwagger, type CanvasSwagger } from "@/app/lib/canvas-swagger";
 import { isLocalAuthBypassEnabled } from "@/app/lib/auth-bypass";
 import { UserProfileMenu } from "@/app/components/user-profile-menu";
-import { msalSelfKeys } from "@/app/lib/auth-client";
+import { fetchGraphProfilePhotoDataUrl, msalSelfKeys } from "@/app/lib/auth-client";
 
 const tabFallback = (
   <div className="flex h-full items-center justify-center gap-2 text-[13px] text-[#7E7E7E]">
@@ -270,14 +270,34 @@ export default function AtlasWorkspace() {
   );
 
   const [online, setOnline] = useState<PresenceUser[]>([]);
+  const [myPresencePhoto, setMyPresencePhoto] = useState<string | null>(null);
   const presenceRoom = project ? `app-atlas:${project.id}` : null;
+
+  // Publish our own Graph face on presence so peers (e.g. BD seeing MS) get a photo, not just initials.
+  useEffect(() => {
+    let cancelled = false;
+    if (!accounts.length) {
+      setMyPresencePhoto(null);
+      return;
+    }
+    void fetchGraphProfilePhotoDataUrl(instance, accounts)
+      .then((url) => {
+        if (!cancelled) setMyPresencePhoto(url);
+      })
+      .catch(() => {
+        if (!cancelled) setMyPresencePhoto(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [instance, accounts, accounts[0]?.homeAccountId, accounts[0]?.localAccountId]);
 
   useEffect(() => {
     if (!presenceRoom || !accounts.length) return;
     let stopped = false;
     const beat = () =>
       client
-        .presence(presenceRoom)
+        .presence(presenceRoom, false, myPresencePhoto)
         .then((r) => !stopped && setOnline(r.users))
         .catch(() => {});
     beat();
@@ -288,7 +308,7 @@ export default function AtlasWorkspace() {
       setOnline([]);
       client.presence(presenceRoom, true).catch(() => {});
     };
-  }, [presenceRoom, accounts.length, client]);
+  }, [presenceRoom, accounts.length, client, myPresencePhoto]);
 
   const selectCanvas = useCallback(
     async (id: string | null) => {
@@ -598,7 +618,7 @@ export default function AtlasWorkspace() {
           </button>
           {(() => {
             // Presence User.id is Entra oid — match MSAL oid/localAccountId/email/name so you never appear twice.
-            const meIds = msalSelfKeys(accounts[0]);
+            const meIds = msalSelfKeys(instance.getActiveAccount() || accounts[0]);
             const others = online.filter((u) => {
               const id = (u.id || "").toLowerCase();
               const email = (u.email || "").toLowerCase();
@@ -616,10 +636,15 @@ export default function AtlasWorkspace() {
                   <span
                     key={u.id}
                     title={u.name || "On this page"}
-                    className={`relative inline-flex shrink-0 items-center justify-center rounded-full border-2 border-white text-[10px] font-semibold text-white dark:border-[#0a0a0a] ${AVATAR_COLORS[i % AVATAR_COLORS.length]}`}
+                    className={`relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-white text-[10px] font-semibold text-white dark:border-[#0a0a0a] ${u.photo ? "bg-[#E5E7EB]" : AVATAR_COLORS[i % AVATAR_COLORS.length]}`}
                     style={{ width: AVATAR, height: AVATAR, minWidth: AVATAR, minHeight: AVATAR }}
                   >
-                    {initials(u.name || "U")}
+                    {u.photo ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={u.photo} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      initials(u.name || "U")
+                    )}
                     <span className="absolute -right-0.5 -bottom-0.5 h-[8px] w-[8px] rounded-full border-[1.5px] border-white bg-[#22C55E] dark:border-[#0a0a0a]" />
                   </span>
                 ))}

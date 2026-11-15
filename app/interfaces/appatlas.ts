@@ -396,7 +396,7 @@ export type TicketNote = {
 export type CanvasClarifications = { canvasId: string; pending: number; items: CanvasClarification[] };
 
 /** Someone who has App Atlas open on the same project right now. */
-export type PresenceUser = { id: string; name: string; email: string };
+export type PresenceUser = { id: string; name: string; email: string; photo?: string };
 
 export type JiraStatus = { connected: boolean; baseUrl?: string; email?: string; user?: string };
 

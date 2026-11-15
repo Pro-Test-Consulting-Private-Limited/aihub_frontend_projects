@@ -295,9 +295,12 @@ export function atlasClient({ instance, accounts }: Msal) {
       request<Canvas>(`/api/app-atlas/canvases/${canvasId}/swagger`, json("POST", body), false, ""),
     disconnectSwagger: (canvasId: string) =>
       request<Canvas>(`/api/app-atlas/canvases/${canvasId}/swagger`, json("DELETE"), false, ""),
-    /** Heartbeat: marks the caller present in `room` and returns everyone there. */
-    presence: (room: string, leaving = false) =>
-      request<{ users: PresenceUser[] }>("/presence", json("POST", { room, leaving })),
+    /** Heartbeat: marks the caller present in `room` and returns everyone there. Optional own photo data-URL for peers. */
+    presence: (room: string, leaving = false, photo?: string | null) =>
+      request<{ users: PresenceUser[] }>(
+        "/presence",
+        json("POST", { room, leaving, ...(photo ? { photo } : {}) }),
+      );
     getClarifications: (canvasId: string) => request<CanvasClarifications>(`/canvases/${canvasId}/clarifications`),
     /** Owner only. No issueKey = every failed ticket; `force` regenerates a ticket that already has questions. */
     retryClarifications: (canvasId: string, body: { issueKey?: string; force?: boolean } = {}) =>

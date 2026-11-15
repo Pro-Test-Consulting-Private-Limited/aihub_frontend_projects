@@ -40,7 +40,7 @@ export function UserProfileMenu({ size = 40 }: { size?: number }) {
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const cardRef = useRef<HTMLDivElement | null>(null);
   const photoUrlRef = useRef<string | null>(null);
-  const user = accounts[0];
+  const user = instance.getActiveAccount() || accounts[0];
   const displayName = friendlyDisplayName(user);
   const letters = initialsOf(displayName) || "?";
 
@@ -72,7 +72,7 @@ export function UserProfileMenu({ size = 40 }: { size?: number }) {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reload when account identity changes
-  }, [instance, accounts, accounts[0]?.homeAccountId, accounts[0]?.localAccountId]);
+  }, [instance, accounts, user?.homeAccountId, user?.localAccountId]);
 
   useEffect(() => {
     const onDoc = (event: MouseEvent) => {
