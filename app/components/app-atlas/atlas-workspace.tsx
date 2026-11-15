@@ -7,7 +7,6 @@ import { useMsal } from "@azure/msal-react";
 import {
   TbChartLine,
   TbChevronDown,
-  TbChevronRight,
   TbHistory,
   TbLayoutGrid,
   TbNetwork,
@@ -39,6 +38,7 @@ import {
 import { useApiSpec, useApiSpecView } from "@/app/hooks/use-api-spec";
 import { clearCanvasSwagger, getCanvasSwagger, setCanvasSwagger, type CanvasSwagger } from "@/app/lib/canvas-swagger";
 import { isLocalAuthBypassEnabled } from "@/app/lib/auth-bypass";
+import { UserProfileMenu } from "@/app/components/user-profile-menu";
 
 const tabFallback = (
   <div className="flex h-full items-center justify-center gap-2 text-[13px] text-[#7E7E7E]">
@@ -584,6 +584,8 @@ export default function AtlasWorkspace() {
               </span>
             )}
           </div>
+          {/* Same signed-in profile control as Home TopNav (Graph photo + logout). */}
+          <UserProfileMenu size={32} />
         </div>
       </div>
 
@@ -595,7 +597,7 @@ export default function AtlasWorkspace() {
       )}
 
       <div className="flex min-h-0 flex-1">
-        {(tab === "canvas" || tab === "sit" || tab === "api") && explorerOpen && !recording && (
+        {(tab === "canvas" || tab === "sit" || tab === "api") && !recording && (
           <Explorer
             canvases={visible}
             loading={canvasesLoading}
@@ -620,6 +622,8 @@ export default function AtlasWorkspace() {
               setReplayOpen(true);
             }}
             onCollapse={() => setExplorerOpen(false)}
+            onExpand={() => setExplorerOpen(true)}
+            collapsed={!explorerOpen}
             onFocusNode={setFocusNodeId}
             onConnect={setConnectFor}
             swagger={swagger}
@@ -632,24 +636,6 @@ export default function AtlasWorkspace() {
               else setTab("canvas");
             }}
           />
-        )}
-        {(tab === "canvas" || tab === "sit" || tab === "api") && !explorerOpen && !recording && (
-          <button
-            type="button"
-            onClick={() => setExplorerOpen(true)}
-            className="flex w-[28px] shrink-0 flex-col items-center gap-1.5 border-r border-[#EEE] bg-[#F3F4F6] py-3 text-[#5E6066] hover:text-[#8664F2] dark:border-[#2a2a2a] dark:bg-[#161616] dark:text-[#9ca3af] dark:hover:text-[#8664F2]"
-            title="Show explorer"
-          >
-            <TbChevronRight size={14} className="shrink-0" />
-            {"EXPLORER".split("").map((ch, i) => (
-              <span
-                key={`${ch}-${i}`}
-                className="text-[10px] font-semibold leading-none tracking-wide"
-              >
-                {ch}
-              </span>
-            ))}
-          </button>
         )}
 
         <div className="relative min-w-0 flex-1">

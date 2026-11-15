@@ -39,6 +39,9 @@ type Props = {
   onNew: () => void;
   onReplay: () => void;
   onCollapse: () => void;
+  onExpand?: () => void;
+  /** When true, panel animates to a thin rail instead of unmounting. */
+  collapsed?: boolean;
   onFocusNode: (id: string) => void;
   onConnect: (c: CanvasSummary) => void;
   /** Swagger spec connected to the selected canvas. Independent of Jira. */
@@ -50,7 +53,7 @@ type Props = {
 };
 
 export function Explorer(props: Props) {
-  const { canvases, loading, selectedId, canvas } = props;
+  const { canvases, loading, selectedId, canvas, collapsed = false } = props;
   const [canvasesOpen, setCanvasesOpen] = useState(true);
   const [detailsOpen, setDetailsOpen] = useState(true);
   const [menuFor, setMenuFor] = useState<string | null>(null);
@@ -76,17 +79,45 @@ export function Explorer(props: Props) {
     };
   }, []);
 
+  const displayWidth = collapsed ? 28 : panelWidth;
+
   return (
     <div
-      className="relative flex h-full shrink-0 flex-col border-r border-[#EEE] bg-white dark:border-[#1a1a1a] dark:bg-[#0a0a0a]"
-      style={{ width: panelWidth }}
+      className="relative flex h-full shrink-0 flex-col overflow-hidden border-r border-[#EEE] bg-white transition-[width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] dark:border-[#1a1a1a] dark:bg-[#0a0a0a]"
+      style={{ width: displayWidth }}
     >
+      {/* Collapsed rail */}
+      <button
+        type="button"
+        onClick={() => props.onExpand?.()}
+        aria-hidden={!collapsed}
+        tabIndex={collapsed ? 0 : -1}
+        className={`absolute inset-0 z-40 flex flex-col items-center gap-1.5 bg-[#F3F4F6] py-3 text-[#5E6066] transition-opacity duration-200 hover:text-[#8664F2] dark:bg-[#161616] dark:text-[#9ca3af] dark:hover:text-[#8664F2] ${
+          collapsed ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
+        }`}
+        title="Show explorer"
+      >
+        <TbChevronRight size={14} className="shrink-0" />
+        {"EXPLORER".split("").map((ch, i) => (
+          <span key={`${ch}-${i}`} className="text-[10px] font-semibold leading-none tracking-wide">
+            {ch}
+          </span>
+        ))}
+      </button>
+
+      <div
+        className={`flex h-full min-w-[200px] flex-col transition-opacity duration-200 ease-out ${
+          collapsed ? "pointer-events-none opacity-0" : "opacity-100"
+        }`}
+        style={{ width: panelWidth }}
+      >
       <button
         type="button"
         aria-label="Resize explorer"
         title="Drag to resize"
         className="absolute top-0 right-0 z-30 h-full w-1.5 translate-x-1/2 cursor-ew-resize bg-transparent hover:bg-[#8664F2]/35"
         onMouseDown={(e) => {
+          if (collapsed) return;
           e.preventDefault();
           dragRef.current = { startX: e.clientX, startW: panelWidth };
           document.body.style.cursor = "ew-resize";
@@ -116,8 +147,12 @@ export function Explorer(props: Props) {
 
       <div className="flex-1 overflow-y-auto text-[12px]">
         <SectionHeader open={canvasesOpen} onToggle={() => setCanvasesOpen((o) => !o)} icon={<TbLayoutGrid size={14} className="text-[#8664F2]" />} label="Canvases" />
-        {canvasesOpen && (
-          <div className="pb-2">
+        <div
+          className={`grid transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+            canvasesOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+          }`}
+        >
+          <div className="min-h-0 overflow-hidden pb-2">
             {loading && <div className="px-5 py-2 text-[#7E7E7E]">Loading…</div>}
             {!loading && canvases.length === 0 && (
               <div className="px-5 py-2 text-[#7E7E7E]">No canvases for this app yet. Click + to record one.</div>
@@ -185,35 +220,14 @@ export function Explorer(props: Props) {
                     </div>
                   )}
                   {active && (c.isMine || c.jiraProjectKey || props.swagger) && (
-                    <div className="mt-2.5 flex flex-col gap-1.5">
-                      {c.jiraProjectKey && (
-                        <ConnectedAppButton
-                          canvas={c}
-                          label={`Jira · ${c.jiraProjectKey}`}
-                          icon={<SiJira size={12} color="#2684FF" />}
-                          title="Manage connected apps"
-                          onConnect={props.onConnect}
-                        />
-                      )}
-                      {props.swagger && (
-                        <ConnectedAppButton
-                          canvas={c}
-                          label="Swagger"
-                          icon={<SiSwagger size={12} color="#85EA2D" />}
-                          title={props.swagger.title ? `Swagger: ${props.swagger.title}` : "Manage connected apps"}
-                          onConnect={props.onConnect}
-                        />
-                      )}
-                      {!c.jiraProjectKey && !props.swagger && (
-                        <ConnectedAppButton
-                          canvas={c}
-                          label="Connect"
-                          icon={<TbLink size={15} />}
-                          bare
-                          title="Connect apps to this canvas"
-                          onConnect={props.onConnect}
-                        />
-                      )}
+                    <div className="mt-2.5">
+                      <ConnectedAppsRow
+                        canvas={c}
+                        jiraKey={c.jiraProjectKey}
+                        swaggerTitle={props.swagger?.title ?? null}
+                        hasSwagger={!!props.swagger}
+                        onConnect={props.onConnect}
+                      />
                     </div>
                   )}
                   {menuFor === c.id && (
@@ -233,11 +247,15 @@ export function Explorer(props: Props) {
               );
             })}
           </div>
-        )}
+        </div>
 
         <SectionHeader open={detailsOpen} onToggle={() => setDetailsOpen((o) => !o)} icon={<TbFolder size={14} className="text-[#B0359B]" />} label="Canvas Details" />
-        {detailsOpen && (
-          <div className="pb-4">
+        <div
+          className={`grid transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+            detailsOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+          }`}
+        >
+          <div className="min-h-0 overflow-hidden pb-4">
             {canvases.map((c) => {
               const open = c.id === selectedId;
               const loaded = open && canvas?.id === c.id ? canvas : null;
@@ -251,19 +269,24 @@ export function Explorer(props: Props) {
                     <TbFolderFilled size={14} className="text-[#E1962E] dark:text-[#F0B45A]" />
                     <span className="truncate font-medium text-[#1F1F1F] dark:text-[#ededed]">{c.name}</span>
                   </div>
-                  {open && (
-                    <div className="pl-[52px] text-[#5E6066] dark:text-[#9ca3af]">
-                      {!loaded && <div className="py-1">Loading…</div>}
+                  <div
+                    className={`grid transition-[grid-template-rows,opacity] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                      open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+                    }`}
+                  >
+                    <div className="min-h-0 overflow-hidden pl-[52px] text-[#5E6066] dark:text-[#9ca3af]">
+                      {open && !loaded && <div className="py-1">Loading…</div>}
                       {loaded?.nodes.map((n) => (
                         <TreeLeaf key={n.id} label={n.title || n.path} title={n.path} onClick={() => props.onFocusNode(n.id)} />
                       ))}
                     </div>
-                  )}
+                  </div>
                 </div>
               );
             })}
           </div>
-        )}
+        </div>
+      </div>
       </div>
     </div>
   );
@@ -272,7 +295,12 @@ export function Explorer(props: Props) {
 function SectionHeader({ open, onToggle, icon, label }: { open: boolean; onToggle: () => void; icon: React.ReactNode; label: string }) {
   return (
     <div onClick={onToggle} className="flex cursor-pointer items-center gap-2 border-b border-[#F3F3F3] px-4 py-2.5 font-medium text-[#1F1F1F] dark:border-[#1a1a1a] dark:text-[#ededed]">
-      {open ? <TbChevronDown size={13} className="text-[#7E7E7E] dark:text-[#a3a3a3]" /> : <TbChevronRight size={13} className="text-[#7E7E7E] dark:text-[#a3a3a3]" />}
+      <TbChevronDown
+        size={13}
+        className={`text-[#7E7E7E] transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] dark:text-[#a3a3a3] ${
+          open ? "rotate-0" : "-rotate-90"
+        }`}
+      />
       {icon}
       {label}
     </div>
@@ -306,39 +334,81 @@ function ViewRow({ active, icon, label, meta, onClick }: { active: boolean; icon
   );
 }
 
-/** One button per app connected to the canvas (Jira and Swagger are independent); owner-only, opens the connect modal. */
-function ConnectedAppButton({
+/**
+ * Single Connected row: all linked apps as compact chips in one control.
+ * Opens the connect modal (owner) so Jira / Swagger stay independent under one entry point.
+ */
+function ConnectedAppsRow({
   canvas,
-  label,
-  icon,
-  title,
-  bare,
+  jiraKey,
+  swaggerTitle,
+  hasSwagger,
   onConnect,
 }: {
   canvas: CanvasSummary;
-  label: string;
-  icon: React.ReactNode;
-  title: string;
-  bare?: boolean;
+  jiraKey: string | null | undefined;
+  swaggerTitle: string | null;
+  hasSwagger: boolean;
   onConnect: (c: CanvasSummary) => void;
 }) {
+  const chips: { key: string; icon: React.ReactNode; label: string }[] = [];
+  if (jiraKey) {
+    chips.push({
+      key: "jira",
+      icon: <SiJira size={11} color="#2684FF" />,
+      label: jiraKey,
+    });
+  }
+  if (hasSwagger) {
+    chips.push({
+      key: "swagger",
+      icon: <SiSwagger size={11} color="#85EA2D" />,
+      label: swaggerTitle || "Swagger",
+    });
+  }
+
+  const title = canvas.isMine
+    ? chips.length
+      ? `Connected: ${chips.map((c) => c.label).join(", ")}. Click to manage.`
+      : "Connect apps to this canvas"
+    : chips.length
+      ? `Connected: ${chips.map((c) => c.label).join(", ")}`
+      : "Connected apps";
+
   return (
     <button
       type="button"
       disabled={!canvas.isMine}
-      title={canvas.isMine ? title : "Connected apps"}
+      title={title}
       onClick={(e) => {
         e.stopPropagation();
         onConnect(canvas);
       }}
-      className="flex min-w-0 items-center justify-center gap-2 rounded-[8px] border border-[#C9B8F7] bg-[#F4EFFE] py-2 text-[12.5px] font-medium text-[#8664F2] hover:bg-[#EDE4FD] disabled:cursor-default disabled:hover:bg-[#F4EFFE] dark:border-[#3a3060] dark:bg-[#1e1a2e]"
+      className="flex w-full min-w-0 items-center gap-2 rounded-[8px] border border-[#C9B8F7] bg-[#F4EFFE] px-2.5 py-1.5 text-left hover:bg-[#EDE4FD] disabled:cursor-default disabled:hover:bg-[#F4EFFE] dark:border-[#3a3060] dark:bg-[#1e1a2e]"
     >
-      {bare ? (
-        icon
+      {chips.length === 0 ? (
+        <>
+          <TbLink size={14} className="shrink-0 text-[#8664F2]" />
+          <span className="text-[12px] font-medium text-[#8664F2]">Connect apps</span>
+        </>
       ) : (
-        <span className="flex h-[20px] w-[20px] items-center justify-center rounded-[5px] bg-white shadow-sm dark:bg-[#2a2440]">{icon}</span>
+        <>
+          <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-[#8664F2]/80">
+            Connected
+          </span>
+          <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+            {chips.map((chip) => (
+              <span
+                key={chip.key}
+                className="inline-flex max-w-full items-center gap-1 rounded-[6px] bg-white px-1.5 py-0.5 text-[11px] font-medium text-[#1F1F1F] shadow-sm dark:bg-[#2a2440] dark:text-[#ededed]"
+              >
+                {chip.icon}
+                <span className="truncate">{chip.label}</span>
+              </span>
+            ))}
+          </span>
+        </>
       )}
-      <span>{label}</span>
     </button>
   );
 }

@@ -46,6 +46,13 @@ const CATEGORIES: { title: string; apps: { id: AppId; name: string; icon: React.
 
 const CAN_MAP: AppId[] = ["jira", "swagger", "teams"];
 
+function healthLabel(health: ConnectionHealth, linkedOnCanvas: boolean): string {
+  if (health === "active") return linkedOnCanvas ? "Active · linked to this canvas" : "Active · ready to connect";
+  if (health === "expired") return "Expired · reconnect in Integrations";
+  if (health === "error") return "Error · check Integrations";
+  return "Not integrated · open Integrations";
+}
+
 export function ConnectAppsModal({
   client,
   canvas,
@@ -125,13 +132,22 @@ export function ConnectAppsModal({
                   const expired = health === "expired";
                   const needsIntegrate = mappable && (health === "disconnected" || health === "error" || expired);
 
+                  const statusText = mappable
+                    ? healthLabel(health, linkedOnCanvas)
+                    : "Coming soon";
+                  const tooltip = selected
+                    ? `${app.name}: ${statusText}. Selected. Click again to unselect.`
+                    : `${app.name}: ${statusText}`;
+
                   const onAppClick = () => {
                     if (needsIntegrate) {
                       router.push("/integrations");
                       return;
                     }
                     if (!mappable) return;
-                    if (ok) setPicked(app.id);
+                    if (!ok) return;
+                    // Toggle: clicking the already-selected icon unselects it.
+                    setPicked((prev) => (prev === app.id ? null : app.id));
                   };
 
                   return (
@@ -139,15 +155,9 @@ export function ConnectAppsModal({
                       key={app.id}
                       type="button"
                       onClick={onAppClick}
-                      title={
-                        needsIntegrate
-                          ? `${app.name}: not integrated or token expired. Click to open Integrations.`
-                          : ok
-                            ? selected
-                              ? `${app.name} selected. Click Connect below.`
-                              : `Select ${app.name}`
-                            : `${app.name} is not available for canvas mapping yet.`
-                      }
+                      title={tooltip}
+                      aria-label={tooltip}
+                      aria-pressed={selected}
                       className={`relative flex h-[56px] w-[56px] items-center justify-center rounded-[10px] bg-white shadow-sm transition dark:bg-[#1a1a1a] ${
                         selected && ok
                           ? "border-2 border-[#8664F2] ring-2 ring-[#8664F2]/35 scale-105"
@@ -161,19 +171,32 @@ export function ConnectAppsModal({
                       }`}
                     >
                       {app.icon}
+                      {/* Connection status: corner chip (green / amber / +) */}
                       {ok && (
-                        <span className="absolute -right-1 -top-1 h-[10px] w-[10px] rounded-full border-2 border-white bg-[#22C55E]" />
+                        <span
+                          className="absolute -right-1 -top-1 h-[12px] w-[12px] rounded-full border-2 border-white bg-[#22C55E]"
+                          title={statusText}
+                        />
                       )}
                       {expired && (
-                        <span className="absolute -right-1 -top-1 h-[10px] w-[10px] rounded-full border-2 border-white bg-[#F59E0B]" />
+                        <span
+                          className="absolute -right-1 -top-1 h-[12px] w-[12px] rounded-full border-2 border-white bg-[#F59E0B]"
+                          title={statusText}
+                        />
                       )}
                       {needsIntegrate && !expired && (
-                        <span className="absolute -right-1 -top-1 flex h-[14px] w-[14px] items-center justify-center rounded-full border-2 border-white bg-[#8664F2] text-[9px] font-bold text-white">
+                        <span
+                          className="absolute -right-1 -top-1 flex h-[14px] w-[14px] items-center justify-center rounded-full border-2 border-white bg-[#8664F2] text-[9px] font-bold text-white"
+                          title={statusText}
+                        >
                           +
                         </span>
                       )}
                       {linkedOnCanvas && ok && (
-                        <span className="absolute -bottom-1 -left-1 h-[8px] w-[8px] rounded-full border border-white bg-[#2563EB]" />
+                        <span
+                          className="absolute -bottom-1 left-1/2 h-[3px] w-[18px] -translate-x-1/2 rounded-full bg-[#2563EB]"
+                          title="Linked to this canvas"
+                        />
                       )}
                     </button>
                   );
@@ -183,7 +206,8 @@ export function ConnectAppsModal({
           ))}
           {picked && canUse(picked) && (
             <p className="text-[12px] font-medium text-[#8664F2]">
-              Selected: {CATEGORIES.flatMap((c) => c.apps).find((a) => a.id === picked)?.name}. Click Connect.
+              Selected: {CATEGORIES.flatMap((c) => c.apps).find((a) => a.id === picked)?.name}. Click Connect
+              (or click the icon again to unselect).
             </p>
           )}
           <button
