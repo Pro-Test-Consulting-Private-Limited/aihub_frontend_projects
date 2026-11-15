@@ -77,16 +77,21 @@ export async function getGraphAccessToken(
   }
 }
 
-/** Graph access token with User.Read  -  profile photo /me. */
+/** Graph access token with User.Read — profile photo /me. Always the access token (not idToken). */
 export async function getGraphUserReadToken(
   instance: IPublicClientApplication,
   accounts: AccountInfo[],
+  forceRefresh = false,
 ) {
   if (accounts.length === 0) return null;
   const account = accounts[0];
   try {
-    const result = await instance.acquireTokenSilent({ ...loginRequest, account });
-    return result.accessToken;
+    const result = await instance.acquireTokenSilent({
+      ...loginRequest,
+      account,
+      forceRefresh,
+    });
+    return result.accessToken || null;
   } catch (err) {
     if (err instanceof InteractionRequiredAuthError) {
       await instance.acquireTokenRedirect({ ...loginRequest, account });
@@ -95,24 +100,79 @@ export async function getGraphUserReadToken(
   }
 }
 
+/** True when bytes look like JPEG / PNG / GIF / WebP (Graph often omits Content-Type or uses octet-stream). */
+function looksLikeImage(buf: ArrayBuffer): boolean {
+  const u = new Uint8Array(buf);
+  if (u.length < 12) return false;
+  // JPEG
+  if (u[0] === 0xff && u[1] === 0xd8 && u[2] === 0xff) return true;
+  // PNG
+  if (u[0] === 0x89 && u[1] === 0x50 && u[2] === 0x4e && u[3] === 0x47) return true;
+  // GIF
+  if (u[0] === 0x47 && u[1] === 0x49 && u[2] === 0x46) return true;
+  // WebP (RIFF....WEBP)
+  if (u[0] === 0x52 && u[1] === 0x49 && u[2] === 0x46 && u[3] === 0x46 && u[8] === 0x57 && u[9] === 0x45) return true;
+  return false;
+}
+
+async function graphPhotoBlob(token: string, path: string): Promise<Blob | null> {
+  const res = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (res.status === 401 || res.status === 403) return null;
+  // 404 = this user has no photo at this size.
+  if (!res.ok) return null;
+  const buf = await res.arrayBuffer();
+  if (!buf.byteLength) return null;
+  const headerType = (res.headers.get("content-type") || "").split(";")[0]!.trim().toLowerCase();
+  const typed =
+    headerType.startsWith("image/")
+      ? headerType
+      : looksLikeImage(buf)
+        ? "image/jpeg"
+        : "";
+  if (!typed) return null;
+  return new Blob([buf], { type: typed });
+}
+
 /**
  * Fetch the signed-in user's Graph profile photo as a blob URL.
+ * Tries several sizes — some accounts only have a photo at 48x48 / 64x64.
+ * Accepts octet-stream bodies that are real images (common Graph quirk).
  * Returns null when no photo is set (caller should show initials).
  */
 export async function fetchGraphProfilePhotoUrl(
   instance: IPublicClientApplication,
   accounts: AccountInfo[],
 ): Promise<string | null> {
-  const token = await getGraphUserReadToken(instance, accounts);
+  let token = await getGraphUserReadToken(instance, accounts);
   if (!token) return null;
-  const res = await fetch("https://graph.microsoft.com/v1.0/me/photo/$value", {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  // 404 = no photo (common). Other errors → initials fallback.
-  if (!res.ok) return null;
-  const blob = await res.blob();
-  // Reject empty / non-image bodies (some tenants return a generic silhouette we still show;
-  // broken HTML/error blobs must not become a gray "person" broken-img icon).
-  if (!blob.size || !(blob.type || "").startsWith("image/")) return null;
-  return URL.createObjectURL(blob);
+
+  const paths = [
+    "/me/photos/48x48/$value",
+    "/me/photos/64x64/$value",
+    "/me/photos/96x96/$value",
+    "/me/photo/$value",
+  ];
+
+  const tryPaths = async (accessToken: string) => {
+    for (const path of paths) {
+      try {
+        const blob = await graphPhotoBlob(accessToken, path);
+        if (blob) return URL.createObjectURL(blob);
+      } catch {
+        /* try next size */
+      }
+    }
+    return null;
+  };
+
+  let url = await tryPaths(token);
+  if (url) return url;
+
+  // First pass often 401 with a stale Graph token — refresh once and retry.
+  token = await getGraphUserReadToken(instance, accounts, true);
+  if (!token) return null;
+  url = await tryPaths(token);
+  return url;
 }

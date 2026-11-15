@@ -50,6 +50,7 @@ export function UserProfileMenu({ size = 40 }: { size?: number }) {
       setPhotoUrl(null);
       return;
     }
+    // Re-fetch when the signed-in account changes (other users / account switch).
     void fetchGraphProfilePhotoUrl(instance, accounts)
       .then((url) => {
         if (cancelled) {
@@ -70,7 +71,8 @@ export function UserProfileMenu({ size = 40 }: { size?: number }) {
         photoUrlRef.current = null;
       }
     };
-  }, [instance, accounts]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload when account identity changes
+  }, [instance, accounts, accounts[0]?.homeAccountId, accounts[0]?.localAccountId]);
 
   useEffect(() => {
     const onDoc = (event: MouseEvent) => {
