@@ -103,7 +103,7 @@ app/layout.tsx                RootLayout
   with a half-ready MSAL instance.
 - `app/pages/layout.tsx` remembers whether the side nav is collapsed (`localStorage["sidenav-collapsed"]`). On
   `/app-atlas` it forces the narrow icon rail and drops the shell TopNav; the Atlas header shows
-  `UserProfileMenu` (`app/components/user-profile-menu.tsx`) — same Graph photo + logout as Home.
+  `UserProfileMenu` (`app/components/user-profile-menu.tsx`) — Graph photo + friendly name + logout (no raw MS UPN in chrome).
 - `/metrics/*` has its own layout (`app/pages/metrics/layout.tsx`) with tabs and a shared time filter
   (`MetricsFilterProvider`, `app/context/metrics-filter-context.tsx`).
 
@@ -202,11 +202,13 @@ hostname. Backend contract and ops UI:
 
 - **Header:** project picker (`?projectId=`; picker grows with viewport so long names are not clipped), product tabs
   (**Canvas**, **API Testing**, **SIT**, **Coverage**, **Security**, **Performance**, **Reports**, **CI/CD** when
-  trial flags allow), History / My History, presence avatars, and **UserProfileMenu** (Graph photo — same component
-  as Home TopNav).
-- **Explorer** (`explorer.tsx`): canvases for the project's host; drag the right edge to widen. Owner display names
-  scale with panel width (not a fixed 70px cap). Separate **Connected** icon row (Jira / Swagger / Teams / …) with
-  smooth collapse. Do not merge Connected icons into the canvas list.
+  trial flags allow), **History** as icon-only toggle, up to two presence initials (name tooltips only), and
+  **UserProfileMenu** (Graph photo + friendly name — same component as Home TopNav; never dump MS UPN in hover).
+- **Explorer** (`explorer.tsx`): canvases for the project's host; drag the right edge to widen. **Canvas name first**
+  (full, wraps); owner on the line below. Separate **Connected** icon row (Jira / Swagger / Teams / …). Do not merge
+  Connected icons into the canvas list.
+- **Coverage** (`coverage-overview.tsx` + `coverage-hub.tsx`): Live hub panels, then SIT depth table. Eisenhower Matrix
+  board is **not sticky** (avoids covering table rows); per-ticket matrix cells stay compact.
 - **Connect apps** (`connect-apps-modal.tsx`): icon grid; click toggles select/unselect; connection status on icons;
   integrate from the modal. Keep this pattern if you touch connect UX.
 - **Main area:** live recording if running, else selected canvas / active tab view, else empty state.

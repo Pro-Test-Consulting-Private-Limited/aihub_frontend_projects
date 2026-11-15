@@ -77,7 +77,8 @@ Backend dig/SIT write-up: appatlas-backend `docs/architecture/01-system-overview
 |---|---|
 | Workspace shell, tabs, header, profile | `app/components/app-atlas/atlas-workspace.tsx` |
 | Home-style profile menu (Graph photo) | `app/components/user-profile-menu.tsx` (shared with TopNav) |
-| Explorer (canvases list, owner name scales with panel width, Connected row, collapse) | `app/components/app-atlas/explorer.tsx` |
+| Explorer (canvas **name first**, full wrap; owner on the line below) | `app/components/app-atlas/explorer.tsx` |
+| Coverage hub + Eisenhower matrix | `coverage-hub.tsx`, `coverage-overview.tsx`, `lib/coverage-gaps.ts` |
 | Connect apps modal (icon grid, status, toggle select) | `app/components/app-atlas/connect-apps-modal.tsx` |
 | Canvas graph | `app/components/app-atlas/canvas-flow.tsx`, `screen-node.tsx` |
 | Recording | `app/components/app-atlas/recording-view.tsx` |
@@ -98,14 +99,15 @@ Env vars: [CONFIGURATION.md](CONFIGURATION.md).
 1. **Open from Home** — App Atlas is not in the side nav; Home → App Atlas project → `/app-atlas?projectId=`.
 2. **Connect apps** — Icon grid for Jira / Swagger / Teams / GitHub / etc. Toggle to select/unselect. Status under
    icons. Explorer shows a separate **Connected** row of icons (not mixed into the canvas list).
-3. **Explorer names** — Drag the Explorer edge wider to show more of the canvas owner name (no longer capped at a
-   fixed 70px). Hover still shows full name + email.
-4. **Jira map is async** — `connectJira` may get `202` + `jobId`; the client polls
+3. **Explorer names** — Canvas **title is primary** (full name, wraps). Owner is secondary on the line under it
+   (truncates). Do not put owner on the same line competing with the canvas name.
+4. **Coverage** — Live hub (AC / OpenAPI / smoke / weighted / device / a11y) sits above the SIT depth table.
+   Eisenhower **Matrix** is a normal (non-sticky) board above the table so it never covers rows. Per-ticket cells stay compact.
+5. **Jira map is async** — `connectJira` may get `202` + `jobId`; the client polls
    `/api/app-atlas/canvases/:id/jira/jobs/:jobId` then reloads the canvas with `GET /canvases/:id?view=lite`.
-5. **Lite vs full canvas** — Prefer `view=lite` when opening canvases for snappy UI; full payload when needed.
-6. **Profile** — Atlas header uses the same `UserProfileMenu` as Home (Graph photo + name + logout). Do not invent a
-   second avatar path.
-7. **Presence** — Project room avatars + site-wide heartbeat (`site-presence.tsx`) feed the ops "who's online" view.
+6. **Lite vs full canvas** — Prefer `view=lite` when opening canvases for snappy UI; full payload when needed.
+7. **Header chrome** — History is icon-only; presence shows ≤2 initials (names only, no emails); `UserProfileMenu`
+   shows Graph photo + **friendly display name** (no MS UPN / `@…onmicrosoft` in hover or menu). Same component as Home.
 8. **Trial flags** — Some tabs (e.g. CI/CD) depend on App Atlas admin settings (`cicdPageTrial`, …). If a tab is
    missing, check the logs dashboard settings, not only FE.
 
