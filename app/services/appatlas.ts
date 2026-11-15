@@ -300,7 +300,7 @@ export function atlasClient({ instance, accounts }: Msal) {
       request<{ users: PresenceUser[] }>(
         "/presence",
         json("POST", { room, leaving, ...(photo ? { photo } : {}) }),
-      );
+      ),
     getClarifications: (canvasId: string) => request<CanvasClarifications>(`/canvases/${canvasId}/clarifications`),
     /** Owner only. No issueKey = every failed ticket; `force` regenerates a ticket that already has questions. */
     retryClarifications: (canvasId: string, body: { issueKey?: string; force?: boolean } = {}) =>
