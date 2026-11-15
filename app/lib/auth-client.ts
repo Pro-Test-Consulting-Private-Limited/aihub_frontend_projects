@@ -186,11 +186,9 @@ async function listPhotoSizes(token: string, userPath: string): Promise<string[]
     const res = await fetch(`https://graph.microsoft.com/v1.0${userPath}/photos`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (res.status === 404) return [];
-    if (!res.ok) return [];
+    if (res.status === 404 || !res.ok) return [];
     const body = (await res.json()) as { value?: Array<{ id?: string }> };
     const ids = (body.value || []).map((v) => v.id).filter((id): id is string => !!id);
-    // Prefer larger sizes first for a clearer face.
     const rank = (id: string) => {
       const n = parseInt(id, 10);
       return Number.isFinite(n) ? n : 0;
@@ -201,80 +199,73 @@ async function listPhotoSizes(token: string, userPath: string): Promise<string[]
   }
 }
 
+/** One in-flight / settled result per account — menu + presence must not double-probe Graph. */
+const graphPhotoBlobCache = new Map<string, Promise<Blob | null>>();
+
+/**
+ * Quiet probe: at most a couple of Graph calls.
+ * 404 on `/me/photo` means no Entra photo — stop (do not fan out oid/upn/sizes/beta×bases).
+ */
 async function fetchGraphProfilePhotoBlob(
   instance: IPublicClientApplication,
   accounts: AccountInfo[],
 ): Promise<Blob | null> {
   const account = instance.getActiveAccount() || accounts[0];
   if (!account) return null;
-  const claims = (account.idTokenClaims || {}) as Record<string, unknown>;
-  const oid = String(claims.oid || claims.sub || account.localAccountId || "");
-  const upn = String(
-    account.username || claims.preferred_username || claims.upn || claims.email || "",
-  ).trim();
+  const cacheKey = account.homeAccountId || account.localAccountId || account.username || "me";
+  const cached = graphPhotoBlobCache.get(cacheKey);
+  if (cached) return cached;
 
-  const tryWithToken = async (accessToken: string): Promise<Blob | null> => {
-    const bases = [
-      "/me",
-      ...(oid ? [`/users/${encodeURIComponent(oid)}`] : []),
-      ...(upn ? [`/users/${encodeURIComponent(upn)}`] : []),
-    ];
-    for (const api of ["v1.0", "beta"] as const) {
-      for (const base of bases) {
-        // Prefer whatever sizes Graph says exist; if the collection 404s, try a few defaults once.
-        const sizes = api === "v1.0" ? await listPhotoSizes(accessToken, base) : [];
-        const paths =
-          sizes.length > 0
-            ? [...sizes.map((id) => `${base}/photos/${id}/$value`), `${base}/photo/$value`]
-            : [
-                `${base}/photo/$value`,
-                `${base}/photos/240x240/$value`,
-                `${base}/photos/96x96/$value`,
-              ];
-        const seen = new Set<string>();
-        for (const path of paths) {
-          if (seen.has(path)) continue;
-          seen.add(path);
-          try {
-            const { blob, missing } = await graphPhotoBlob(accessToken, path, api);
-            if (blob) return blob;
-            // No photo on this user/base — don't keep probing sizes / other bases for the same api.
-            if (missing && path.endsWith("/photo/$value")) break;
-          } catch (err) {
-            if (err && typeof err === "object" && "status" in err) throw err;
-          }
-        }
+  const load = (async (): Promise<Blob | null> => {
+    const accountList = [account, ...accounts.filter((a) => a.homeAccountId !== account.homeAccountId)];
+    let token = await getGraphUserReadToken(instance, accountList);
+    if (!token) return null;
+
+    const tryOnce = async (accessToken: string): Promise<Blob | null> => {
+      // Primary: signed-in user's photo.
+      const primary = await graphPhotoBlob(accessToken, "/me/photo/$value", "v1.0");
+      if (primary.blob) return primary.blob;
+      if (primary.missing) {
+        // Some tenants only expose the AAD photo on beta — one extra call, then stop.
+        const beta = await graphPhotoBlob(accessToken, "/me/photo/$value", "beta");
+        return beta.blob;
+      }
+      // Non-404 miss (empty/bad body): ask which sizes exist, try the largest once.
+      const sizes = await listPhotoSizes(accessToken, "/me");
+      for (const id of sizes.slice(0, 1)) {
+        const sized = await graphPhotoBlob(accessToken, `/me/photos/${id}/$value`, "v1.0");
+        if (sized.blob) return sized.blob;
+      }
+      return null;
+    };
+
+    try {
+      return await tryOnce(token);
+    } catch (err) {
+      // Only re-auth-and-retry on Graph 401/403 — never re-spam because the photo is missing.
+      if (!(err && typeof err === "object" && "status" in err)) return null;
+      token = await getGraphUserReadToken(instance, accountList, true);
+      if (!token) return null;
+      try {
+        return await tryOnce(token);
+      } catch {
+        return null;
       }
     }
-    return null;
-  };
+  })();
 
-  // Keep token acquisition on the same account we resolve the photo for.
-  const accountList = [account, ...accounts.filter((a) => a.homeAccountId !== account.homeAccountId)];
-
-  let token = await getGraphUserReadToken(instance, accountList);
-  if (!token) return null;
-
+  graphPhotoBlobCache.set(cacheKey, load);
   try {
-    const blob = await tryWithToken(token);
-    if (blob) return blob;
-  } catch {
-    /* refresh below */
-  }
-
-  token = await getGraphUserReadToken(instance, accountList, true);
-  if (!token) return null;
-  try {
-    return await tryWithToken(token);
-  } catch {
-    return null;
+    return await load;
+  } catch (err) {
+    graphPhotoBlobCache.delete(cacheKey);
+    throw err;
   }
 }
 
 /**
  * Fetch the signed-in user's Graph profile photo as a blob URL.
- * Uses the active MSAL account, tries v1.0 then beta, skips empty gray placeholders,
- * and stops after Graph 404 (no photo) instead of spamming every size.
+ * Cached per account; at most ~2 Graph calls when the tenant has no photo (no console spam).
  */
 export async function fetchGraphProfilePhotoUrl(
   instance: IPublicClientApplication,
