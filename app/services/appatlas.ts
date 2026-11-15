@@ -247,7 +247,10 @@ export function atlasClient({ instance, accounts }: Msal) {
       const qs = q.toString();
       return request<CanvasSummary[]>(`/canvases${qs ? `?${qs}` : ""}`);
     },
-    getCanvas: (id: string) => request<Canvas>(`/canvases/${id}`),
+    getCanvas: (id: string, opts?: { view?: "lite" | "full" }) => {
+      const view = opts?.view === "full" ? "full" : "lite";
+      return request<Canvas>(`/canvases/${id}?view=${view}`);
+    },
     saveCanvas: (body: { sessionId: string; name: string; description?: string }) =>
       request<Canvas>("/canvases", json("POST", body)),
     renameCanvas: (id: string, body: { name?: string; description?: string }) =>
@@ -255,9 +258,36 @@ export function atlasClient({ instance, accounts }: Msal) {
     deleteCanvas: (id: string) => request<void>(`/canvases/${id}`, json("DELETE")),
     listJiraProjects: () =>
       request<{ projects: JiraProject[] }>("/api/app-atlas/jira/projects", {}, false, "").then((r) => r.projects),
-    /** `regenerate` re-asks the clarification agent for every ticket instead of keeping unchanged ones. */
-    connectJira: (canvasId: string, projectKey: string, regenerate = false) =>
-      request<Canvas>(`/api/app-atlas/canvases/${canvasId}/jira`, json("POST", { projectKey, regenerate }), false, ""),
+    /**
+     * Starts async Jira map (202 + jobId), polls until done, then returns the canvas.
+     * `regenerate` re-asks the clarification agent for every ticket instead of keeping unchanged ones.
+     */
+    connectJira: async (canvasId: string, projectKey: string, regenerate = false) => {
+      const started = await request<{ jobId?: string; status?: string } | Canvas>(
+        `/api/app-atlas/canvases/${canvasId}/jira`,
+        json("POST", { projectKey, regenerate }),
+        false,
+        "",
+      );
+      if (started && typeof started === "object" && "nodes" in started) {
+        return started as Canvas;
+      }
+      const jobId = (started as { jobId?: string }).jobId;
+      if (!jobId) throw new AtlasError("Jira map did not return a job id", 502);
+      const deadline = Date.now() + 5 * 60_000;
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 1500));
+        const job = await request<{ status: string; error?: string | null }>(
+          `/api/app-atlas/canvases/${canvasId}/jira/jobs/${encodeURIComponent(jobId)}`,
+          {},
+          false,
+          "",
+        );
+        if (job.status === "done") return request<Canvas>(`/canvases/${canvasId}?view=lite`);
+        if (job.status === "failed") throw new AtlasError(job.error || "Jira mapping failed", 502);
+      }
+      throw new AtlasError("Jira mapping timed out. Refresh and check the canvas.", 504);
+    },
     disconnectJira: (canvasId: string) =>
       request<Canvas>(`/api/app-atlas/canvases/${canvasId}/jira`, json("DELETE"), false, ""),
     /** Binds a swagger URL to the canvas; App Atlas builds/reuses the org-wide API chain. */

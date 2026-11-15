@@ -324,6 +324,23 @@ export default function AtlasWorkspace() {
     [canvas?.id, client, loadCanvases],
   );
 
+  // Jira panel needs full issue text; upgrade from lite GET when a node is opened.
+  useEffect(() => {
+    if (!panelNodeId || !selectedId) return;
+    let cancelled = false;
+    void client
+      .getCanvas(selectedId, { view: "full" })
+      .then((full) => {
+        if (!cancelled) setCanvas(full);
+      })
+      .catch(() => {
+        /* keep lite canvas */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [panelNodeId, selectedId, client]);
+
   // Switching app clears a selection that belongs to another app.
   useEffect(() => {
     if (selectedId && !visible.some((c) => c.id === selectedId)) {
