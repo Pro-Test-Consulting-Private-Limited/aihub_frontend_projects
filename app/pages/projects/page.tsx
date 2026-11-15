@@ -31,7 +31,8 @@ function todayFormatted() {
 }
 
 export default function Projects() {
-  const { projects, addProject, updateProject, deleteProject } = useProjects();
+  const { projects, loading: projectsLoading, error: projectsError, refresh, addProject, updateProject, deleteProject } =
+    useProjects();
 
   // ---- Which page we're showing ----
   const [mode, setMode] = useState<"create" | "view">("view");
@@ -520,7 +521,18 @@ export default function Projects() {
                 <h3>All Projects</h3>
                 <div className="hint">Click a project to view or edit its details.</div>
 
-                {projects.length === 0 && (
+                {projectsLoading && (
+                  <div style={{ fontSize: 13, color: "var(--gray)" }}>Loading projects…</div>
+                )}
+                {projectsError && (
+                  <div style={{ fontSize: 13, color: "#DC3545", marginBottom: 8 }}>
+                    {projectsError}{" "}
+                    <button type="button" onClick={() => void refresh()} style={{ textDecoration: "underline" }}>
+                      Retry
+                    </button>
+                  </div>
+                )}
+                {!projectsLoading && !projectsError && projects.length === 0 && (
                   <div style={{ fontSize: 13, color: "var(--gray)" }}>
                     No projects yet. Click &quot;+ New Project&quot; to create one.
                   </div>

@@ -7,7 +7,11 @@ import { SiJira, SiLinear, SiSwagger } from "react-icons/si";
 import { FaBook, FaCode, FaMicrosoft, FaSlack } from "react-icons/fa";
 import type { Canvas, CanvasSummary, JiraProject } from "@/app/interfaces/appatlas";
 import type { AtlasClient } from "@/app/services/appatlas";
-import { useIntegrationStatus, type SwaggerStatus } from "@/app/hooks/use-integration-status";
+import {
+  useIntegrationStatus,
+  type ConnectionHealth,
+  type SwaggerStatus,
+} from "@/app/hooks/use-integration-status";
 import { clearCanvasSwagger, setCanvasSwagger, type CanvasSwagger } from "@/app/lib/canvas-swagger";
 import { clearToken, getEnvironment, getToken, selectEnvProfile, setEnvironment, setToken, validateBaseUrl, type TestEnvironment } from "@/app/lib/api-testing/environment";
 import { EnvProfileChips } from "@/app/components/app-atlas/endpoint-tests/env-profile-chips";
@@ -59,16 +63,44 @@ export function ConnectAppsModal({
   onClose: () => void;
 }) {
   const router = useRouter();
-  const { jira, swagger: swaggerIntegration, teams, loading: statusLoading } = useIntegrationStatus();
+  const {
+    jira,
+    swagger: swaggerIntegration,
+    teams,
+    loading: statusLoading,
+    probing,
+  } = useIntegrationStatus({ live: true, refreshMs: 60_000 });
   const teamsConnected = teams.connected;
+
+  const healthOf = (id: AppId): ConnectionHealth => {
+    if (id === "jira") return jira.health;
+    if (id === "swagger") return swaggerIntegration.health;
+    if (id === "teams") return teams.health;
+    return "disconnected";
+  };
+
+  /** Usable for Connect: Active only. Expired/disconnected must go to Integrations. */
+  const canUse = (id: AppId) => {
+    const h = healthOf(id);
+    return h === "active";
+  };
+
   const integrated: Record<AppId, boolean> = {
-    jira: jira.connected,
-    swagger: swaggerIntegration.connected,
+    jira: canUse("jira"),
+    swagger: canUse("swagger"),
     linear: false,
     redocly: false,
     stoplight: false,
-    teams: teamsConnected,
+    teams: canUse("teams"),
     slack: false,
+  };
+
+  const statusChip = (health: ConnectionHealth) => {
+    if (health === "active") return { label: "Active", className: "border-[#86EFAC] bg-[#F0FDF4] text-[#166534]" };
+    if (health === "expired")
+      return { label: "Token expired · reconnect", className: "border-[#FCD34D] bg-[#FFFBEB] text-[#92400E]" };
+    if (health === "error") return { label: "Check failed", className: "border-[#FCA5A5] bg-[#FEF2F2] text-[#991B1B]" };
+    return { label: "Not connected", className: "border-[#E5E7EB] bg-white text-[#6B7280] dark:border-[#2a2a2a]" };
   };
   const [step, setStep] = useState<"apps" | "jira" | "swagger" | "teams">("apps");
   const [picked, setPicked] = useState<AppId | null>(canvas.jiraProjectKey ? "jira" : null);
@@ -90,6 +122,43 @@ export function ConnectAppsModal({
     <Modal title={stepTitle} onClose={onClose} width={480}>
       {step === "apps" ? (
         <div className="mt-4 space-y-3">
+          <div className="rounded-[12px] border border-[#E6E1F5] bg-[#FBF8FF] p-3 dark:border-[#2a2a2a] dark:bg-[#16121f]">
+            <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-[#5E6066] dark:text-[#9ca3af]">
+              Connection status
+              {statusLoading ? " · loading…" : probing ? " · checking…" : ""}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {(
+                [
+                  { name: "Jira", health: jira.health, detail: jira.detail },
+                  { name: "Swagger", health: swaggerIntegration.health, detail: null },
+                  { name: "Teams", health: teams.health, detail: null },
+                ] as const
+              ).map((row) => {
+                const chip = statusChip(row.health);
+                return (
+                  <button
+                    key={row.name}
+                    type="button"
+                    title={row.detail || (row.health === "expired" ? "Open Integrations to reconnect" : undefined)}
+                    onClick={() => {
+                      if (row.health === "expired" || row.health === "disconnected" || row.health === "error") {
+                        router.push("/integrations");
+                      }
+                    }}
+                    className={`rounded-full border px-2.5 py-1 text-[12px] font-medium ${chip.className}`}
+                  >
+                    {row.name}: {chip.label}
+                  </button>
+                );
+              })}
+            </div>
+            {(jira.health === "expired" || teams.health === "expired") && (
+              <p className="mt-2 text-[11.5px] text-[#92400E]">
+                A saved connection expired. Open Integrations to add the token again, then return here.
+              </p>
+            )}
+          </div>
           {CATEGORIES.map((cat) => (
             <div key={cat.title} className="rounded-[12px] border border-[#ECECEC] bg-[#FAFAFA] p-4 dark:border-[#2a2a2a] dark:bg-[#101010]">
               <button
@@ -104,12 +173,14 @@ export function ConnectAppsModal({
               <div className="mt-3 flex gap-3">
                 {cat.apps.map((app) => {
                   const ok = integrated[app.id];
+                  const health = healthOf(app.id);
                   const linkedTeams = (canvas as CanvasSummary & { teams?: { teamId?: string } | null }).teams;
                   const connected =
                     (app.id === "jira" && !!canvas.jiraProjectKey) ||
                     (app.id === "swagger" && !!swagger) ||
                     (app.id === "teams" && !!linkedTeams?.teamId);
                   const selected = picked === app.id;
+                  const expired = health === "expired";
                   return (
                     <button
                       key={app.id}
@@ -117,22 +188,31 @@ export function ConnectAppsModal({
                       disabled={!ok}
                       onClick={() => setPicked(app.id)}
                       title={
-                        ok
-                          ? connected
-                            ? `${app.name}: connected to ${app.id === "swagger" ? swagger?.title || "this spec" : canvas.jiraProjectKey}`
-                            : `Select ${app.name}`
-                          : `${app.name} isn't integrated yet. Integrate it on the Integrations page first.`
+                        expired
+                          ? `${app.name} token expired. Go to Integrations to reconnect.`
+                          : ok
+                            ? connected
+                              ? `${app.name}: connected to ${app.id === "swagger" ? swagger?.title || "this spec" : canvas.jiraProjectKey}`
+                              : `Select ${app.name}`
+                            : `${app.name} isn't integrated yet. Integrate it on the Integrations page first.`
                       }
                       className={`relative flex h-[56px] w-[56px] items-center justify-center rounded-[10px] bg-white shadow-sm transition dark:bg-[#1a1a1a] ${
                         ok
                           ? selected
                             ? "border-2 border-[#22C55E] ring-2 ring-[#22C55E]/30"
                             : "border-2 border-[#22C55E] hover:scale-105"
-                          : "cursor-not-allowed border border-[#E5E7EB] opacity-45 grayscale dark:border-[#2a2a2a]"
+                          : expired
+                            ? "cursor-not-allowed border-2 border-[#F59E0B] opacity-80"
+                            : "cursor-not-allowed border border-[#E5E7EB] opacity-45 grayscale dark:border-[#2a2a2a]"
                       }`}
                     >
                       {app.icon}
-                      {connected && <span className="absolute -top-1 -right-1 h-[10px] w-[10px] rounded-full border-2 border-white bg-[#22C55E]" />}
+                      {connected && ok && (
+                        <span className="absolute -right-1 -top-1 h-[10px] w-[10px] rounded-full border-2 border-white bg-[#22C55E]" />
+                      )}
+                      {expired && (
+                        <span className="absolute -right-1 -top-1 h-[10px] w-[10px] rounded-full border-2 border-white bg-[#F59E0B]" />
+                      )}
                     </button>
                   );
                 })}
@@ -142,7 +222,7 @@ export function ConnectAppsModal({
           <p className="text-[11.5px] text-[#7E7E7E]">
             {statusLoading
               ? "Checking your integrations…"
-              : "Apps with a green border are integrated in AI Hub. Select one, then Connect. Integrate the others from the Integrations page."}
+              : "Green = Active connection. Amber = token expired — reconnect on Integrations. Then select an app and Connect."}
           </p>
           {picked && !CAN_MAP.includes(picked) && (
             <p className="text-[11.5px] text-[#92400E]">

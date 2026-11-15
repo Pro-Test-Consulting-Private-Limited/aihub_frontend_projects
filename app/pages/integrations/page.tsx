@@ -241,7 +241,7 @@ function IntegrationsContent() {
     refresh,
     saveProviders,
     disconnectProvider,
-  } = useIntegrationStatus({ live: true });
+  } = useIntegrationStatus({ live: true, refreshMs: 60_000 });
   const [busy, setBusy] = useState<string | null>(null);
   const [connectProvider, setConnectProvider] = useState<Exclude<LiveProvider, "teams"> | null>(null);
   const handledCallback = useRef(false);

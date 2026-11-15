@@ -10,7 +10,7 @@ const DEFAULT_APPLIED_FILTER: MetricsCustomTimeFilterState = {
   ...DEFAULT_CUSTOM_TIME_FILTER,
   mode: "relative",
   duration: "15",
-  unit: "months",
+  unit: "minutes",
 };
 
 interface MetricsFilterContextValue {

@@ -81,9 +81,10 @@ const EMPTY_TEAMS: TeamsStatus = {
   detail: null,
 };
 
-export function useIntegrationStatus(opts?: { live?: boolean }) {
-  /** Live probe hits Jira/GitHub APIs — only opt in (Integrations hub). Elsewhere cookie/DB presence is enough. */
+export function useIntegrationStatus(opts?: { live?: boolean; refreshMs?: number }) {
+  /** Live probe hits Jira/GitHub APIs — opt in for Integrations hub and Connect-to-canvas. */
   const live = opts?.live === true;
+  const refreshMs = opts?.refreshMs && opts.refreshMs >= 10_000 ? opts.refreshMs : 0;
   const { instance, accounts } = useMsal();
   const [jira, setJira] = useState<JiraStatus>(EMPTY_JIRA);
   const [github, setGithub] = useState<GitHubStatus>(EMPTY_GITHUB);
@@ -221,6 +222,19 @@ export function useIntegrationStatus(opts?: { live?: boolean }) {
   useEffect(() => {
     refresh().finally(() => setLoading(false));
   }, [refresh]);
+
+  useEffect(() => {
+    if (!refreshMs) return;
+    const tick = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    const id = setInterval(tick, refreshMs);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", tick);
+    };
+  }, [refresh, refreshMs]);
 
   const saveProviders = useCallback(
     async (

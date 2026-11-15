@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMsal } from "@azure/msal-react";
@@ -16,6 +17,7 @@ import {
   TbWorld,
   TbListCheck,
   TbGitBranch,
+  TbLoader2,
 } from "react-icons/tb";
 import { useProjects } from "@/app/lib/projectsStore";
 import type { Canvas, CanvasSummary, PresenceUser, SessionSnapshot } from "@/app/interfaces/appatlas";
@@ -28,22 +30,50 @@ import { SaveExecutionModal } from "./save-execution-modal";
 import { SessionSetupModal } from "./session-setup-modal";
 import { RecordingView } from "./recording-view";
 import { ReplayPlayer } from "./replay-player";
-import { PerformanceView } from "./performance-view";
 import { PhaseCToolsModal } from "./phase-c-tools";
 import {
   emulationBodyFromPrefs,
   loadEmulationPrefs,
   type SessionEmulationPrefs,
 } from "@/app/lib/session-emulation";
-import { ApiTestingView } from "./api-testing-view";
-import { CicdView } from "./cicd-view";
-import { SitTestingView } from "./sit-testing-view";
-import { CoverageOverview } from "./coverage-overview";
-import { ReportsView } from "./reports-view";
-import { SecurityOverview } from "./security-overview";
 import { useApiSpec, useApiSpecView } from "@/app/hooks/use-api-spec";
 import { clearCanvasSwagger, getCanvasSwagger, setCanvasSwagger, type CanvasSwagger } from "@/app/lib/canvas-swagger";
 import { isLocalAuthBypassEnabled } from "@/app/lib/auth-bypass";
+
+const tabFallback = (
+  <div className="flex h-full items-center justify-center gap-2 text-[13px] text-[#7E7E7E]">
+    <TbLoader2 className="animate-spin" size={16} /> Loading…
+  </div>
+);
+
+const ApiTestingView = dynamic(() => import("./api-testing-view").then((m) => m.ApiTestingView), {
+  ssr: false,
+  loading: () => tabFallback,
+});
+const CicdView = dynamic(() => import("./cicd-view").then((m) => m.CicdView), {
+  ssr: false,
+  loading: () => tabFallback,
+});
+const SitTestingView = dynamic(() => import("./sit-testing-view").then((m) => m.SitTestingView), {
+  ssr: false,
+  loading: () => tabFallback,
+});
+const CoverageOverview = dynamic(() => import("./coverage-overview").then((m) => m.CoverageOverview), {
+  ssr: false,
+  loading: () => tabFallback,
+});
+const ReportsView = dynamic(() => import("./reports-view").then((m) => m.ReportsView), {
+  ssr: false,
+  loading: () => tabFallback,
+});
+const SecurityOverview = dynamic(() => import("./security-overview").then((m) => m.SecurityOverview), {
+  ssr: false,
+  loading: () => tabFallback,
+});
+const PerformanceView = dynamic(() => import("./performance-view").then((m) => m.PerformanceView), {
+  ssr: false,
+  loading: () => tabFallback,
+});
 
 const BASE_TABS = [
   { id: "canvas", label: "Canvas", icon: TbLayoutGrid },

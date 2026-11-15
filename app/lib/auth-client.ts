@@ -76,3 +76,40 @@ export async function getGraphAccessToken(
     throw err;
   }
 }
+
+/** Graph access token with User.Read — profile photo /me. */
+export async function getGraphUserReadToken(
+  instance: IPublicClientApplication,
+  accounts: AccountInfo[],
+) {
+  if (accounts.length === 0) return null;
+  const account = accounts[0];
+  try {
+    const result = await instance.acquireTokenSilent({ ...loginRequest, account });
+    return result.accessToken;
+  } catch (err) {
+    if (err instanceof InteractionRequiredAuthError) {
+      await instance.acquireTokenRedirect({ ...loginRequest, account });
+    }
+    return null;
+  }
+}
+
+/**
+ * Fetch the signed-in user's Graph profile photo as a blob URL.
+ * Returns null when no photo is set (caller should show initials).
+ */
+export async function fetchGraphProfilePhotoUrl(
+  instance: IPublicClientApplication,
+  accounts: AccountInfo[],
+): Promise<string | null> {
+  const token = await getGraphUserReadToken(instance, accounts);
+  if (!token) return null;
+  const res = await fetch("https://graph.microsoft.com/v1.0/me/photo/$value", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) return null;
+  const blob = await res.blob();
+  if (!blob.size) return null;
+  return URL.createObjectURL(blob);
+}

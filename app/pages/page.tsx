@@ -68,12 +68,15 @@ export default function Home() {
   const [period, setPeriod] = useState<DropdownItem | null>(PERIODOPTIONS[0]);
   const [last, setLast] = useState<DropdownItem | null>(LASTOPTIONS[0]);
   const [stats, setStats] = useState<StatsResponse | null>(null);
+  const [statsError, setStatsError] = useState<string | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
   const [usage, setUsage] = useState<ModelUsage | null>(null);
   const [usageError, setUsageError] = useState(false);
   const [server, setServer] = useState<{
     Backend: boolean;
     database: boolean;
   } | null>(null);
+  const [serverError, setServerError] = useState<string | null>(null);
   const modelState = useModelStatus();
   const router = useRouter();
   const { accounts } = useMsal();
@@ -86,11 +89,33 @@ export default function Home() {
   const lastValue = last?.value;
   const periodValue = period?.value;
 
+  const loadStats = useCallback(
+    async (silent = false) => {
+      if (!silent) setStatsLoading(true);
+      try {
+        const response = await getBusinessMetrics(LAST_OPTION_SECONDS[String(lastValue)] ?? 1800);
+        setStats(response?.data ?? null);
+        setStatsError(null);
+      } catch (error) {
+        setStatsError(error instanceof Error ? error.message : "Could not load usage stats");
+        if (!silent) setStats(null);
+      } finally {
+        if (!silent) setStatsLoading(false);
+      }
+    },
+    [lastValue],
+  );
+
   useEffect(() => {
-    getBusinessMetrics(LAST_OPTION_SECONDS[String(lastValue)] ?? 1800)
-      .then((response) => setStats(response?.data ?? null))
-      .catch((error) => console.log(error));
-  }, [lastValue]);
+    void loadStats(false);
+  }, [loadStats]);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible") void loadStats(true);
+    }, 20_000);
+    return () => clearInterval(id);
+  }, [loadStats]);
 
   useEffect(() => {
     setUsageError(false);
@@ -103,17 +128,22 @@ export default function Home() {
   }, [periodValue]);
 
   const fetchServerStatus = useCallback(async () => {
-    getServerStatus()
-      .then((response) => {
-        console.log("AI HUB HEALTH RESPONSE:", response);
-        setServer(response?.data?.details);
-      })
-      .catch((error) => console.log("AI HUB HEALTH ERROR:", error));
+    try {
+      const response = await getServerStatus();
+      setServer(response?.data?.details);
+      setServerError(null);
+    } catch (error) {
+      setServerError(error instanceof Error ? error.message : "Could not reach health endpoint");
+    }
   }, []);
 
   useEffect(() => {
     fetchUser();
-    fetchServerStatus();
+    void fetchServerStatus();
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible") void fetchServerStatus();
+    }, 30_000);
+    return () => clearInterval(id);
   }, [fetchUser, fetchServerStatus]);
 
   const backendDown =
@@ -424,9 +454,14 @@ export default function Home() {
             </div>
           </div>
 
-          {usageError && (
-            <div className="-mt-[15px] mb-[30px] text-[12px] text-[#DC3545]">
-              Could not load usage from Hugging Face.
+          {(usageError || statsError || serverError || statsLoading) && (
+            <div className="-mt-[15px] mb-[30px] space-y-1 text-[12px]">
+              {statsLoading && !stats && <div className="text-[#7E7E7E]">Loading live stats…</div>}
+              {statsError && <div className="text-[#DC3545]">{statsError}</div>}
+              {usageError && (
+                <div className="text-[#DC3545]">Could not load usage from Hugging Face.</div>
+              )}
+              {serverError && <div className="text-[#DC3545]">{serverError}</div>}
             </div>
           )}
         </div>
