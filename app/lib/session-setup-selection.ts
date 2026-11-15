@@ -12,7 +12,7 @@ export type DeviceSelection =
   | { kind: "custom" }
   | { kind: "mine"; presetId: string };
 
-/** Tab is derived from the selected card — never the other way around. */
+/** Tab is derived from the selected card  -  never the other way around. */
 export function tabForSelection(selection: DeviceSelection, prefs: SessionEmulationPrefs): DeviceTab {
   if (selection.kind === "mine") return "mine";
   if (selection.kind === "custom") return "custom";
@@ -24,7 +24,7 @@ export function selectionFromPrefs(prefs: SessionEmulationPrefs): DeviceSelectio
   if (prefs.devicePreset === "custom") return { kind: "custom" };
   const entry = deviceById(prefs.devicePreset);
   if (!entry || entry.id === "custom") return { kind: "custom" };
-  // Prefs may have been edited away from the catalog size — treat as custom.
+  // Prefs may have been edited away from the catalog size  -  treat as custom.
   if (prefs.width !== entry.width || prefs.height !== entry.height) return { kind: "custom" };
   return { kind: "catalog", id: entry.id };
 }

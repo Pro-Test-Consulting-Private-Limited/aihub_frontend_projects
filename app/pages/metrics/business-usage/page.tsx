@@ -4,6 +4,7 @@ import MetricsTimeFilterBar from "@/app/components/metrics-time-filter-bar";
 import { MetricsChartCard, MetricsChartGrid, MetricsStatusBar } from "@/app/components/metrics-chart-grid";
 import { useMetricsFilter } from "@/app/context/metrics-filter-context";
 import { pickModelSeries, useMetricsStats } from "@/app/hooks/use-metrics-stats";
+import { withBusinessSeed } from "@/app/lib/metrics-seed";
 import { getBusinessMetrics } from "@/app/services/analytics";
 
 export default function BusinessUsage() {
@@ -18,7 +19,7 @@ export default function BusinessUsage() {
     setAppliedCustomFilter,
   } = useMetricsFilter();
 
-  const { data, loading, error, reload } = useMetricsStats(getBusinessMetrics);
+  const { data, loading, error, reload } = useMetricsStats(getBusinessMetrics, { seed: withBusinessSeed });
 
   const handleCustomOpenChange = (open: boolean) => {
     if (open && selectedFilter === "custom") setCustomFilter(appliedCustomFilter);
@@ -40,7 +41,7 @@ export default function BusinessUsage() {
           setSelectedFilter("custom");
         }}
         onCustomClearAndDismiss={() => {
-          setSelectedFilter("15m");
+          setSelectedFilter("1h");
           setIsCustomOpen(false);
         }}
       />

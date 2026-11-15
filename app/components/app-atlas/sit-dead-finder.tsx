@@ -59,7 +59,7 @@ export function DeadTestFinderStrip({
             }`}
             title="Show all cases (clear dead-flag filter)"
           >
-            {flagged === 0 ? "0 flagged — suite looks live" : `${flagged} flagged`}
+            {flagged === 0 ? "0 flagged  -  suite looks live" : `${flagged} flagged`}
           </button>
           {DEAD_FLAG_ORDER.map((flag) => {
             const n = summary?.[flag] ?? 0;
@@ -83,7 +83,7 @@ export function DeadTestFinderStrip({
         </>
       )}
       <span className="ml-auto text-[10.5px] text-[#92400e]/70 dark:text-[#FCD34D]/70">
-        Stub, empty oracle, orphan, duplicate — no run history needed
+        Stub, empty oracle, orphan, duplicate  -  no run history needed
       </span>
     </div>
   );

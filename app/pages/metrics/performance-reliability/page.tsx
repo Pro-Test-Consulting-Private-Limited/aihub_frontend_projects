@@ -4,6 +4,7 @@ import MetricsTimeFilterBar from "@/app/components/metrics-time-filter-bar";
 import { MetricsChartCard, MetricsChartGrid, MetricsStatusBar } from "@/app/components/metrics-chart-grid";
 import { useMetricsFilter } from "@/app/context/metrics-filter-context";
 import { useMetricsStats } from "@/app/hooks/use-metrics-stats";
+import { withPerformanceSeed } from "@/app/lib/metrics-seed";
 import { getPerformanceMetrics } from "@/app/services/analytics";
 
 export default function PerformanceReliability() {
@@ -18,19 +19,16 @@ export default function PerformanceReliability() {
     setAppliedCustomFilter,
   } = useMetricsFilter();
 
-  const { data, loading, error, reload } = useMetricsStats(getPerformanceMetrics);
+  const { data, loading, error, reload } = useMetricsStats(getPerformanceMetrics, {
+    seed: withPerformanceSeed,
+  });
 
   const handleCustomOpenChange = (open: boolean) => {
     if (open && selectedFilter === "custom") setCustomFilter(appliedCustomFilter);
     setIsCustomOpen(open);
   };
 
-  const throttling =
-    data?.throttling?.data ||
-    data?.throttle_events?.data ||
-    data?.throttling_events?.data ||
-    data?.throughput?.data ||
-    [];
+  const throttling = data?.throttling?.data || data?.throughput?.data || [];
 
   return (
     <div>
@@ -47,7 +45,7 @@ export default function PerformanceReliability() {
           setSelectedFilter("custom");
         }}
         onCustomClearAndDismiss={() => {
-          setSelectedFilter("15m");
+          setSelectedFilter("1h");
           setIsCustomOpen(false);
         }}
       />

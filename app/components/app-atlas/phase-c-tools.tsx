@@ -326,7 +326,7 @@ export function PhaseCToolsModal({
                             {f.warnings.map((w, i) => (
                               <li key={i}>
                                 {w.message}
-                                {w.detail ? ` — ${w.detail}` : ""}
+                                {w.detail ? `  -  ${w.detail}` : ""}
                               </li>
                             ))}
                           </ul>

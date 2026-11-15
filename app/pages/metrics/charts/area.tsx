@@ -136,11 +136,11 @@ const AreaLineChart = ({
   };
 
   return (
-    <div className="h-[300px] w-full rounded-xl bg-white dark:bg-[#141414] p-4">
-      <div className="mb-2 text-sm font-medium text-gray-600 dark:text-[#ededed]">
-        Count
+    <div className="h-[180px] w-full rounded-xl bg-white p-3 dark:bg-[#141414]">
+      <div className="mb-1 text-[11px] font-medium text-gray-600 dark:text-[#ededed]">Count</div>
+      <div className="h-[148px]">
+        <Line ref={chartRef} data={data} options={options} />
       </div>
-      <Line ref={chartRef} data={data} options={options} />
     </div>
   );
 };

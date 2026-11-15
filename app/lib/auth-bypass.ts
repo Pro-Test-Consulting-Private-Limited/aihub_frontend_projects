@@ -20,7 +20,7 @@ export function isLocalAuthBypassEnabled(): boolean {
   return host === "localhost" || host === "127.0.0.1";
 }
 
-/** Server-only helper — never call from client code. */
+/** Server-only helper  -  never call from client code. */
 export function localProxyAuthSecret(): string | null {
   if (process.env.NODE_ENV === "production") return null;
   if (process.env.AUTH_BYPASS_LOCAL !== "1") return null;

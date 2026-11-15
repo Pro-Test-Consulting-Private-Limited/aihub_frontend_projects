@@ -214,7 +214,7 @@ export function PrerequisitesSection({
       {open && (
         <div className="mt-2 space-y-2.5">
           <Hint short="Calls that run first. Failures BLOCK tests (not fail them).">
-            These run first, in order. Every field of their responses is saved automatically (token, userId…) as <span className={mono}>{"{{token}}"}</span> for later steps. Use <b>Suggest from spec</b> when you are unsure which login or create call to add. If a step fails, later tests are <b>BLOCKED</b> — not failed — until you fix it. Shared setup (“Use on all endpoints”) copies this list to new endpoints of the same spec.
+            These run first, in order. Every field of their responses is saved automatically (token, userId…) as <span className={mono}>{"{{token}}"}</span> for later steps. Use <b>Suggest from spec</b> when you are unsure which login or create call to add. If a step fails, later tests are <b>BLOCKED</b>  -  not failed  -  until you fix it. Shared setup (“Use on all endpoints”) copies this list to new endpoints of the same spec.
           </Hint>
           {steps.map((s, i) => (
             <StepCard key={s.id} accountIds={accountIds} step={s} index={i} count={steps.length} last={lastRun?.prerequisites.find((p) => p.id === s.id)} onChange={(n) => onChange(steps.map((x) => (x.id === s.id ? n : x)))} onRemove={() => onChange(steps.filter((x) => x.id !== s.id))} onMove={(d) => move(i, d)} />

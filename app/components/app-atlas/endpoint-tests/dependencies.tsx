@@ -100,7 +100,7 @@ export function DependencyOverview({ specUrl, targetKey, hasPrerequisites, onAdd
               >
                 {adding ? <TbLoader2 size={12} className="animate-spin" /> : null} Suggest prerequisites
               </button>
-              <span className="text-[11px] text-[#7E7E7E]">Adds the calls this endpoint likely needs first. If one fails later, tests are BLOCKED — not failed.</span>
+              <span className="text-[11px] text-[#7E7E7E]">Adds the calls this endpoint likely needs first. If one fails later, tests are BLOCKED  -  not failed.</span>
             </div>
           )}
         </div>

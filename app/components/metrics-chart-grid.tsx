@@ -50,7 +50,7 @@ export function MetricsChartCard({
     <div className="min-w-0 rounded-[15px] border border-[rgba(94,96,102,0.1)] bg-white pb-[24px] dark:border-[#2a2a2a] dark:bg-[#141414]">
       <div className="p-4 text-[14px] text-[#2C2C2C] dark:text-[#ededed]">{title}</div>
       {series.length === 0 ? (
-        <div className="flex h-[220px] items-center justify-center px-4 text-center text-[12.5px] text-[#7E7E7E]">
+        <div className="flex h-[160px] items-center justify-center px-4 text-center text-[12.5px] text-[#7E7E7E]">
           {emptyHint || "No data in this window. Try a wider range or wait for traffic."}
         </div>
       ) : (
@@ -61,5 +61,5 @@ export function MetricsChartCard({
 }
 
 export function MetricsChartGrid({ children }: { children: React.ReactNode }) {
-  return <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">{children}</div>;
+  return <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">{children}</div>;
 }

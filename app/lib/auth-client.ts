@@ -77,7 +77,7 @@ export async function getGraphAccessToken(
   }
 }
 
-/** Graph access token with User.Read — profile photo /me. */
+/** Graph access token with User.Read  -  profile photo /me. */
 export async function getGraphUserReadToken(
   instance: IPublicClientApplication,
   accounts: AccountInfo[],

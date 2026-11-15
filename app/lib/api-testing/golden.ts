@@ -23,7 +23,7 @@ export function topLevelKeys(body: unknown): string[] {
   return Object.keys(body).sort();
 }
 
-/** FNV-1a 32-bit hex — good enough for local pin compare without crypto.subtle. */
+/** FNV-1a 32-bit hex  -  good enough for local pin compare without crypto.subtle. */
 export function hashBody(body: unknown): string {
   const s = JSON.stringify(normalize(body ?? null));
   let h = 0x811c9dc5;

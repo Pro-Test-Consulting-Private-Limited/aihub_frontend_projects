@@ -490,7 +490,7 @@ export function atlasClient({ instance, accounts }: Msal) {
 
     getSettings: () => request<AtlasSettings>("/settings"),
 
-    /** Canvas GitHub trial (logs `cicdCanvasTrial`) — secondary; prefer CI/CD page. */
+    /** Canvas GitHub trial (logs `cicdCanvasTrial`)  -  secondary; prefer CI/CD page. */
     connectGithub: (
       canvasId: string,
       body: { owner: string; repo: string; openapiPath?: string; smokeBaseUrl?: string },
@@ -519,7 +519,7 @@ export function atlasClient({ instance, accounts }: Msal) {
     startCicdRun: (canvasId: string, body: { ref?: string; title?: string } = {}) =>
       request<CicdRun>(`/canvases/${canvasId}/cicd/run`, json("POST", body)),
 
-    /** Standalone pipelines (base URL + Swagger — no canvas required). */
+    /** Standalone pipelines (base URL + Swagger  -  no canvas required). */
     listCicdPipelines: () => request<{ items: CicdPipeline[] }>("/cicd/pipelines"),
     createCicdPipeline: (body: { name: string; baseUrl: string; swaggerUrl: string; mode?: "live" | "demo" }) =>
       request<{ pipeline: CicdPipeline; triggerSecret: string; snippets: CicdSnippets }>(

@@ -10,7 +10,7 @@ export const pool =
   new Pool({
     connectionString: process.env.DATABASE_URL,
     // This Postgres server does not support SSL connections (confirmed via
-    // psql connecting without sslmode). Do NOT set an `ssl` option here —
+    // psql connecting without sslmode). Do NOT set an `ssl` option here  - 
     // pg will attempt SSL negotiation and the server will reject it.
   });
 

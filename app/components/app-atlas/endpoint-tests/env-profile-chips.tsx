@@ -29,7 +29,7 @@ export function EnvProfileChips({
             key={id}
             type="button"
             onClick={() => onSelect(id)}
-            title={filled ? env.profiles[id] : `No ${ENV_PROFILE_LABEL[id]} URL saved yet — enter one below`}
+            title={filled ? env.profiles[id] : `No ${ENV_PROFILE_LABEL[id]} URL saved yet  -  enter one below`}
             className={`${chip} ${
               active
                 ? "border-[#8664F2] bg-[#8664F2] text-white"

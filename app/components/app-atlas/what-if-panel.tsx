@@ -33,7 +33,7 @@ export function WhatIfPanel({
   if (simulate.locked) {
     return (
       <div className="rounded-[8px] border border-[#FDE68A] bg-[#FFFBEB] p-3 text-[11px] text-[#92400E] dark:border-[#78350f] dark:bg-[#1c1408] dark:text-[#FBBF24]">
-        What if? locked — environment is <strong>{simulate.environment}</strong>. Simulation is only
+        What if? locked  -  environment is <strong>{simulate.environment}</strong>. Simulation is only
         allowed for dev, test, or staging.
       </div>
     );
@@ -99,7 +99,7 @@ export function WhatIfPanel({
                     {o.path}
                   </span>
                   <span className="ml-auto text-[#9ca3af]">
-                    {o.lastStatus || "—"} · ×{o.count}
+                    {o.lastStatus || "-"} · ×{o.count}
                     {(o.simulatedCount || 0) > 0 ? ` · sim×${o.simulatedCount}` : ""}
                   </span>
                 </div>

@@ -21,7 +21,7 @@ type Props = {
 };
 
 const STUFFING_WHAT =
-  "Brute force means an attacker tries many passwords against one account until one works — often after enriching a mobile number into name and date-of-birth patterns (Name@Year). This check runs that attack path live. Pass if the app locks out, throttles, or never grants a session. Fail if a guessed password signs in.";
+  "Brute force means an attacker tries many passwords against one account until one works  -  often after enriching a mobile number into name and date-of-birth patterns (Name@Year). This check runs that attack path live. Pass if the app locks out, throttles, or never grants a session. Fail if a guessed password signs in.";
 
 const ENUM_WHAT =
   "This automated test checks whether login errors leak which accounts exist. The agent tries a fake mobile and a real test mobile with the same wrong password, compares the on-screen errors, and marks pass or fail.";
@@ -60,12 +60,12 @@ export function SecurityCheckSession({ check, kind, targetUrl, client, onClose }
             </span>
             {failBanner && (
               <span className="rounded-[6px] border border-red-300 bg-red-50 px-2.5 py-1 text-[11.5px] font-bold uppercase tracking-wide text-red-700 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200">
-                Failed — password cracked
+                Failed  -  password cracked
               </span>
             )}
             {passBanner && (
               <span className="rounded-[6px] border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-[11.5px] font-bold uppercase tracking-wide text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
-                {stuffingVerdict === "protected" ? "Passed — attack stopped" : "Held — no login"}
+                {stuffingVerdict === "protected" ? "Passed  -  attack stopped" : "Held  -  no login"}
               </span>
             )}
           </div>
@@ -245,7 +245,7 @@ function StuffingSession({
           { id: "phonepe", label: "UPI VPA → display-name graph", hit: "Marti S. Pradyumna", score: 78, ready: false },
           { id: "gpay", label: "GPay entity cluster", hit: "Sai Pradyumna", score: 71, ready: false },
           { id: "hibp", label: "Breach-email ∩ DOB prior", hit: `birth year ${demo.year}`, score: 64, ready: false },
-          { id: "jw", label: "Jaro–Winkler resolve ≥0.86", hit: demo.fullName, score: 90, ready: false },
+          { id: "jw", label: "Jaro-Winkler resolve ≥0.86", hit: demo.fullName, score: 90, ready: false },
         ];
         setIntelPreview({ phone: phoneKey, fullName: demo.fullName, year: demo.year, sources });
         for (let i = 0; i < sources.length; i++) {
@@ -300,7 +300,7 @@ function StuffingSession({
                 <p>Login attempts appear here as Chromium runs on the agent host.</p>
               </>
             ) : (
-              <p>Enter a mobile on the right, then start — live browser and password attempts appear here.</p>
+              <p>Enter a mobile on the right, then start  -  live browser and password attempts appear here.</p>
             )}
           </div>
         )}
@@ -316,7 +316,7 @@ function StuffingSession({
         {tab === "clues" && (
           <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-3">
             <p className="text-[11px] leading-snug text-[#7E7E7E]">
-              Say what you know — a mobile number is enough. Optional: full name, birth year, company.
+              Say what you know  -  a mobile number is enough. Optional: full name, birth year, company.
             </p>
             {clues.map((row, i) => (
               <div key={row.id} className="flex gap-1.5">
@@ -490,11 +490,11 @@ function passwordOutcomeLabel(p: PasswordTry) {
 function verdictHeadline(verdict?: string) {
   switch (verdict) {
     case "compromised":
-      return "Check failed — login succeeded with a guessed password";
+      return "Check failed  -  login succeeded with a guessed password";
     case "protected":
-      return "Check passed — app stopped the attack";
+      return "Check passed  -  app stopped the attack";
     case "held":
-      return "Check held — no password worked in this run";
+      return "Check held  -  no password worked in this run";
     case "error":
       return "Check errored";
     default:
@@ -667,7 +667,7 @@ function GuidedSession({
               ? guide.passWhen
               : verdict === "fail"
                 ? guide.failWhen
-                : "No result — tester did not conclude pass or fail."),
+                : "No result  -  tester did not conclude pass or fail."),
           notes: [notes.trim(), stepNotes, labLine].filter(Boolean).join("\n\n") || undefined,
         });
         setResult(run);
@@ -749,7 +749,7 @@ function GuidedSession({
               <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto px-3 py-3">
                 <p className="text-[12px] font-medium text-[#1F1F1F] dark:text-[#ededed]">{guide.plainStory}</p>
                 <p className="text-[11px] text-[#7E7E7E]">
-                  Steps {doneCount}/{guide.steps.length} — ticks from the live site; pass/fail auto-records when complete
+                  Steps {doneCount}/{guide.steps.length}  -  ticks from the live site; pass/fail auto-records when complete
                 </p>
                 <ol className="space-y-2">
                   {guide.steps.map((s) => {
@@ -793,7 +793,7 @@ function GuidedSession({
                 {leanOutcome && (
                   <div className="rounded-[6px] border border-[#8664F2]/40 bg-[#F3EEFF] px-3 py-2 text-[12px] text-[#5B21B6]">
                     Lab suggests: <strong>{leanOutcome.pass ? "PASS" : "FAIL"}</strong>
-                    {leanOutcome.detail ? ` — ${leanOutcome.detail}` : ""}. You can override below.
+                    {leanOutcome.detail ? `  -  ${leanOutcome.detail}` : ""}. You can override below.
                   </div>
                 )}
                 <textarea
@@ -805,7 +805,7 @@ function GuidedSession({
                 />
                 <div className="space-y-1.5">
                   <div className="text-[11px] font-medium text-[#7E7E7E]">
-                    {recorded ? "Recorded — override anytime" : "Record result"}
+                    {recorded ? "Recorded  -  override anytime" : "Record result"}
                   </div>
                   {verdictBtns(result?.result?.verdict)}
                 </div>
@@ -822,10 +822,10 @@ function GuidedSession({
                   >
                     <div className="text-[13px] font-semibold">
                       {result.result.verdict === "pass"
-                        ? "Pass — recorded"
+                        ? "Pass  -  recorded"
                         : result.result.verdict === "fail"
-                          ? "Fail — recorded"
-                          : "No result — recorded"}
+                          ? "Fail  -  recorded"
+                          : "No result  -  recorded"}
                     </div>
                     <p className="mt-1 text-[12px]">{result.result.summary}</p>
                   </div>
@@ -865,7 +865,7 @@ function GuidedSession({
           <p className="text-[12px] font-medium text-[#1F1F1F] dark:text-[#ededed]">{guide.plainStory}</p>
           <p className="text-[11px] text-[#7E7E7E]">
             Steps done: {doneCount}/{guide.steps.length}
-            {liveHint ? ` · ${liveHint}` : ""} — click Done to toggle
+            {liveHint ? ` · ${liveHint}` : ""}  -  click Done to toggle
           </p>
           <ol className="space-y-2">
             {guide.steps.map((s) => {
@@ -913,7 +913,7 @@ function GuidedSession({
           />
           <div className="space-y-1.5">
             <div className="text-[11px] font-medium text-[#7E7E7E]">
-              {recorded ? "Recorded — override anytime" : "Record result"}
+              {recorded ? "Recorded  -  override anytime" : "Record result"}
             </div>
             {verdictBtns(result?.result?.verdict)}
           </div>
@@ -931,10 +931,10 @@ function GuidedSession({
           >
             <div className="text-[13px] font-semibold text-[#1F1F1F]">
               {result.result.verdict === "pass"
-                ? "Pass — recorded"
+                ? "Pass  -  recorded"
                 : result.result.verdict === "fail"
-                  ? "Fail — recorded"
-                  : "No result — recorded"}
+                  ? "Fail  -  recorded"
+                  : "No result  -  recorded"}
             </div>
             <p className="mt-1 text-[12px] text-[#5E6066]">{result.result.summary}</p>
             <div className="mt-3 flex flex-wrap gap-2">

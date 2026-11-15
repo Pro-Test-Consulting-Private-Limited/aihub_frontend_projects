@@ -129,7 +129,7 @@ export function ReportBugModal(props: Props) {
     setBusy(true);
     setError(null);
     try {
-      // Live create is blocked server-side unless JIRA_LIVE_TEST=1 — surface that clearly.
+      // Live create is blocked server-side unless JIRA_LIVE_TEST=1  -  surface that clearly.
       const res = await props.client.createBug({ ...body, mode, similarKey });
       if (res.key) props.onCreated?.(res.key);
       else if (res.error) setError(res.error + (res.livePath ? ` (${res.livePath}; liveTested=${res.liveTested})` : ""));
@@ -187,7 +187,7 @@ export function ReportBugModal(props: Props) {
             </div>
             {preview?.similar && preview.similar.length > 0 && (
               <div className="rounded-[8px] border border-[#FDE68A] bg-[#FFFBEB] p-2 text-[#92400E]">
-                Similar bug exists: {preview.similar[0].key} — {preview.similar[0].summary}
+                Similar bug exists: {preview.similar[0].key}  -  {preview.similar[0].summary}
                 <div className="mt-2 flex gap-2">
                   <button
                     type="button"
@@ -240,7 +240,7 @@ export function ReportBugModal(props: Props) {
             />
             <div className="mt-2 text-[11px] text-[#9ca3af]" data-testid="bug-clip-notice">
               Video clip: last 10s before state + 2s after (mask burned in; ≤10 MB). Falls back to GIF/frames when
-              oversize — notice shown at create time. Cap constant: 10485760 bytes.
+              oversize  -  notice shown at create time. Cap constant: 10485760 bytes.
             </div>
             <button
               type="button"

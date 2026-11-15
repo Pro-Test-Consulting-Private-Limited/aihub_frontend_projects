@@ -9,7 +9,7 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
   const { id } = await context.params;
 
   const updates = await req.json();
-  delete updates.owner; // owner is never accepted from the client — set once at creation only
+  delete updates.owner; // owner is never accepted from the client  -  set once at creation only
 
   const columnMap: Record<string, string> = {
     name: "name", description: "description", workspace: "workspace",

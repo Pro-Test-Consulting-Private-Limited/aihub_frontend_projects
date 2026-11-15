@@ -164,7 +164,7 @@ function ColorChip({
   );
 }
 
-/** Coloured status pill (no hex) — used in the guide and panel header. */
+/** Coloured status pill (no hex)  -  used in the guide and panel header. */
 function StatusTab({ color, label }: { color: string; label: string }) {
   return (
     <button
@@ -555,7 +555,7 @@ function A11yNodeShot({
         className="max-h-56 w-full object-contain bg-[#F8FAFC]"
         onLoad={(e) => {
           const img = e.currentTarget;
-          // Old near-empty element crops decode to tiny bitmaps — swap in the full screen shot.
+          // Old near-empty element crops decode to tiny bitmaps  -  swap in the full screen shot.
           if ((img.naturalWidth < 48 || img.naturalHeight < 48) && fallbackSrc && src !== fallbackSrc) {
             setSrc(fallbackSrc);
           }

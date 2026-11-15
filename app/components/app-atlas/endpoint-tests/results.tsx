@@ -30,9 +30,9 @@ function CheckRow({ c }: { c: CheckResult }) {
         {showBoth ? (
           <div className="mt-0.5 grid grid-cols-[64px_1fr] gap-x-2 text-[11.5px] text-[#5E6066] dark:text-[#9ca3af]">
             <span className="font-semibold">Expected</span>
-            <span className={`${mono} break-all`}>{c.expected ?? "—"}</span>
+            <span className={`${mono} break-all`}>{c.expected ?? "-"}</span>
             <span className="font-semibold">Actual</span>
-            <span className={`${mono} break-all ${c.status === "fail" ? "text-[#DC2626]" : "text-[#D97706]"}`}>{c.actual ?? "—"}</span>
+            <span className={`${mono} break-all ${c.status === "fail" ? "text-[#DC2626]" : "text-[#D97706]"}`}>{c.actual ?? "-"}</span>
           </div>
         ) : (
           <div className="text-[11.5px] break-all text-[#7E7E7E]">{c.actual ?? c.expected}</div>
@@ -191,7 +191,7 @@ export function ResultsPanel({ run, rowOrder }: { run: RunResponse; rowOrder?: s
         <div className="rounded-[8px] border border-[#D97706] bg-[#FFFBEB] px-3 py-2 text-[12.5px] text-[#92400E] dark:bg-[#2a2210] dark:text-[#FCD34D]">
           {run.blockedReason ? (
             <>
-              <b>BLOCKED: {run.blockedReason.title}.</b> {run.blockedReason.message} Nothing was sent, so these are not failures — fix the blocker, then re-run.
+              <b>BLOCKED: {run.blockedReason.title}.</b> {run.blockedReason.message} Nothing was sent, so these are not failures  -  fix the blocker, then re-run.
               {run.blockedReason.action?.type === "add-account" && (
                 <div className="mt-1.5">
                   <button type="button" className={`${outlineButton} !px-2.5 !py-1 !text-[11.5px]`} onClick={() => requestAddAccount(run.blockedReason!.action!.role)}>Add account</button>

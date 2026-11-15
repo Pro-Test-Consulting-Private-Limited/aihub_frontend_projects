@@ -70,7 +70,7 @@ function Kpi({ value, name, note, tone }: { value: string; name: string; note: s
 }
 
 /**
- * Reports strip v0 — same numbers as Coverage (Test depth, Prio/Sev, Eisenhower, status).
+ * Reports strip v0  -  same numbers as Coverage (Test depth, Prio/Sev, Eisenhower, status).
  * No new engine; read-only rollup for stakeholders / release glance.
  */
 export function ReportsView({
@@ -216,7 +216,7 @@ export function ReportsView({
             Reports
           </div>
           <p className="mt-1 max-w-[640px] text-[12.5px] text-[#5E6066] dark:text-[#9ca3af]">
-            Strip from Coverage — Test depth, Priority / Severity, Eisenhower, and case status. No new
+            Strip from Coverage  -  Test depth, Priority / Severity, Eisenhower, and case status. No new
             engine; open Coverage for the full matrix.
           </p>
         </div>
@@ -240,7 +240,7 @@ export function ReportsView({
           note={`${totals.covered} of ${totals.tickets} mapped tickets have suites`}
         />
         <Kpi
-          value={totals.covered ? `${totals.avgDepth}%` : "—"}
+          value={totals.covered ? `${totals.avgDepth}%` : "-"}
           name="Avg test depth"
           note={`Volume + type mix vs ${CASE_TARGET} cases / ${TYPE_COUNT} types`}
           tone={band(totals.avgDepth).text}
@@ -320,7 +320,7 @@ export function ReportsView({
           )}
           {totals.dead > 0 && (
             <p className="mt-3 text-[12px] text-[#92400E]">
-              Dead Test Finder flagged <b>{totals.dead}</b> case{totals.dead === 1 ? "" : "s"} — open SIT Results to filter.
+              Dead Test Finder flagged <b>{totals.dead}</b> case{totals.dead === 1 ? "" : "s"}  -  open SIT Results to filter.
             </p>
           )}
           {sumMap(totals.status) === 0 && (
@@ -368,7 +368,7 @@ export function ReportsView({
                           <span className="ml-2 text-[#1F1F1F] dark:text-[#ededed]">{r.name}</span>
                         </button>
                       </td>
-                      <td className="px-3 py-2.5 tabular-nums">{r.tests || "—"}</td>
+                      <td className="px-3 py-2.5 tabular-nums">{r.tests || "-"}</td>
                       <td className="px-3 py-2.5">
                         {r.tests ? (
                           <div className="flex items-center gap-2">
@@ -378,18 +378,18 @@ export function ReportsView({
                             <span className={`tabular-nums font-semibold ${b.text}`}>{r.depth}%</span>
                           </div>
                         ) : (
-                          "—"
+                          "-"
                         )}
                       </td>
                       <td className="px-3 py-2.5 text-[11.5px] text-[#5E6066]">
                         {r.tests
                           ? `H ${r.byPriority.High || 0} · M ${r.byPriority.Medium || 0} · L ${r.byPriority.Low || 0}`
-                          : "—"}
+                          : "-"}
                       </td>
                       <td className="px-3 py-2.5 text-[11.5px] text-[#5E6066]">
                         {r.tests
                           ? `H ${r.bySeverity.High || 0} · M ${r.bySeverity.Medium || 0} · L ${r.bySeverity.Low || 0}`
-                          : "—"}
+                          : "-"}
                       </td>
                       <td className="px-3 py-2.5 tabular-nums">
                         {r.deadFlags > 0 ? (
@@ -397,7 +397,7 @@ export function ReportsView({
                             {r.deadFlags}
                           </span>
                         ) : (
-                          "—"
+                          "-"
                         )}
                       </td>
                     </tr>

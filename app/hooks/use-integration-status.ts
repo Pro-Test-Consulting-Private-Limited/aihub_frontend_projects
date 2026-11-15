@@ -82,7 +82,7 @@ const EMPTY_TEAMS: TeamsStatus = {
 };
 
 export function useIntegrationStatus(opts?: { live?: boolean; refreshMs?: number }) {
-  /** Live probe hits Jira/GitHub APIs — opt in for Integrations hub and Connect-to-canvas. */
+  /** Live probe hits Jira/GitHub APIs  -  opt in for Integrations hub and Connect-to-canvas. */
   const live = opts?.live === true;
   const refreshMs = opts?.refreshMs && opts.refreshMs >= 10_000 ? opts.refreshMs : 0;
   const { instance, accounts } = useMsal();

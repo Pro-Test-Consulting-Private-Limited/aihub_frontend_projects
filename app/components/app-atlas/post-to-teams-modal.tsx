@@ -139,7 +139,7 @@ export function PostToTeamsModal({
 
       <label className={fieldLabel}>Tag people</label>
       <p className="mb-1.5 text-[11.5px] text-[#6B7280] dark:text-[#9ca3af]">
-        The message is posted as you. Search this team to tag someone — people are not added one by one.
+        The message is posted as you. Search this team to tag someone  -  people are not added one by one.
       </p>
       <div className="relative">
         <div className="mb-1.5 flex flex-wrap gap-1.5">

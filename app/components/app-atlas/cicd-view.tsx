@@ -169,7 +169,7 @@ function PassRateChart({
           </div>
           <div className="mt-0.5 truncate font-medium text-[#374151]">{selected.title}</div>
           <div className="truncate font-mono text-[10px] text-[#6D4AE8]">
-            {selected.sha ? selected.sha.slice(0, 7) : "—"}
+            {selected.sha ? selected.sha.slice(0, 7) : "-"}
             {selected.branch ? <span className="ml-1.5 font-sans text-[#9CA3AF]">{selected.branch}</span> : null}
             <span className="ml-1.5 font-sans text-[#9CA3AF]">
               · {selected.passed}✓ {selected.failed}✗ · {ago(selected.createdAt)}
@@ -599,7 +599,7 @@ export function CicdView({ client, canvasId = null }: { client: AtlasClient; can
               </span>
             </div>
             <p className="mt-0.5 max-w-2xl text-[12.5px] leading-relaxed text-[#5E6066] dark:text-[#9ca3af]">
-              Their runner executes. App Atlas owns the suite truth — contract, functional, data-driven, schema, chain —
+              Their runner executes. App Atlas owns the suite truth  -  contract, functional, data-driven, schema, chain  - 
               with gates, flaky detection, and spec quality in one place.
             </p>
           </div>
@@ -1032,7 +1032,7 @@ export function CicdView({ client, canvasId = null }: { client: AtlasClient; can
                       <div className="rounded-[14px] border border-[#E8E4F0] bg-white p-3.5 dark:border-[#2a2a2a] dark:bg-[#101010]">
                         <div className="text-[10px] font-medium uppercase tracking-wide text-[#9CA3AF]">Latest pass rate</div>
                         <div className="mt-1 text-[22px] font-semibold tabular-nums">
-                          {passPoints.length ? `${passPoints[passPoints.length - 1].pct}%` : "—"}
+                          {passPoints.length ? `${passPoints[passPoints.length - 1].pct}%` : "-"}
                         </div>
                         <div className="text-[11px] text-[#7E7E7E]">
                           {passPoints.length
@@ -1046,7 +1046,7 @@ export function CicdView({ client, canvasId = null }: { client: AtlasClient; can
                         </div>
                         <div className="mt-1 text-[22px] font-semibold tabular-nums">
                           {timeToGreen == null
-                            ? "—"
+                            ? "-"
                             : timeToGreen.hours === 0
                               ? "Green"
                               : timeToGreen.hours < 1
@@ -1199,9 +1199,9 @@ export function CicdView({ client, canvasId = null }: { client: AtlasClient; can
                                       {r.status}
                                     </span>
                                   </td>
-                                  <td className="py-2 pr-3 font-mono text-[#6D4AE8]">{r.sha ? r.sha.slice(0, 7) : "—"}</td>
+                                  <td className="py-2 pr-3 font-mono text-[#6D4AE8]">{r.sha ? r.sha.slice(0, 7) : "-"}</td>
                                   <td className="max-w-[220px] truncate py-2 pr-3 font-medium text-[#374151]">{r.title}</td>
-                                  <td className="py-2 pr-3 tabular-nums">{pct != null ? `${pct}%` : "—"}</td>
+                                  <td className="py-2 pr-3 tabular-nums">{pct != null ? `${pct}%` : "-"}</td>
                                   <td className="py-2 text-[#9CA3AF]">{ago(r.createdAt)}</td>
                                 </tr>
                               );
@@ -1228,7 +1228,7 @@ export function CicdView({ client, canvasId = null }: { client: AtlasClient; can
           ) : (
             <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
               <p className="max-w-md text-[14px] leading-relaxed text-[#5E6066]">
-                Start with <strong>Digital Wallet demo</strong> to see gates, layered suites, flaky insights and CI snippets —
+                Start with <strong>Digital Wallet demo</strong> to see gates, layered suites, flaky insights and CI snippets  - 
                 all in this tab, not on the canvas.
               </p>
             </div>

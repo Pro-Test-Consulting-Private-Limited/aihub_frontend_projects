@@ -144,7 +144,7 @@ export const securityAgent = {
       { method: "POST", body: JSON.stringify(body) },
       signal,
     ),
-  /** Guided checks: pass / fail / inconclusive — tester can override the lab suggestion. */
+  /** Guided checks: pass / fail / inconclusive  -  tester can override the lab suggestion. */
   submitGuidedResult: (
     body: {
       checkName: string;

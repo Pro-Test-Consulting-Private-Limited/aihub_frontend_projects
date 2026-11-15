@@ -38,7 +38,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <ProjectsProvider>
-      <div className="flex h-dvh max-h-dvh overflow-hidden">
+      <div className="flex h-[100dvh] max-h-[100dvh] overflow-hidden overscroll-none">
         <SideNav
           collapsed={collapsed}
           transition={transition}

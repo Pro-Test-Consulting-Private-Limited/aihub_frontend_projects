@@ -62,7 +62,7 @@ export function PerformanceView({ canvas }: { canvas: Canvas | null }) {
                 </td>
                 <td className="px-3 py-2">{fmt(r.ttfb)}</td>
                 <td className={`px-3 py-2 ${lcpClass(r.lcp)}`}>{fmt(r.lcp)}</td>
-                <td className={`px-3 py-2 ${clsClass(r.cls)}`}>{r.cls ?? "—"}</td>
+                <td className={`px-3 py-2 ${clsClass(r.cls)}`}>{r.cls ?? "-"}</td>
                 <td className="px-3 py-2">{r.httpErrors}</td>
                 <td className="px-3 py-2">{r.failed}</td>
               </tr>
@@ -108,7 +108,7 @@ function Trend({ values }: { values: number[] }) {
 }
 
 function fmt(v: number | null) {
-  return v == null ? "—" : `${Math.round(v)} ms`;
+  return v == null ? "-" : `${Math.round(v)} ms`;
 }
 function lcpClass(v: number | null) {
   if (v == null) return "";

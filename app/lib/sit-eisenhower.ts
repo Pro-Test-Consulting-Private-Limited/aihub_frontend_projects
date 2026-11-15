@@ -1,4 +1,4 @@
-/** Deterministic Eisenhower triage — mirrors backend/src/sit-eisenhower.ts */
+/** Deterministic Eisenhower triage  -  mirrors backend/src/sit-eisenhower.ts */
 
 export type EisenhowerQ = "Q1" | "Q2" | "Q3" | "Q4" | "Untriaged";
 
@@ -14,10 +14,10 @@ export const EISENHOWER_LABEL: Record<Exclude<EisenhowerQ, "Untriaged">, string>
 
 /** What each quadrant means for a tester / release window. */
 export const EISENHOWER_MEANING: Record<Exclude<EisenhowerQ, "Untriaged">, string> = {
-  Q1: "Urgent and important — run or fix before ship",
-  Q2: "Important but not urgent — plan for next sprint",
-  Q3: "Urgent but low impact — automate or handle after core",
-  Q4: "Neither urgent nor important — defer or drop (noise)",
+  Q1: "Urgent and important  -  run or fix before ship",
+  Q2: "Important but not urgent  -  plan for next sprint",
+  Q3: "Urgent but low impact  -  automate or handle after core",
+  Q4: "Neither urgent nor important  -  defer or drop (noise)",
 };
 
 export const EISENHOWER_AXES: Record<Exclude<EisenhowerQ, "Untriaged">, string> = {
@@ -78,7 +78,7 @@ export function deriveEisenhower(cells: {
   return { q, urgent, important, source: "derived", why };
 }
 
-/** Dominant quadrant for a ticket rollup (highest count among Q1–Q4). */
+/** Dominant quadrant for a ticket rollup (highest count among Q1-Q4). */
 export function dominantQuadrant(byQuadrant: Record<string, number> | undefined): EisenhowerQ {
   const qs: Exclude<EisenhowerQ, "Untriaged">[] = ["Q1", "Q2", "Q3", "Q4"];
   let best: EisenhowerQ = "Untriaged";

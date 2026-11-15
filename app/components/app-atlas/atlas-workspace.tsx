@@ -341,7 +341,7 @@ export default function AtlasWorkspace() {
   };
 
   // A reload mid-recording reattaches to the running session, or offers to save it if it already stopped.
-  // Local AUTH_BYPASS has no MSAL accounts — still resume so Phase B harness / localhost can reattach.
+  // Local AUTH_BYPASS has no MSAL accounts  -  still resume so Phase B harness / localhost can reattach.
   useEffect(() => {
     if (!accounts.length && !bypass) return;
     const id = localStorage.getItem(ACTIVE_SESSION_KEY);

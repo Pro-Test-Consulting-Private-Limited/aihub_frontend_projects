@@ -66,11 +66,13 @@ export default function TopNav() {
     await instance.logoutRedirect();
   };
 
+  const displayName = user?.name || user?.username || "Account";
+
   return (
-    <div className="flex h-[70px] w-[calc(100%-3rem)] items-center justify-between border-b border-[#E5E7EB] bg-[#FFFFFF] mx-6 mt-[10px] dark:border-[#2a2a2a] dark:bg-[#0a0a0a]">
+    <div className="mx-6 flex h-[64px] w-[calc(100%-3rem)] shrink-0 items-center justify-between border-b border-[#E5E7EB] bg-[#FFFFFF] dark:border-[#2a2a2a] dark:bg-[#0a0a0a]">
       <div></div>
 
-      <div className="flex items-center">
+      <div className="relative flex items-center">
         <div className="relative mr-[30px] hidden h-[40px] w-[250px] rounded-[15px] border border-[rgba(94,96,102,0.5)] md:block dark:border-[#2a2a2a]">
           <input
             value={search}
@@ -92,19 +94,23 @@ export default function TopNav() {
           <Image src={NotificationImage} width={20} alt="notification" className="dark:invert" />
         </div>
 
-        <div className="cursor-pointer select-none" onClick={() => setOpen((prev) => !prev)}>
+        <div
+          className="group relative cursor-pointer select-none"
+          onClick={() => setOpen((prev) => !prev)}
+          title={displayName}
+        >
           {photoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={photoUrl}
-              alt={user?.name || "Profile"}
+              alt={displayName}
               width={40}
               height={40}
               className="h-10 w-10 rounded-full object-cover"
             />
           ) : (
             <Avatar
-              name={user?.name || ""}
+              name={displayName}
               size="40px"
               textSizeRatio={2}
               round="25px"
@@ -112,15 +118,20 @@ export default function TopNav() {
               maxInitials={3}
             />
           )}
+          <div className="pointer-events-none absolute right-0 top-[48px] z-50 hidden whitespace-nowrap rounded-[8px] border border-[#E5E7EB] bg-white px-2.5 py-1.5 text-[12.5px] font-medium text-[#1F1F1F] shadow-md group-hover:block dark:border-[#2a2a2a] dark:bg-[#141414] dark:text-[#ededed]">
+            {displayName}
+          </div>
         </div>
 
         {open && (
           <div
             ref={cardRef}
-            className="group absolute right-[20px] top-[75px] w-[auto] rounded-[7px] border border-[#E5E7EB] bg-white shadow-xl dark:border-[#2a2a2a] dark:bg-[#141414]"
+            className="absolute right-0 top-[52px] z-50 min-w-[180px] rounded-[7px] border border-[#E5E7EB] bg-white shadow-xl dark:border-[#2a2a2a] dark:bg-[#141414]"
           >
-            <div className="absolute -top-[6px] right-[17px] h-[12px] w-[12px] rotate-45 border-l border-t border-[#E5E7EB] bg-white group-hover:bg-[#E5E7EB] dark:border-[#2a2a2a] dark:bg-[#141414] dark:group-hover:bg-[#2a2a2a]" />
-            <ul className="divide-y divide-[#E5E7EB] dark:divide-[#2a2a2a]">
+            <div className="border-b border-[#E5E7EB] px-[17px] py-[10px] text-[13px] font-medium text-[#1F1F1F] dark:border-[#2a2a2a] dark:text-[#ededed]">
+              {displayName}
+            </div>
+            <ul>
               <li
                 className="cursor-pointer px-[17px] py-[8px] text-[15px] font-[500] text-black hover:bg-[#E5E7EB] dark:text-[#ededed] dark:hover:bg-[#2a2a2a]"
                 onClick={() => void handleLogout()}

@@ -6,17 +6,23 @@ import { useMetricsFilter } from "@/app/context/metrics-filter-context";
 import { getCustomFilterSeconds } from "@/app/interfaces/metrics-time-filter";
 
 type Fetcher = (seconds: number) => Promise<{ data: unknown }>;
+type SeedFn = (data: any, seconds: number) => any;
 
 /**
  * Shared Metrics fetch: loading/error states + light polling while the tab is visible.
+ * When live series are empty, `seed` fills stable demo history (live points win when present).
  */
-export function useMetricsStats(fetcher: Fetcher, pollMs = METRICS_POLL_MS) {
+export function useMetricsStats(fetcher: Fetcher, opts?: { pollMs?: number; seed?: SeedFn }) {
+  const pollMs = opts?.pollMs ?? METRICS_POLL_MS;
+  const seed = opts?.seed;
   const { selectedFilter, appliedCustomFilter } = useMetricsFilter();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const fetcherRef = useRef(fetcher);
+  const seedRef = useRef(seed);
   fetcherRef.current = fetcher;
+  seedRef.current = seed;
 
   const secondsForFilter = useCallback(() => {
     if (selectedFilter === "custom") return getCustomFilterSeconds(appliedCustomFilter);
@@ -24,17 +30,25 @@ export function useMetricsStats(fetcher: Fetcher, pollMs = METRICS_POLL_MS) {
   }, [selectedFilter, appliedCustomFilter]);
 
   const load = useCallback(
-    async (opts?: { silent?: boolean }) => {
-      if (!opts?.silent) setLoading(true);
+    async (loadOpts?: { silent?: boolean }) => {
+      if (!loadOpts?.silent) setLoading(true);
       try {
-        const res = await fetcherRef.current(secondsForFilter());
-        setData(res?.data ?? null);
+        const seconds = secondsForFilter();
+        const res = await fetcherRef.current(seconds);
+        const raw = res?.data ?? null;
+        setData(seedRef.current ? seedRef.current(raw, seconds) : raw);
         setError(null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Could not load metrics");
-        if (!opts?.silent) setData(null);
+        const seconds = secondsForFilter();
+        if (seedRef.current) {
+          setData(seedRef.current(null, seconds));
+          setError(null);
+        } else {
+          setError(err instanceof Error ? err.message : "Could not load metrics");
+          if (!loadOpts?.silent) setData(null);
+        }
       } finally {
-        if (!opts?.silent) setLoading(false);
+        if (!loadOpts?.silent) setLoading(false);
       }
     },
     [secondsForFilter],

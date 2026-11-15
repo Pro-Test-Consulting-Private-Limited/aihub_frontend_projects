@@ -386,7 +386,7 @@ function EisenhowerMiniGrid({
     return (
       <div
         className={`rounded-[8px] border ${EISENHOWER_CHIP[q]} ${compact ? "p-1.5" : "p-2"}`}
-        title={`${q} · ${EISENHOWER_LABEL[q]} — ${EISENHOWER_MEANING[q]} (${EISENHOWER_AXES[q]})`}
+        title={`${q} · ${EISENHOWER_LABEL[q]}  -  ${EISENHOWER_MEANING[q]} (${EISENHOWER_AXES[q]})`}
       >
         <div className={`font-semibold ${compact ? "text-[10px]" : "text-[11px]"}`}>
           {q} · {EISENHOWER_LABEL[q]}
@@ -452,11 +452,11 @@ function EisenhowerBoard({
       <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
         <div>
           <div className="text-[13px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">
-            {title || "Eisenhower triage — all tickets"}
+            {title || "Eisenhower triage  -  all tickets"}
           </div>
           <p className="mt-0.5 text-[11.5px] text-[#6b7280]">
             {subtitle ||
-              "Urgent × Important from Priority × Severity. Q1–Q4 say what to do with each case — not just how many."}
+              "Urgent × Important from Priority × Severity. Q1-Q4 say what to do with each case  -  not just how many."}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-[#6B7280]">
@@ -480,7 +480,7 @@ function EisenhowerBoard({
               {q} · {EISENHOWER_LABEL[q]}
             </span>
             <span className="text-[#9ca3af]">{EISENHOWER_AXES[q]}</span>
-            {" — "}
+            {"  -  "}
             {EISENHOWER_MEANING[q]}
             <span className="ml-1 font-semibold tabular-nums text-[#1F1F1F] dark:text-[#ededed]">
               · {byQuadrant[q] || 0} {(byQuadrant[q] || 0) === 1 ? "case" : "cases"}
@@ -1621,7 +1621,7 @@ export function CoverageOverview({
                       </p>
                       <p className="mt-1">{priorityFloor}</p>
                       <p className="mt-2">
-                        <b>Matrix</b> is Eisenhower triage: Q1 Do first · Q2 Schedule · Q3 Delegate · Q4 Later —
+                        <b>Matrix</b> is Eisenhower triage: Q1 Do first · Q2 Schedule · Q3 Delegate · Q4 Later  - 
                         derived from Priority × Severity (does not replace Prio/Sev).
                       </p>
                       <p className="mt-2">

@@ -76,7 +76,7 @@ export function ContractTab({
         {golden ? (
           <>
             <span className={`${mono} text-[11.5px] text-[#5E6066] dark:text-[#9ca3af]`} title={golden.pinnedAt}>
-              pinned {golden.hash.slice(0, 8)} · keys [{golden.shapeKeys.join(", ") || "—"}]
+              pinned {golden.hash.slice(0, 8)} · keys [{golden.shapeKeys.join(", ") || "-"}]
             </span>
             {goldenCheck && goldenCheck.status !== "skip" && (
               <span className={`rounded-[4px] border px-1.5 py-0.5 text-[10.5px] font-semibold ${goldenCheck.status === "pass" ? "border-[#86efac] bg-[#F0FDF4] text-[#166534]" : "border-[#fca5a5] bg-[#FEF2F2] text-[#991B1B]"}`}>
@@ -365,7 +365,7 @@ export function DataDrivenTab({ rows, onRows, detail, specUrl, target, seeded, o
                     <input className={input} value={r.label ?? ""} placeholder={r.origin === "generated-invalid" ? "invalid case" : "label"} onChange={(e) => update(r.id, { label: e.target.value })} title={r.label} />
                   </td>
                   <td className="px-2 py-1.5">
-                    {r.catalogKind ? <span className={`${mono} rounded-[4px] bg-[#F5F6F6] px-1.5 py-0.5 text-[10.5px] text-[#5E6066] dark:bg-[#1a1a1a] dark:text-[#9ca3af]`}>{r.catalogKind}</span> : <span className="text-[#7E7E7E]">—</span>}
+                    {r.catalogKind ? <span className={`${mono} rounded-[4px] bg-[#F5F6F6] px-1.5 py-0.5 text-[10.5px] text-[#5E6066] dark:bg-[#1a1a1a] dark:text-[#9ca3af]`}>{r.catalogKind}</span> : <span className="text-[#7E7E7E]"> - </span>}
                   </td>
                   <td className="px-1 py-1">
                     <input className={`${input} ${mono} !w-[64px] ${STATUS_OK.test(r.expectedStatus) ? "" : "!border-[#DC2626]"}`} value={r.expectedStatus} onChange={(e) => update(r.id, { expectedStatus: e.target.value.trim(), soft: undefined })} aria-label="Expected status" />
@@ -380,7 +380,7 @@ export function DataDrivenTab({ rows, onRows, detail, specUrl, target, seeded, o
                       {r.assertions.length}
                     </button>
                   </td>
-                  <td className="px-2 py-1.5">{res ? <StatusBadge status={res.status} /> : <span className="text-[#7E7E7E]">—</span>}</td>
+                  <td className="px-2 py-1.5">{res ? <StatusBadge status={res.status} /> : <span className="text-[#7E7E7E]"> - </span>}</td>
                   <td className="px-1 py-1">
                     <button type="button" className={iconButton} aria-label={`Remove row ${i + 1}`} onClick={() => onRows(rows.filter((x) => x.id !== r.id))}>
                       <TbTrash size={14} />

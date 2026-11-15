@@ -46,7 +46,7 @@ export function forgeAlgNone(token: string): string {
   return `${jsonToB64url(forgedHeader)}.${jsonToB64url(payload)}.`;
 }
 
-/** Flip a claim so signature cannot match (still keeps original alg — server must reject). */
+/** Flip a claim so signature cannot match (still keeps original alg  -  server must reject). */
 export function forgeTamperedClaim(token: string): string {
   const { header, payload, signature } = decodeJwt(token);
   const next = {

@@ -158,7 +158,7 @@ function networkStrength(id: string): 0 | 1 | 2 | 3 | 4 {
 }
 
 function formatRate(kbps: number | null): string {
-  if (kbps == null) return "—";
+  if (kbps == null) return "-";
   if (kbps >= 1024) return `${(kbps / 1024).toFixed(kbps % 1024 === 0 ? 0 : 1)} Mbps`;
   return `${kbps} kbps`;
 }
@@ -363,7 +363,7 @@ export function SessionSetupModal({
   const [savedLoginId, setSavedLoginId] = useState("");
   const [recordAsOpen, setRecordAsOpen] = useState(false);
   const [personaClock, setPersonaClock] = useState("");
-  /** Compact density: smaller preview, tighter rows, persona groups on one row — auto under 900px viewport height. */
+  /** Compact density: smaller preview, tighter rows, persona groups on one row  -  auto under 900px viewport height. */
   const [compact, setCompact] = useState(false);
   useEffect(() => {
     const read = () => {
@@ -1403,7 +1403,7 @@ export function SessionSetupModal({
                       </div>
                       {!compact && (
                         <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#5E6066]">
-                          <span className="font-mono">{personaClock || "—"}</span>
+                          <span className="font-mono">{personaClock || "-"}</span>
                           <span className="text-[#7E7E7E]">{persona.timezoneId}</span>
                         </div>
                       )}
@@ -1595,7 +1595,7 @@ export function SessionSetupModal({
                             </li>
                           ))}
                           {savedLogins.length === 0 && (
-                            <li className="px-3 py-2 text-[#9ca3af]">No saved logins yet — use Save this login while recording.</li>
+                            <li className="px-3 py-2 text-[#9ca3af]">No saved logins yet  -  use Save this login while recording.</li>
                           )}
                         </ul>
                       </>

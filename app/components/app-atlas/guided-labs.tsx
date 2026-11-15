@@ -22,7 +22,7 @@ type LabProps = {
 type TxnRow = { transactionId: string; label: string };
 
 /**
- * Guided JWT/IDOR using the same App Atlas remote browser as Canvas —
+ * Guided JWT/IDOR using the same App Atlas remote browser as Canvas  - 
  * interact in the center pane (no Chromium window on your laptop).
  */
 export function GuidedLiveLab({ loginUrl, lab, client, onEvent, onClose, onOutcome, render }: LabProps) {
@@ -164,7 +164,7 @@ export function GuidedLiveLab({ loginUrl, lab, client, onEvent, onClose, onOutco
   const decode = () => {
     setErr(null);
     try {
-      if (!looksLikeJwt(token)) throw new Error("No session token yet — sign in in the center pane first.");
+      if (!looksLikeJwt(token)) throw new Error("No session token yet  -  sign in in the center pane first.");
       const d = decodeJwt(token);
       setDecoded({ header: d.header, payload: d.payload });
       mark("decoded", `alg=${String(d.header.alg)}`);
@@ -178,7 +178,7 @@ export function GuidedLiveLab({ loginUrl, lab, client, onEvent, onClose, onOutco
     try {
       if (!looksLikeJwt(token)) throw new Error("No token yet.");
       setForged(forgeAlgNone(token));
-      setForgedNote("Forged alg:none token ready — signature emptied. Next: Probe.");
+      setForgedNote("Forged alg:none token ready  -  signature emptied. Next: Probe.");
       mark("forged", "alg:none");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Forge failed");
@@ -289,7 +289,7 @@ export function GuidedLiveLab({ loginUrl, lab, client, onEvent, onClose, onOutco
             allow="autoplay; clipboard-read; clipboard-write; fullscreen"
             className="h-full max-h-full w-full rounded-[8px] border border-[#333] bg-black"
             style={{ aspectRatio: SCREEN_RATIO[viewer.kind] ?? 16 / 9 }}
-            title="Remote browser — interact here"
+            title="Remote browser  -  interact here"
           />
         ) : viewer?.kind === "local" ? (
           <div className="max-w-md p-6 text-center text-[13px] text-[#9ca3af]">
@@ -298,7 +298,7 @@ export function GuidedLiveLab({ loginUrl, lab, client, onEvent, onClose, onOutco
         ) : (
           <div className="max-w-md space-y-2 p-6 text-center text-[13px] text-[#9ca3af]">
             <p className="text-[#fbbf24]">{busy ? "Starting remote browser…" : "Waiting for browser…"}</p>
-            <p>Same live browser as Canvas — sign in and browse in this pane.</p>
+            <p>Same live browser as Canvas  -  sign in and browse in this pane.</p>
             {err && <p className="text-red-400">{err}</p>}
           </div>
         )}
@@ -309,7 +309,7 @@ export function GuidedLiveLab({ loginUrl, lab, client, onEvent, onClose, onOutco
   const tools = (
     <div className="space-y-2 px-3 py-2.5">
       <div className="text-[11px] font-semibold uppercase tracking-wide text-[#8664F2]">
-        {lab === "jwt" ? "JWT — decode / forge / probe" : "IDOR — victim target"}
+        {lab === "jwt" ? "JWT  -  decode / forge / probe" : "IDOR  -  victim target"}
       </div>
       {lab === "jwt" && (
         <>
@@ -342,7 +342,7 @@ export function GuidedLiveLab({ loginUrl, lab, client, onEvent, onClose, onOutco
               }`}
             >
               <div className="font-semibold">
-                Probe: HTTP {probeOut.status} {probeOut.rejected ? "— rejected (PASS)" : "— accepted (FAIL)"}
+                Probe: HTTP {probeOut.status} {probeOut.rejected ? " -  rejected (PASS)" : " -  accepted (FAIL)"}
               </div>
               {probeOut.body && (
                 <pre className="mt-1 max-h-14 overflow-auto whitespace-pre-wrap font-mono text-[10px] opacity-80">{probeOut.body}</pre>

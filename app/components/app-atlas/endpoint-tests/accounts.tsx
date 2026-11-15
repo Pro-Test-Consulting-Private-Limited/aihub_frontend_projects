@@ -172,7 +172,7 @@ export function AccountsSection({ specUrl, targetKey, baseUrl, runAs, onRunAs }:
 
   const addOptions: [Draft["source"], string, string][] = [["token", "Paste a token / API key", "Fast. Cannot refresh."]];
   if (canLogin) addOptions.push(["credentials", "Existing login", "Uses the login API with your mobile/password (or whatever the spec asks for)."]);
-  if (canRegister) addOptions.push(["register", "Register a new account", "Calls register, then auth email if the spec needs it. Unique data every time — demo accounts are never deleted."]);
+  if (canRegister) addOptions.push(["register", "Register a new account", "Calls register, then auth email if the spec needs it. Unique data every time  -  demo accounts are never deleted."]);
   const kindLabel = (a: AccountSpec) => (a.source === "token" ? "pasted token" : a.source === "credentials" ? "existing login" : "created by register") + (a.lifecycle === "disposable" ? " · new account every run" : "");
   const issue = (id: string) => statuses.find((s) => s.id === id)?.error;
   const hasDefaultToken = !!getToken(specUrl);
@@ -309,7 +309,7 @@ export function AccountsSection({ specUrl, targetKey, baseUrl, runAs, onRunAs }:
               )}
               {draft.source === "register" && (
                 <div className="text-[11.5px] text-[#7E7E7E]">
-                  {template?.registerStep ? `Calls ${template.registerStep.endpoint.method} ${template.registerStep.endpoint.path} with unique generated data (never reused — demo DBs keep accounts forever), remembers mobile/password, and later refreshes the token via login.` : "Calls the spec's register endpoint with unique generated data."}
+                  {template?.registerStep ? `Calls ${template.registerStep.endpoint.method} ${template.registerStep.endpoint.path} with unique generated data (never reused  -  demo DBs keep accounts forever), remembers mobile/password, and later refreshes the token via login.` : "Calls the spec's register endpoint with unique generated data."}
                   {canLogin ? " You can also add an account with Existing login if you already have credentials." : null}
                   {template?.readySteps?.length ? (
                     <label className="mt-1 flex items-center gap-1.5 text-[12px] text-[#5E6066] dark:text-[#9ca3af]">

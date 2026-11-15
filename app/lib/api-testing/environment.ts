@@ -21,7 +21,7 @@ export type TestEnvironment = {
   active: EnvProfileId;
   /** Named base URLs for this spec. */
   profiles: Record<EnvProfileId, string>;
-  /** Convenience mirror of profiles[active] — what runners read. */
+  /** Convenience mirror of profiles[active]  -  what runners read. */
   baseUrl: string;
 };
 

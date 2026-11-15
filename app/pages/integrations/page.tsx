@@ -160,7 +160,7 @@ const CATEGORIES: IntegrationCategory[] = [
         id: "gitbucket",
         name: "GitBucket",
         status: "disconnected",
-        description: "Self-hosted Git — sync scripts to your GitBucket instance.",
+        description: "Self-hosted Git  -  sync scripts to your GitBucket instance.",
         buttons: ["Connect GitBucket"],
         Icon: SiGit,
         color: "#F05032",

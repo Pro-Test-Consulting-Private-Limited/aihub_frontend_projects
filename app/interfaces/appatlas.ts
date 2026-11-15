@@ -85,7 +85,7 @@ export type EmulationSummary = {
   viewport: { width: number; height: number };
   /** Preset / requested viewport (chips warn when this differs from viewport). */
   requestedViewport?: { width: number; height: number };
-  /** Remote desktop size (viewport + browser chrome) — prefer for the stream iframe. */
+  /** Remote desktop size (viewport + browser chrome)  -  prefer for the stream iframe. */
   streamSurface?: { width: number; height: number };
   browserChromeHeight?: number;
   viewportLimited?: boolean;

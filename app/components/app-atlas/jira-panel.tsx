@@ -334,7 +334,7 @@ function TicketCard({
       if (pinned) {
         const next = keys.filter((k) => k !== issue.key);
         if (next.length === 0 && canvas.jira?.manual?.[nodeId]) {
-          await onSetNodeTickets(nodeId, null, "Unpinned last ticket — reset to matcher");
+          await onSetNodeTickets(nodeId, null, "Unpinned last ticket  -  reset to matcher");
         } else {
           await onSetNodeTickets(nodeId, next, `Unpinned ${issue.key}`);
         }
@@ -377,7 +377,7 @@ function TicketCard({
       <div className="mt-2 flex items-center justify-between text-[11px] text-[#5E6066] dark:text-[#9ca3af]">
         <div className="flex min-w-0 items-center gap-3">
           <span className="flex items-center gap-1" title={issue.assignee ?? "Unassigned"}>
-            <TbUser size={12} /> {issue.assignee ? initials(issue.assignee) : "—"}
+            <TbUser size={12} /> {issue.assignee ? initials(issue.assignee) : "-"}
           </span>
           {epic && (
             <span className="truncate" title={epic.summary}>

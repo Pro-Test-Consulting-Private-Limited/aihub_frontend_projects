@@ -41,13 +41,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <MetricsFilterProvider>
-      <div className="p-6 pb-10">
+      <div className="px-6 pb-4 pt-4">
         <Breadcrumbs breadcrumbs={breadcrumbs} />
 
-        <div className="mt-[25px] text-[22px] font-[500] text-[#081332] dark:text-[#ededed]">
+        <div className="mt-3 text-[20px] font-[500] text-[#081332] dark:text-[#ededed]">
           Metrics
         </div>
-        <div className="mt-[20px] flex border-b border-b-[rgba(202,196,208)] dark:border-b-[#2a2a2a]">
+        <div className="mt-3 flex border-b border-b-[rgba(202,196,208)] dark:border-b-[#2a2a2a]">
           {metricsSubItems.map((subItem) => {
             return (
               <div

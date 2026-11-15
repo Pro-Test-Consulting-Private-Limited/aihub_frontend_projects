@@ -10,7 +10,7 @@ const DEFAULT_APPLIED_FILTER: MetricsCustomTimeFilterState = {
   ...DEFAULT_CUSTOM_TIME_FILTER,
   mode: "relative",
   duration: "15",
-  unit: "minutes",
+  unit: "months",
 };
 
 interface MetricsFilterContextValue {
@@ -29,7 +29,7 @@ const MetricsFilterContext = createContext<MetricsFilterContextValue | null>(
 );
 
 export function MetricsFilterProvider({ children }: { children: ReactNode }) {
-  const [selectedFilter, setSelectedFilter] = useState("15m");
+  const [selectedFilter, setSelectedFilter] = useState("1h");
   const [isCustomOpen, setIsCustomOpen] = useState(false);
   const [customFilter, setCustomFilter] = useState(DEFAULT_APPLIED_FILTER);
   const [appliedCustomFilter, setAppliedCustomFilter] = useState(

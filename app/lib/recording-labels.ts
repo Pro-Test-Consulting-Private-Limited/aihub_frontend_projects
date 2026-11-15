@@ -25,7 +25,7 @@ export function deviceDisplayName(devicePreset: string): string {
 }
 
 function formatKbps(kbps: number): string {
-  if (kbps < 0) return "—";
+  if (kbps < 0) return "-";
   if (kbps >= 1024) {
     const mbps = kbps / 1024;
     return `${mbps % 1 === 0 ? mbps.toFixed(0) : mbps.toFixed(1)} Mbps`;

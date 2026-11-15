@@ -10,7 +10,7 @@ export type LiveBinding = {
 
 /**
  * Live demos (kind can differ from the static checklist mode when that makes a better KT).
- * Flagship guided: JWT tamper + IDOR — interactive labs with live step updates.
+ * Flagship guided: JWT tamper + IDOR  -  interactive labs with live step updates.
  */
 export const LIVE_BINDINGS: LiveBinding[] = [
   { checkName: "Brute force detection", kind: "stuffing" },
@@ -67,7 +67,7 @@ const JWT_GUIDED: GuidedProcedure = {
   title: "JWT signature validation & algorithm confusion",
   whatThisIs:
     "JWT signature validation & algorithm confusion means: after login the app gives you a signed token (JWT). Attackers try to strip or swap the signature (e.g. set alg to none) so the server accepts a forged identity. This guided check has you sign in on the live site, decode the real token, forge alg:none, and probe /auth/me. Pass if the forged token is rejected.",
-  plainStory: "Same remote browser as Canvas — sign in in the center pane. Steps tick as you go.",
+  plainStory: "Same remote browser as Canvas  -  sign in in the center pane. Steps tick as you go.",
   showAppFrame: true,
   lab: "jwt",
   steps: [
@@ -92,13 +92,13 @@ const JWT_GUIDED: GuidedProcedure = {
     {
       n: 4,
       title: "Decode the JWT",
-      does: "Click Decode in the side tools — see alg + claims.",
+      does: "Click Decode in the side tools  -  see alg + claims.",
       autoOn: "decoded",
     },
     {
       n: 5,
       title: "Forge the token",
-      does: "Click Forge alg:none — classic algorithm-confusion attempt (empty signature).",
+      does: "Click Forge alg:none  -  classic algorithm-confusion attempt (empty signature).",
       autoOn: "forged",
     },
     {
@@ -116,7 +116,7 @@ const IDOR_GUIDED: GuidedProcedure = {
   title: "IDOR probes",
   whatThisIs:
     "IDOR (Insecure Direct Object Reference) means: can User A open User B’s data just by changing an id in the URL/API? This guided check signs you in as A on the live site, opens B’s transaction id while still A, and watches whether the app blocks it. Pass if the live site refuses; fail if B’s receipt appears.",
-  plainStory: "Same remote browser as Canvas — sign in as A in the center pane; open B’s txn there.",
+  plainStory: "Same remote browser as Canvas  -  sign in as A in the center pane; open B’s txn there.",
   showAppFrame: true,
   lab: "idor",
   steps: [
@@ -141,7 +141,7 @@ const IDOR_GUIDED: GuidedProcedure = {
     {
       n: 4,
       title: "Open B’s txn on the live site",
-      does: "Click Open in center browser on a B id — the remote pane navigates to /transactions/{id} as A.",
+      does: "Click Open in center browser on a B id  -  the remote pane navigates to /transactions/{id} as A.",
       autoOn: "idor_navigated",
     },
     {
@@ -153,7 +153,7 @@ const IDOR_GUIDED: GuidedProcedure = {
     {
       n: 6,
       title: "Record the verdict",
-      does: "Lab suggests pass/fail when complete — override anytime with Pass, Fail, or No result.",
+      does: "Lab suggests pass/fail when complete  -  override anytime with Pass, Fail, or No result.",
       autoOn: "verdict_ready",
     },
   ],
@@ -168,7 +168,7 @@ const GUIDED: Record<string, GuidedProcedure> = {
     ...IDOR_GUIDED,
     title: "Object-level authorization on data endpoints",
     whatThisIs:
-      "Same live IDOR lab: ownership on data endpoints. Prove User A cannot fetch User B’s transaction by id — steps update from your lab actions.",
+      "Same live IDOR lab: ownership on data endpoints. Prove User A cannot fetch User B’s transaction by id  -  steps update from your lab actions.",
   },
   "CAPTCHA verification": {
     title: "CAPTCHA verification",
@@ -185,7 +185,7 @@ const GUIDED: Record<string, GuidedProcedure> = {
   },
   "Password hashing algorithm verification": {
     title: "Password hashing algorithm verification",
-    whatThisIs: "Developer check — leave static unless a backend person is in the room.",
+    whatThisIs: "Developer check  -  leave static unless a backend person is in the room.",
     plainStory: "Ask how passwords are hashed; record pass/fail.",
     showAppFrame: true,
     steps: [
@@ -246,7 +246,7 @@ const GUIDED: Record<string, GuidedProcedure> = {
   },
   "Refresh token rotation policy": {
     title: "Refresh token rotation policy",
-    whatThisIs: "Developer API check — leave static for layman demos.",
+    whatThisIs: "Developer API check  -  leave static for layman demos.",
     plainStory: "Refresh once; old refresh must die.",
     showAppFrame: true,
     steps: [

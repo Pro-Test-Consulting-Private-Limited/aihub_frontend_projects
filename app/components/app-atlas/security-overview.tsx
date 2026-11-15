@@ -61,7 +61,7 @@ export function SecurityOverview({
       .getSettings()
       .then((s) => {
         if (cancelled) return;
-        // Older backends omit the flag — keep live on until logs can turn it off.
+        // Older backends omit the flag  -  keep live on until logs can turn it off.
         setLiveEnabled(typeof s.securityLiveChecks === "boolean" ? s.securityLiveChecks : true);
         setCheckEnabled(s.securityCheckEnabled && typeof s.securityCheckEnabled === "object" ? s.securityCheckEnabled : {});
       })
@@ -115,7 +115,7 @@ export function SecurityOverview({
               )}
             </p>
             {liveEnabled ? (
-              <p className="mt-1 text-[11.5px] text-[#8664F2]">Live checks on — click a runnable row to open a session. Toggle from the logs dashboard.</p>
+              <p className="mt-1 text-[11.5px] text-[#8664F2]">Live checks on  -  click a runnable row to open a session. Toggle from the logs dashboard.</p>
             ) : (
               <p className="mt-1 text-[11.5px] text-[#7E7E7E]">Static plan only. Enable “Live Security checks” on the logs dashboard to run headed / guided sessions.</p>
             )}
