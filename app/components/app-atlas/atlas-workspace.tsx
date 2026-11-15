@@ -499,21 +499,31 @@ export default function AtlasWorkspace() {
 
   return (
     <div className="flex h-full flex-col bg-[#F7F7FA] dark:bg-[#0a0a0a]">
-      <div className="flex h-[56px] shrink-0 items-center justify-between border-b border-[#EEE] bg-white px-4 dark:border-[#1a1a1a] dark:bg-[#0a0a0a]">
-        <div className="flex min-w-0 items-center gap-4">
-          <div className="relative">
+      <div className="flex h-[56px] shrink-0 items-center justify-between gap-3 border-b border-[#EEE] bg-white px-4 dark:border-[#1a1a1a] dark:bg-[#0a0a0a]">
+        <div className="flex min-w-0 flex-1 items-center gap-4">
+          <div className="relative min-w-0 shrink">
             <button
               type="button"
               onClick={() => setProjectMenu((o) => !o)}
-              className="flex h-[34px] max-w-[340px] items-center gap-2 rounded-[8px] border border-[#E5E7EB] bg-[#F5F6F6] px-3 text-[13px] text-[#1F1F1F] dark:border-[#2a2a2a] dark:bg-[#141414] dark:text-[#ededed]"
-              title={appUrl || "No application URL"}
+              className="flex h-[34px] max-w-full items-center gap-2 rounded-[8px] border border-[#E5E7EB] bg-[#F5F6F6] px-3 text-[13px] text-[#1F1F1F] dark:border-[#2a2a2a] dark:bg-[#141414] dark:text-[#ededed]"
+              style={{ maxWidth: "min(720px, max(280px, 42vw))" }}
+              title={
+                project
+                  ? `${project.name}${appUrl ? ` · ${appUrl}` : ""}`
+                  : appUrl || "No application URL"
+              }
             >
               <TbWorld size={15} className="shrink-0 text-[#5E6066] dark:text-[#9ca3af]" />
-              <span className="truncate">
+              <span className="flex min-w-0 items-baseline gap-1.5">
                 {project ? (
                   <>
-                    <span className="font-medium">{project.name}</span>
-                    {host && <span className="text-[#7E7E7E]"> · {host}</span>}
+                    {/* Name stays fully visible whenever the picker has room; host may shrink. */}
+                    <span className="shrink-0 font-medium whitespace-nowrap">{project.name}</span>
+                    {host && (
+                      <span className="min-w-0 truncate text-[#7E7E7E]" title={appUrl || host}>
+                        · {host}
+                      </span>
+                    )}
                   </>
                 ) : projectsLoading ? (
                   "Loading…"
@@ -524,7 +534,7 @@ export default function AtlasWorkspace() {
               <TbChevronDown size={14} className="shrink-0 text-[#5E6066] dark:text-[#9ca3af]" />
             </button>
             {projectMenu && (
-              <div className="absolute top-10 left-0 z-40 w-[320px] rounded-[10px] border border-[#E6E1F5] bg-white py-1 shadow-lg dark:border-[#2a2a2a] dark:bg-[#141414]">
+              <div className="absolute top-10 left-0 z-40 w-[min(480px,90vw)] rounded-[10px] border border-[#E6E1F5] bg-white py-1 shadow-lg dark:border-[#2a2a2a] dark:bg-[#141414]">
                 {projects.length === 0 && <div className="px-3 py-2 text-[12px] text-[#7E7E7E]">No projects yet.</div>}
                 {projects.map((p) => (
                   <button
@@ -536,8 +546,8 @@ export default function AtlasWorkspace() {
                     }}
                     className={`block w-full px-3 py-2 text-left hover:bg-[#F9FAFC] dark:hover:bg-[#1a1a1a] ${p.id === project?.id ? "bg-[#F2EBFB] dark:bg-[#2a2440]" : ""}`}
                   >
-                    <div className="truncate text-[12.5px] font-medium text-[#1F1F1F] dark:text-[#ededed]">{p.name}</div>
-                    <div className="truncate text-[11px] text-[#7E7E7E]">{p.applicationUrl?.trim() || "No Application URL"}</div>
+                    <div className="break-words text-[12.5px] font-medium text-[#1F1F1F] dark:text-[#ededed]">{p.name}</div>
+                    <div className="break-all text-[11px] text-[#7E7E7E]">{p.applicationUrl?.trim() || "No Application URL"}</div>
                   </button>
                 ))}
                 <button
@@ -550,7 +560,7 @@ export default function AtlasWorkspace() {
               </div>
             )}
           </div>
-          <nav className="flex items-center gap-1">
+          <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
             {TABS.map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
