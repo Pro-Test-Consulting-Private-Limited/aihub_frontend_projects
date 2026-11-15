@@ -24,6 +24,18 @@ server only holds secrets (DB, integration cookies) and the Jira proxy.
 
 ## Environments (frontends are per env)
 
+### Are dig and SIT the same?
+
+**No.** Dig and SIT are different websites with different frontend containers. They share the App Atlas **API**
+(and canvases/data behind it). A UI change on dig is invisible on sit until you promote.
+
+| Name | Meaning |
+|---|---|
+| **Dig / dev** | `https://ai-hub-dev.protestcorp.com` — day-to-day integration site (`frontend-dev`) |
+| **SIT (environment)** | `https://ai-hub-sit.protestcorp.com` — staging frontend (`frontend-sit`) |
+| **SIT Testing (tab)** | App Atlas product tab (Gherkin from Jira). Exists on dig too. Not “the SIT site”. |
+| **Shared Atlas backend** | One `appatlas-backend` for dig + sit + prod + logs |
+
 | Env | URL | Container | Typical branch |
 |---|---|---|---|
 | Dig (dev) | https://ai-hub-dev.protestcorp.com | `frontend-dev` | `dev` |
@@ -31,7 +43,7 @@ server only holds secrets (DB, integration cookies) and the Jira proxy.
 | Prod | https://ai-hub.protestcorp.com | `frontend` | `main` / promote from sit |
 
 ```bash
-aihub-deploy frontend dig              # or: frontend dev <commit>
+aihub-deploy frontend dig              # or: frontend dig <commit>
 aihub-deploy promote frontend dig sit
 aihub-deploy promote frontend sit prod
 aihub-deploy rollback frontend dig
@@ -53,6 +65,7 @@ So: changing FE dig does **not** change FE sit until you promote. Changing App A
 API for dig, sit, and prod.
 
 Ops dashboard: https://logs.protestcorp.com/admin/ (shared nginx login; not part of this frontend).
+Backend dig/SIT write-up: appatlas-backend `docs/architecture/01-system-overview.md` §1.4.
 
 ---
 
@@ -62,7 +75,7 @@ Ops dashboard: https://logs.protestcorp.com/admin/ (shared nginx login; not part
 |---|---|
 | Workspace shell, tabs, header, profile | `app/components/app-atlas/atlas-workspace.tsx` |
 | Home-style profile menu (Graph photo) | `app/components/user-profile-menu.tsx` (shared with TopNav) |
-| Explorer (canvases list, Connected row, collapse) | `app/components/app-atlas/explorer.tsx` |
+| Explorer (canvases list, owner name scales with panel width, Connected row, collapse) | `app/components/app-atlas/explorer.tsx` |
 | Connect apps modal (icon grid, status, toggle select) | `app/components/app-atlas/connect-apps-modal.tsx` |
 | Canvas graph | `app/components/app-atlas/canvas-flow.tsx`, `screen-node.tsx` |
 | Recording | `app/components/app-atlas/recording-view.tsx` |
@@ -83,13 +96,15 @@ Env vars: [CONFIGURATION.md](CONFIGURATION.md).
 1. **Open from Home** — App Atlas is not in the side nav; Home → App Atlas project → `/app-atlas?projectId=`.
 2. **Connect apps** — Icon grid for Jira / Swagger / Teams / GitHub / etc. Toggle to select/unselect. Status under
    icons. Explorer shows a separate **Connected** row of icons (not mixed into the canvas list).
-3. **Jira map is async** — `connectJira` may get `202` + `jobId`; the client polls
+3. **Explorer names** — Drag the Explorer edge wider to show more of the canvas owner name (no longer capped at a
+   fixed 70px). Hover still shows full name + email.
+4. **Jira map is async** — `connectJira` may get `202` + `jobId`; the client polls
    `/api/app-atlas/canvases/:id/jira/jobs/:jobId` then reloads the canvas with `GET /canvases/:id?view=lite`.
-4. **Lite vs full canvas** — Prefer `view=lite` when opening canvases for snappy UI; full payload when needed.
-5. **Profile** — Atlas header uses the same `UserProfileMenu` as Home (Graph photo + name + logout). Do not invent a
+5. **Lite vs full canvas** — Prefer `view=lite` when opening canvases for snappy UI; full payload when needed.
+6. **Profile** — Atlas header uses the same `UserProfileMenu` as Home (Graph photo + name + logout). Do not invent a
    second avatar path.
-6. **Presence** — Project room avatars + site-wide heartbeat (`site-presence.tsx`) feed the ops "who's online" view.
-7. **Trial flags** — Some tabs (e.g. CI/CD) depend on App Atlas admin settings (`cicdPageTrial`, …). If a tab is
+7. **Presence** — Project room avatars + site-wide heartbeat (`site-presence.tsx`) feed the ops "who's online" view.
+8. **Trial flags** — Some tabs (e.g. CI/CD) depend on App Atlas admin settings (`cicdPageTrial`, …). If a tab is
    missing, check the logs dashboard settings, not only FE.
 
 ---
@@ -125,7 +140,7 @@ API (CORS allows localhost). Details in the root [README.md](../README.md).
 
 | Do | Don't |
 |---|---|
-| Match dig → promote sit → promote prod | Assume one FE container serves all envs |
+| Match dig → promote sit → promote prod | Assume dig and SIT are the same site, or one FE container serves all envs |
 | Keep Atlas profile on `UserProfileMenu` | Fork a second profile control |
 | Use `atlasClient` + types in `appatlas.ts` | Hand-roll `/atlas-api` URLs with wrong auth |
 | Treat shared Atlas backend as cross-env | Expect dig-only BE behaviour after an Atlas deploy |
@@ -135,6 +150,6 @@ API (CORS allows localhost). Details in the root [README.md](../README.md).
 
 ## Related product surfaces (Nov 2026)
 
-Shipped on dig/sit (see team ship logs): Connect modal polish, explorer Connected row + collapse motion, shared
-profile photo, Metrics seed/labels, async Jira jobs + lite canvas GET, SIT/Coverage/Reports/CI/CD tabs (trial flags
-apply). Prod lags until deliberate promote.
+Shipped on dig/sit (see team ship logs): Connect modal polish, explorer Connected row + collapse motion, owner names
+that grow when the Explorer is widened, shared profile photo, Metrics seed/labels, async Jira jobs + lite canvas GET,
+SIT/Coverage/Reports/CI/CD tabs (trial flags apply). Prod lags until deliberate promote.

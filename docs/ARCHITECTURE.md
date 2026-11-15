@@ -192,8 +192,11 @@ CI/CD, Security, Performance, Reports) against that canvas. The frontend entry i
 (`app/services/appatlas.ts`). Types live in `app/interfaces/appatlas.ts`.
 
 **One shared backend:** dig, sit and prod frontends all call the same `appatlas-backend` via `/atlas-api/`. Frontend
-images stay per env; only promote FE to move UI. Backend contract and ops UI:
-[appatlas-backend docs](https://github.com/Pro-Test-Consulting-Private-Limited/appatlas-backend/tree/dev/docs/architecture).
+images stay per env; only promote FE to move UI. **Dig ≠ SIT as websites** (`frontend-dev` vs `frontend-sit`);
+**dig = sit = prod for Atlas API data.** The **SIT Testing** tab is a product feature (also on dig), not the SIT
+hostname. Backend contract and ops UI:
+[appatlas-backend docs](https://github.com/Pro-Test-Consulting-Private-Limited/appatlas-backend/tree/dev/docs/architecture)
+(see §1.4 dig vs SIT).
 
 ### Layout of the workspace
 
@@ -201,8 +204,9 @@ images stay per env; only promote FE to move UI. Backend contract and ops UI:
   (**Canvas**, **API Testing**, **SIT**, **Coverage**, **Security**, **Performance**, **Reports**, **CI/CD** when
   trial flags allow), History / My History, presence avatars, and **UserProfileMenu** (Graph photo — same component
   as Home TopNav).
-- **Explorer** (`explorer.tsx`): canvases for the project's host, plus a separate **Connected** icon row (Jira /
-  Swagger / Teams / …) with smooth collapse. Do not merge Connected icons into the canvas list.
+- **Explorer** (`explorer.tsx`): canvases for the project's host; drag the right edge to widen. Owner display names
+  scale with panel width (not a fixed 70px cap). Separate **Connected** icon row (Jira / Swagger / Teams / …) with
+  smooth collapse. Do not merge Connected icons into the canvas list.
 - **Connect apps** (`connect-apps-modal.tsx`): icon grid; click toggles select/unselect; connection status on icons;
   integrate from the modal. Keep this pattern if you touch connect UX.
 - **Main area:** live recording if running, else selected canvas / active tab view, else empty state.

@@ -167,13 +167,17 @@ export function Explorer(props: Props) {
                     active ? "bg-[#FFF6EA] dark:bg-[#2a2440]" : "hover:bg-[#F9FAFC] dark:hover:bg-[#141414]"
                   }`}
                 >
-                  <div className="flex items-center gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
                     {active ? <TbChevronDown size={12} className="shrink-0 text-[#7E7E7E] dark:text-[#a3a3a3]" /> : <TbChevronRight size={12} className="shrink-0 text-[#7E7E7E] dark:text-[#a3a3a3]" />}
                     <span className="h-[10px] w-[10px] shrink-0 rounded-[2px] border-2 border-[#E1962E] bg-[#FFE7C2]" />
                     <span className="min-w-0 flex-1 truncate font-medium text-[#1F1F1F] dark:text-[#ededed]" title={c.description || c.name}>
                       {c.name}
                     </span>
-                    <span className="max-w-[70px] shrink-0 truncate text-[10px] text-[#9ca3af]" title={c.owner.email}>
+                    <span
+                      className="min-w-0 shrink truncate text-[10px] text-[#9ca3af]"
+                      style={{ maxWidth: Math.max(72, Math.min(200, Math.floor(panelWidth * 0.42))) }}
+                      title={`${c.owner.name}${c.owner.email ? ` · ${c.owner.email}` : ""}`}
+                    >
                       {c.owner.name}
                     </span>
                     {c.isMine ? (
@@ -284,11 +288,12 @@ export function Explorer(props: Props) {
                 <div key={c.id}>
                   <div
                     onClick={() => props.onSelect(c.id)}
-                    className="flex cursor-pointer items-center gap-2 px-5 py-1.5 hover:bg-[#F9FAFC] dark:hover:bg-[#141414]"
+                    className="flex min-w-0 cursor-pointer items-center gap-2 px-5 py-1.5 hover:bg-[#F9FAFC] dark:hover:bg-[#141414]"
+                    title={c.name}
                   >
-                    {open ? <TbChevronDown size={12} className="text-[#7E7E7E] dark:text-[#a3a3a3]" /> : <TbChevronRight size={12} className="text-[#7E7E7E] dark:text-[#a3a3a3]" />}
-                    <TbFolderFilled size={14} className="text-[#E1962E] dark:text-[#F0B45A]" />
-                    <span className="truncate font-medium text-[#1F1F1F] dark:text-[#ededed]">{c.name}</span>
+                    {open ? <TbChevronDown size={12} className="shrink-0 text-[#7E7E7E] dark:text-[#a3a3a3]" /> : <TbChevronRight size={12} className="shrink-0 text-[#7E7E7E] dark:text-[#a3a3a3]" />}
+                    <TbFolderFilled size={14} className="shrink-0 text-[#E1962E] dark:text-[#F0B45A]" />
+                    <span className="min-w-0 flex-1 truncate font-medium text-[#1F1F1F] dark:text-[#ededed]">{c.name}</span>
                   </div>
                   <div
                     className={`grid transition-[grid-template-rows,opacity] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] ${
