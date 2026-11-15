@@ -167,23 +167,32 @@ export function Explorer(props: Props) {
                     active ? "bg-[#FFF6EA] dark:bg-[#2a2440]" : "hover:bg-[#F9FAFC] dark:hover:bg-[#141414]"
                   }`}
                 >
-                  <div className="flex min-w-0 items-center gap-2">
-                    {active ? <TbChevronDown size={12} className="shrink-0 text-[#7E7E7E] dark:text-[#a3a3a3]" /> : <TbChevronRight size={12} className="shrink-0 text-[#7E7E7E] dark:text-[#a3a3a3]" />}
-                    <span className="h-[10px] w-[10px] shrink-0 rounded-[2px] border-2 border-[#E1962E] bg-[#FFE7C2]" />
-                    <span className="min-w-0 flex-1 truncate font-medium text-[#1F1F1F] dark:text-[#ededed]" title={c.description || c.name}>
-                      {c.name}
-                    </span>
-                    <span
-                      className="min-w-0 shrink truncate text-[10px] text-[#9ca3af]"
-                      style={{ maxWidth: Math.max(72, Math.min(200, Math.floor(panelWidth * 0.42))) }}
-                      title={`${c.owner.name}${c.owner.email ? ` · ${c.owner.email}` : ""}`}
-                    >
-                      {c.owner.name}
-                    </span>
+                  <div className="flex min-w-0 items-start gap-2">
+                    {active ? (
+                      <TbChevronDown size={12} className="mt-1 shrink-0 text-[#7E7E7E] dark:text-[#a3a3a3]" />
+                    ) : (
+                      <TbChevronRight size={12} className="mt-1 shrink-0 text-[#7E7E7E] dark:text-[#a3a3a3]" />
+                    )}
+                    <span className="mt-1 h-[10px] w-[10px] shrink-0 rounded-[2px] border-2 border-[#E1962E] bg-[#FFE7C2]" />
+                    {/* Name first (full, can wrap); owner only in leftover space below. */}
+                    <div className="min-w-0 flex-1">
+                      <div
+                        className="break-words text-[13px] font-medium leading-snug text-[#1F1F1F] dark:text-[#ededed]"
+                        title={c.description || c.name}
+                      >
+                        {c.name}
+                      </div>
+                      <div
+                        className="mt-0.5 truncate text-[10px] leading-tight text-[#9ca3af]"
+                        title={`${c.owner.name}${c.owner.email ? ` · ${c.owner.email}` : ""}`}
+                      >
+                        {c.owner.name}
+                      </div>
+                    </div>
                     {c.isMine ? (
                       <button
                         type="button"
-                        className="shrink-0 text-[#9ca3af] hover:text-[#1F1F1F]"
+                        className="mt-0.5 shrink-0 text-[#9ca3af] hover:text-[#1F1F1F]"
                         aria-label="Canvas actions"
                         onClick={(e) => {
                           e.stopPropagation();
@@ -193,7 +202,11 @@ export function Explorer(props: Props) {
                         <TbDotsVertical size={14} />
                       </button>
                     ) : (
-                      <TbLock size={12} className="shrink-0 text-[#c0c0c0] dark:text-[#9ca3af]" title="View only: recorded by someone else" />
+                      <TbLock
+                        size={12}
+                        className="mt-1 shrink-0 text-[#c0c0c0] dark:text-[#9ca3af]"
+                        title="View only: recorded by someone else"
+                      />
                     )}
                   </div>
                   {active && (

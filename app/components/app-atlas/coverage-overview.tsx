@@ -415,9 +415,19 @@ function EisenhowerMiniGrid({
   );
 }
 
-function EisenhowerCell({ byQuadrant }: { byQuadrant: Record<string, number> }) {
-  const q = dominantQuadrant(byQuadrant);
-  const total = Object.values(byQuadrant).reduce((n, v) => n + v, 0);
+/** Prefer API byQuadrant; if missing but cases exist, show Untriaged so Matrix is never a blank dash. */
+function quadrantForDisplay(byQuadrant: Record<string, number> | undefined, tests: number): Record<string, number> {
+  const q = byQuadrant || {};
+  const total = Object.values(q).reduce((n, v) => n + (v || 0), 0);
+  if (total > 0) return q;
+  if (tests > 0) return { Q1: 0, Q2: 0, Q3: 0, Q4: 0, Untriaged: tests };
+  return q;
+}
+
+function EisenhowerCell({ byQuadrant, tests = 0 }: { byQuadrant: Record<string, number>; tests?: number }) {
+  const map = quadrantForDisplay(byQuadrant, tests);
+  const q = dominantQuadrant(map);
+  const total = Object.values(map).reduce((n, v) => n + v, 0);
   if (!total) return <span className="text-[#9ca3af]">-</span>;
   return (
     <div className="min-w-[200px] max-w-[280px]">
@@ -426,8 +436,8 @@ function EisenhowerCell({ byQuadrant }: { byQuadrant: Record<string, number> }) 
           Focus: {q}
           {q !== "Untriaged" ? ` · ${EISENHOWER_LABEL[q]}` : " · Untriaged"}
         </span>
-        {(byQuadrant.Untriaged || 0) > 0 ? (
-          <span className="text-[10px] text-[#9CA3AF]">+{byQuadrant.Untriaged} untriaged</span>
+        {(map.Untriaged || 0) > 0 && q !== "Untriaged" ? (
+          <span className="text-[10px] text-[#9CA3AF]">+{map.Untriaged} untriaged</span>
         ) : null}
       </div>
       {q !== "Untriaged" ? (
@@ -435,7 +445,7 @@ function EisenhowerCell({ byQuadrant }: { byQuadrant: Record<string, number> }) 
       ) : (
         <p className="mb-1.5 text-[10px] leading-snug text-[#6b7280]">No Priority/Severity assessed yet for these cases.</p>
       )}
-      <EisenhowerMiniGrid byQuadrant={byQuadrant} compact />
+      <EisenhowerMiniGrid byQuadrant={map} compact />
     </div>
   );
 }
@@ -621,6 +631,7 @@ export function CoverageOverview({
   const depthInfoRef = useRef<HTMLButtonElement>(null);
   const qualityInfoRef = useRef<HTMLButtonElement>(null);
   const prioInfoRef = useRef<HTMLButtonElement>(null);
+  const eisenhowerBoardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setCovCanvas(canvasProp);
@@ -672,6 +683,11 @@ export function CoverageOverview({
       localStorage.setItem(PRIOSEV_VIEW_KEY, v);
     } catch {
       /* ignore */
+    }
+    if (v === "matrix") {
+      requestAnimationFrame(() => {
+        eisenhowerBoardRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      });
     }
   };
 
@@ -1037,8 +1053,9 @@ export function CoverageOverview({
   const eisenhowerTotals = useMemo(() => {
     const totals: Record<string, number> = { Q1: 0, Q2: 0, Q3: 0, Q4: 0, Untriaged: 0 };
     for (const t of flat) {
-      for (const [q, n] of Object.entries(t.byQuadrant || {})) {
-        totals[q] = (totals[q] || 0) + n;
+      const map = quadrantForDisplay(t.byQuadrant, t.tests);
+      for (const [q, n] of Object.entries(map)) {
+        totals[q] = (totals[q] || 0) + (n || 0);
       }
     }
     return totals;
@@ -1561,7 +1578,14 @@ export function CoverageOverview({
               </div>
             </div>
 
-            {prioSevView === "matrix" ? <EisenhowerBoard byQuadrant={eisenhowerTotals} /> : null}
+            {prioSevView === "matrix" ? (
+              <div
+                ref={eisenhowerBoardRef}
+                className="sticky top-0 z-[5] -mx-1 mb-4 bg-[#f8f9fc]/95 px-1 py-1 backdrop-blur-sm dark:bg-[#0a0a0a]/95"
+              >
+                <EisenhowerBoard byQuadrant={eisenhowerTotals} />
+              </div>
+            ) : null}
 
             <table className={`w-full border-collapse text-[13px] ${prioSevView === "matrix" ? "min-w-[1480px]" : "min-w-[1320px]"}`}>
               <thead>
@@ -1810,7 +1834,23 @@ export function CoverageOverview({
                           </Tip>
                         </td>
                         <td className="px-3 py-3">{epicHasCases ? autoSum : "-"}</td>
-                        <td className="px-3 py-3 text-[11px] text-[#7E7E7E]">-</td>
+                        <td className="px-3 py-3 text-[11px] text-[#7E7E7E]">
+                          {prioSevView === "matrix" && epicHasCases ? (
+                            <EisenhowerCell
+                              byQuadrant={tickets.reduce(
+                                (acc, t) => {
+                                  const map = quadrantForDisplay(t.byQuadrant, t.tests);
+                                  for (const [k, n] of Object.entries(map)) acc[k] = (acc[k] || 0) + (n || 0);
+                                  return acc;
+                                },
+                                {} as Record<string, number>,
+                              )}
+                              tests={tests}
+                            />
+                          ) : (
+                            "-"
+                          )}
+                        </td>
                         <td className="px-3 py-3 text-[11px] text-[#7E7E7E]">roll-up</td>
                       </tr>
                       {tickets.map((t) => {
@@ -1963,7 +2003,7 @@ export function CoverageOverview({
                                     className="text-left disabled:cursor-default"
                                   >
                                     {prioSevView === "matrix" ? (
-                                      <EisenhowerCell byQuadrant={t.byQuadrant} />
+                                      <EisenhowerCell byQuadrant={t.byQuadrant} tests={t.tests} />
                                     ) : prioSevView === "numbers" ? (
                                       <span className="block max-w-[260px] text-[11px] leading-snug tabular-nums text-[#5b647a]">
                                         {prioSevNumbersLines(t).map((line) => (
