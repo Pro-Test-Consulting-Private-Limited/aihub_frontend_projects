@@ -43,11 +43,13 @@ server only holds secrets (DB, integration cookies) and the Jira proxy.
 | Prod | https://ai-hub.protestcorp.com | `frontend` | `main` / promote from sit |
 
 ```bash
-aihub-deploy frontend dig              # or: frontend dig <commit>
-aihub-deploy promote frontend dig sit
+# People say "dig"; aihub-deploy env name is `dev` (container frontend-dev).
+aihub-deploy frontend dev <commit>
+aihub-deploy promote frontend dev sit
 aihub-deploy promote frontend sit prod
-aihub-deploy rollback frontend dig
+aihub-deploy rollback frontend dev
 ```
+
 
 Each env gets its **own Docker image** because `NEXT_PUBLIC_*` is baked in at build time from that env's
 `.env.production` on the VM.
