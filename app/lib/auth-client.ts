@@ -108,8 +108,11 @@ export async function fetchGraphProfilePhotoUrl(
   const res = await fetch("https://graph.microsoft.com/v1.0/me/photo/$value", {
     headers: { Authorization: `Bearer ${token}` },
   });
+  // 404 = no photo (common). Other errors → initials fallback.
   if (!res.ok) return null;
   const blob = await res.blob();
-  if (!blob.size) return null;
+  // Reject empty / non-image bodies (some tenants return a generic silhouette we still show;
+  // broken HTML/error blobs must not become a gray "person" broken-img icon).
+  if (!blob.size || !(blob.type || "").startsWith("image/")) return null;
   return URL.createObjectURL(blob);
 }

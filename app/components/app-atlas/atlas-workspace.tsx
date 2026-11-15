@@ -602,24 +602,27 @@ export default function AtlasWorkspace() {
                 .filter(Boolean)
                 .map((x) => String(x).toLowerCase()),
             );
-            // Hide yourself — UserProfileMenu already shows your photo.
+            // Hide yourself — UserProfileMenu already shows your avatar.
             const others = online.filter((u) => {
               const id = (u.id || "").toLowerCase();
               const email = (u.email || "").toLowerCase();
               const name = (u.name || "").toLowerCase();
               return !meIds.has(id) && !meIds.has(email) && !meIds.has(name);
             });
+            // Same box size as UserProfileMenu (32) so the header circles match.
+            const AVATAR = 32;
             if (!others.length) return null;
             return (
               <div
-                className="flex -space-x-2"
+                className="flex items-center -space-x-2"
                 title={others.map((u) => u.name || "Someone").filter(Boolean).join(", ")}
               >
                 {others.slice(0, 2).map((u, i) => (
                   <span
                     key={u.id}
                     title={u.name || "On this page"}
-                    className={`relative flex h-[28px] w-[28px] items-center justify-center rounded-full border-2 border-white text-[10px] font-semibold text-white dark:border-[#0a0a0a] ${AVATAR_COLORS[i % AVATAR_COLORS.length]}`}
+                    className={`relative inline-flex shrink-0 items-center justify-center rounded-full border-2 border-white text-[10px] font-semibold text-white dark:border-[#0a0a0a] ${AVATAR_COLORS[i % AVATAR_COLORS.length]}`}
+                    style={{ width: AVATAR, height: AVATAR, minWidth: AVATAR, minHeight: AVATAR }}
                   >
                     {initials(u.name || "U")}
                     <span className="absolute -right-0.5 -bottom-0.5 h-[8px] w-[8px] rounded-full border-[1.5px] border-white bg-[#22C55E] dark:border-[#0a0a0a]" />
@@ -627,7 +630,8 @@ export default function AtlasWorkspace() {
                 ))}
                 {others.length > 2 ? (
                   <span
-                    className="flex h-[28px] w-[28px] items-center justify-center rounded-full border-2 border-white bg-[#E5E7EB] text-[10px] font-semibold text-[#4B5563] dark:border-[#0a0a0a]"
+                    className="inline-flex shrink-0 items-center justify-center rounded-full border-2 border-white bg-[#E5E7EB] text-[10px] font-semibold text-[#4B5563] dark:border-[#0a0a0a]"
+                    style={{ width: AVATAR, height: AVATAR, minWidth: AVATAR, minHeight: AVATAR }}
                     title={others
                       .slice(2)
                       .map((u) => u.name || "Someone")

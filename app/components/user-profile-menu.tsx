@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Avatar from "react-avatar";
 import { useMsal } from "@azure/msal-react";
 import type { AccountInfo } from "@azure/msal-browser";
 import { fetchGraphProfilePhotoUrl } from "@/app/lib/auth-client";
@@ -21,9 +20,19 @@ function friendlyDisplayName(user: AccountInfo | undefined): string {
   return "Account";
 }
 
+function initialsOf(name: string) {
+  return name
+    .split(/[\s.@_-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p[0]!.toUpperCase())
+    .join("");
+}
+
 /**
  * Shared signed-in user control (photo + logout).
  * Used by Home TopNav and App Atlas header so both stay in sync.
+ * Falls back to colored initials (same visual language as presence) when Graph has no photo.
  */
 export function UserProfileMenu({ size = 40 }: { size?: number }) {
   const { instance, accounts } = useMsal();
@@ -33,6 +42,7 @@ export function UserProfileMenu({ size = 40 }: { size?: number }) {
   const photoUrlRef = useRef<string | null>(null);
   const user = accounts[0];
   const displayName = friendlyDisplayName(user);
+  const letters = initialsOf(displayName) || "?";
 
   useEffect(() => {
     let cancelled = false;
@@ -70,11 +80,20 @@ export function UserProfileMenu({ size = 40 }: { size?: number }) {
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
 
+  const clearPhoto = () => {
+    if (photoUrlRef.current) {
+      URL.revokeObjectURL(photoUrlRef.current);
+      photoUrlRef.current = null;
+    }
+    setPhotoUrl(null);
+  };
+
   return (
-    <div className="relative" ref={cardRef}>
+    <div className="relative shrink-0" ref={cardRef}>
       <button
         type="button"
-        className="cursor-pointer select-none"
+        className="flex shrink-0 cursor-pointer select-none items-center justify-center overflow-hidden rounded-full bg-[#8664F2] text-white"
+        style={{ width: size, height: size, minWidth: size, minHeight: size }}
         onClick={() => setOpen((v) => !v)}
         title={displayName}
         aria-label={`Account · ${displayName}`}
@@ -86,18 +105,13 @@ export function UserProfileMenu({ size = 40 }: { size?: number }) {
             alt=""
             width={size}
             height={size}
-            className="rounded-full object-cover"
-            style={{ width: size, height: size }}
+            className="h-full w-full rounded-full object-cover"
+            onError={clearPhoto}
           />
         ) : (
-          <Avatar
-            name={displayName}
-            size={`${size}px`}
-            textSizeRatio={2}
-            round={`${Math.round(size / 2)}px`}
-            color="#8664f2"
-            maxInitials={2}
-          />
+          <span className="text-[10px] font-semibold leading-none" style={{ fontSize: Math.max(10, Math.round(size * 0.36)) }}>
+            {letters}
+          </span>
         )}
       </button>
 
