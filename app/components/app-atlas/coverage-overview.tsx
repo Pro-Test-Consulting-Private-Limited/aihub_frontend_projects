@@ -20,6 +20,7 @@ import {
   EISENHOWER_CHIP,
   EISENHOWER_LABEL,
   EISENHOWER_MEANING,
+  resolveQuadrants,
   type EisenhowerQ,
 } from "@/app/lib/sit-eisenhower";
 import { liveAcForTickets } from "@/app/lib/coverage-gaps";
@@ -388,17 +389,17 @@ function EisenhowerMiniGrid({
     const n = byQuadrant[q] || 0;
     return (
       <div
-        className={`overflow-hidden rounded-[8px] border ${EISENHOWER_CHIP[q]} ${compact ? "p-1" : "p-2"}`}
+        className={`overflow-hidden rounded-[8px] border ${EISENHOWER_CHIP[q]} ${compact ? "px-1.5 py-1" : "p-2"}`}
         title={`${q} · ${EISENHOWER_LABEL[q]} — ${EISENHOWER_MEANING[q]} (${EISENHOWER_AXES[q]})`}
       >
-        <div className={`truncate font-semibold ${compact ? "text-[9px]" : "text-[11px]"}`}>
-          {q}
-          {!compact ? ` · ${EISENHOWER_LABEL[q]}` : ""}
+        <div className={`truncate font-semibold ${compact ? "text-[10px]" : "text-[11px]"}`}>
+          {q} · {EISENHOWER_LABEL[q]}
         </div>
         {!compact ? (
           <div className="mt-0.5 line-clamp-2 text-[10px] leading-snug opacity-90">{EISENHOWER_MEANING[q]}</div>
         ) : null}
-        <div className={`mt-0.5 font-semibold tabular-nums ${compact ? "text-[12px]" : "text-[18px]"}`}>{n}</div>
+        <div className={`mt-0.5 font-semibold tabular-nums ${compact ? "text-[15px]" : "text-[18px]"}`}>{n}</div>
+        {!compact ? <div className="text-[9px] opacity-70">{n === 1 ? "case" : "cases"}</div> : null}
       </div>
     );
   };
@@ -413,29 +414,59 @@ function EisenhowerMiniGrid({
   );
 }
 
-/** Prefer API byQuadrant; if missing but cases exist, show Untriaged so Matrix is never a blank dash. */
-function quadrantForDisplay(byQuadrant: Record<string, number> | undefined, tests: number): Record<string, number> {
-  const q = byQuadrant || {};
-  const total = Object.values(q).reduce((n, v) => n + (v || 0), 0);
-  if (total > 0) return q;
-  if (tests > 0) return { Q1: 0, Q2: 0, Q3: 0, Q4: 0, Untriaged: tests };
-  return q;
+function quadrantForRow(t: {
+  byQuadrant?: Record<string, number>;
+  byPriority?: Record<string, number>;
+  bySeverity?: Record<string, number>;
+  notAssessed?: number;
+  tests: number;
+}): Record<string, number> {
+  return resolveQuadrants({
+    byQuadrant: t.byQuadrant,
+    byPriority: t.byPriority,
+    bySeverity: t.bySeverity,
+    notAssessed: t.notAssessed,
+    tests: t.tests,
+  });
 }
 
-function EisenhowerCell({ byQuadrant, tests = 0 }: { byQuadrant: Record<string, number>; tests?: number }) {
-  const map = quadrantForDisplay(byQuadrant, tests);
+function EisenhowerCell({
+  byQuadrant,
+  byPriority,
+  bySeverity,
+  notAssessed,
+  tests = 0,
+}: {
+  byQuadrant: Record<string, number>;
+  byPriority?: Record<string, number>;
+  bySeverity?: Record<string, number>;
+  notAssessed?: number;
+  tests?: number;
+}) {
+  const map = resolveQuadrants({ byQuadrant, byPriority, bySeverity, notAssessed, tests });
   const q = dominantQuadrant(map);
-  const total = Object.values(map).reduce((n, v) => n + v, 0);
+  const triaged = (map.Q1 || 0) + (map.Q2 || 0) + (map.Q3 || 0) + (map.Q4 || 0);
+  const total = triaged + (map.Untriaged || 0);
   if (!total) return <span className="text-[#9ca3af]">-</span>;
-  const focusLabel = q === "Untriaged" ? "Untriaged" : `${q} · ${EISENHOWER_LABEL[q]}`;
-  return (
-    <div
-      className="w-[148px]"
-      title={q === "Untriaged" ? "No Priority/Severity assessed yet" : EISENHOWER_MEANING[q]}
-    >
-      <span className={`mb-1 inline-flex max-w-full truncate rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${EISENHOWER_CHIP[q]}`}>
-        {focusLabel}
+  // Only Untriaged — no empty Q1–Q4 zero grid.
+  if (!triaged) {
+    return (
+      <span className={`inline-flex rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${EISENHOWER_CHIP.Untriaged}`}>
+        Untriaged · {map.Untriaged}
       </span>
+    );
+  }
+  const focusLabel = `${q} · ${EISENHOWER_LABEL[q as Exclude<EisenhowerQ, "Untriaged">]}`;
+  return (
+    <div className="min-w-[168px] max-w-[220px]" title={EISENHOWER_MEANING[q as Exclude<EisenhowerQ, "Untriaged">]}>
+      <div className="mb-1 flex flex-wrap items-center gap-1">
+        <span className={`inline-flex rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${EISENHOWER_CHIP[q]}`}>
+          {focusLabel}
+        </span>
+        {(map.Untriaged || 0) > 0 ? (
+          <span className="text-[10px] text-[#9CA3AF]">+{map.Untriaged} untriaged</span>
+        ) : null}
+      </div>
       <EisenhowerMiniGrid byQuadrant={map} compact />
     </div>
   );
@@ -1044,7 +1075,7 @@ export function CoverageOverview({
   const eisenhowerTotals = useMemo(() => {
     const totals: Record<string, number> = { Q1: 0, Q2: 0, Q3: 0, Q4: 0, Untriaged: 0 };
     for (const t of flat) {
-      const map = quadrantForDisplay(t.byQuadrant, t.tests);
+      const map = quadrantForRow(t);
       for (const [q, n] of Object.entries(map)) {
         totals[q] = (totals[q] || 0) + (n || 0);
       }
@@ -1158,11 +1189,11 @@ export function CoverageOverview({
         <span className="ml-auto flex items-center gap-3">
           {modelInactive ? (
             <span
-              title="Model inactive — Hugging Face endpoint is paused or scaled to zero"
-              className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[#fecaca] bg-[#fff5f5] text-[#b91c1c]"
-              aria-label="Model inactive"
+              title="Hugging Face endpoint is paused or scaled to zero"
+              className="inline-flex items-center gap-1.5 rounded-full border border-[#fecaca] bg-[#fff5f5] px-2.5 py-0.5 text-[11px] font-medium text-[#b91c1c]"
             >
-              <span className="h-2 w-2 rounded-full bg-[#ef4444]" />
+              <span className="h-1.5 w-1.5 rounded-full bg-[#ef4444]" />
+              Model inactive
             </span>
           ) : null}
           <button
@@ -1828,12 +1859,27 @@ export function CoverageOverview({
                             <EisenhowerCell
                               byQuadrant={tickets.reduce(
                                 (acc, t) => {
-                                  const map = quadrantForDisplay(t.byQuadrant, t.tests);
+                                  const map = quadrantForRow(t);
                                   for (const [k, n] of Object.entries(map)) acc[k] = (acc[k] || 0) + (n || 0);
                                   return acc;
                                 },
                                 {} as Record<string, number>,
                               )}
+                              byPriority={tickets.reduce(
+                                (acc, t) => {
+                                  for (const [k, n] of Object.entries(t.byPriority || {})) acc[k] = (acc[k] || 0) + n;
+                                  return acc;
+                                },
+                                {} as Record<string, number>,
+                              )}
+                              bySeverity={tickets.reduce(
+                                (acc, t) => {
+                                  for (const [k, n] of Object.entries(t.bySeverity || {})) acc[k] = (acc[k] || 0) + n;
+                                  return acc;
+                                },
+                                {} as Record<string, number>,
+                              )}
+                              notAssessed={tickets.reduce((n, t) => n + (t.notAssessed || 0), 0)}
                               tests={tests}
                             />
                           ) : (
@@ -1992,7 +2038,13 @@ export function CoverageOverview({
                                     className="text-left disabled:cursor-default"
                                   >
                                     {prioSevView === "matrix" ? (
-                                      <EisenhowerCell byQuadrant={t.byQuadrant} tests={t.tests} />
+                                      <EisenhowerCell
+                                        byQuadrant={t.byQuadrant}
+                                        byPriority={t.byPriority}
+                                        bySeverity={t.bySeverity}
+                                        notAssessed={t.notAssessed}
+                                        tests={t.tests}
+                                      />
                                     ) : prioSevView === "numbers" ? (
                                       <span className="block max-w-[260px] text-[11px] leading-snug tabular-nums text-[#5b647a]">
                                         {prioSevNumbersLines(t).map((line) => (

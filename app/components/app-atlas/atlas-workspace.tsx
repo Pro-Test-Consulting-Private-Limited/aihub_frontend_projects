@@ -595,34 +595,50 @@ export default function AtlasWorkspace() {
           >
             <TbHistory size={16} />
           </button>
-          {online.length > 0 ? (
-            <div
-              className="flex -space-x-2"
-              title={online.map((u) => u.name || "Someone").filter(Boolean).join(", ")}
-            >
-              {online.slice(0, 2).map((u, i) => (
-                <span
-                  key={u.id}
-                  title={u.name || "On this page"}
-                  className={`relative flex h-[28px] w-[28px] items-center justify-center rounded-full border-2 border-white text-[10px] font-semibold text-white dark:border-[#0a0a0a] ${AVATAR_COLORS[i % AVATAR_COLORS.length]}`}
-                >
-                  {initials(u.name || "U")}
-                  <span className="absolute -right-0.5 -bottom-0.5 h-[8px] w-[8px] rounded-full border-[1.5px] border-white bg-[#22C55E] dark:border-[#0a0a0a]" />
-                </span>
-              ))}
-              {online.length > 2 ? (
-                <span
-                  className="flex h-[28px] w-[28px] items-center justify-center rounded-full border-2 border-white bg-[#E5E7EB] text-[10px] font-semibold text-[#4B5563] dark:border-[#0a0a0a]"
-                  title={online
-                    .slice(2)
-                    .map((u) => u.name || "Someone")
-                    .join(", ")}
-                >
-                  +{online.length - 2}
-                </span>
-              ) : null}
-            </div>
-          ) : null}
+          {(() => {
+            const me = accounts[0];
+            const meIds = new Set(
+              [me?.localAccountId, me?.homeAccountId, me?.username, me?.name]
+                .filter(Boolean)
+                .map((x) => String(x).toLowerCase()),
+            );
+            // Hide yourself — UserProfileMenu already shows your photo.
+            const others = online.filter((u) => {
+              const id = (u.id || "").toLowerCase();
+              const email = (u.email || "").toLowerCase();
+              const name = (u.name || "").toLowerCase();
+              return !meIds.has(id) && !meIds.has(email) && !meIds.has(name);
+            });
+            if (!others.length) return null;
+            return (
+              <div
+                className="flex -space-x-2"
+                title={others.map((u) => u.name || "Someone").filter(Boolean).join(", ")}
+              >
+                {others.slice(0, 2).map((u, i) => (
+                  <span
+                    key={u.id}
+                    title={u.name || "On this page"}
+                    className={`relative flex h-[28px] w-[28px] items-center justify-center rounded-full border-2 border-white text-[10px] font-semibold text-white dark:border-[#0a0a0a] ${AVATAR_COLORS[i % AVATAR_COLORS.length]}`}
+                  >
+                    {initials(u.name || "U")}
+                    <span className="absolute -right-0.5 -bottom-0.5 h-[8px] w-[8px] rounded-full border-[1.5px] border-white bg-[#22C55E] dark:border-[#0a0a0a]" />
+                  </span>
+                ))}
+                {others.length > 2 ? (
+                  <span
+                    className="flex h-[28px] w-[28px] items-center justify-center rounded-full border-2 border-white bg-[#E5E7EB] text-[10px] font-semibold text-[#4B5563] dark:border-[#0a0a0a]"
+                    title={others
+                      .slice(2)
+                      .map((u) => u.name || "Someone")
+                      .join(", ")}
+                  >
+                    +{others.length - 2}
+                  </span>
+                ) : null}
+              </div>
+            );
+          })()}
           <UserProfileMenu size={32} />
         </div>
       </div>

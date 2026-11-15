@@ -93,3 +93,54 @@ export function dominantQuadrant(byQuadrant: Record<string, number> | undefined)
   if (!n && (byQuadrant?.Untriaged || 0) > 0) return "Untriaged";
   return best;
 }
+
+const prioCount = (p: Record<string, number> | undefined, keys: string[]) =>
+  keys.reduce((n, k) => n + (p?.[k] || 0), 0);
+
+/**
+ * Prefer API byQuadrant. If Q1–Q4 are empty but Priority/Severity were assessed,
+ * synthesize a triage grid so Matrix mode still shows counts (never a fake all-zero board).
+ */
+export function resolveQuadrants(opts: {
+  byQuadrant?: Record<string, number>;
+  byPriority?: Record<string, number>;
+  bySeverity?: Record<string, number>;
+  notAssessed?: number;
+  tests: number;
+}): Record<string, number> {
+  const q = { ...(opts.byQuadrant || {}) };
+  const qTriaged = (q.Q1 || 0) + (q.Q2 || 0) + (q.Q3 || 0) + (q.Q4 || 0);
+  if (qTriaged > 0) return q;
+
+  const p = opts.byPriority || {};
+  const s = opts.bySeverity || {};
+  let highP = prioCount(p, ["High", "Highest", "Critical"]);
+  let medP = prioCount(p, ["Medium", "Normal"]);
+  let lowP = prioCount(p, ["Low", "Lowest"]);
+  const assessedP = highP + medP + lowP;
+  if (!assessedP) {
+    const u = q.Untriaged || opts.notAssessed || (opts.tests > 0 ? opts.tests : 0);
+    return u ? { Untriaged: u } : {};
+  }
+
+  let highS = prioCount(s, ["High", "Highest", "Critical"]);
+  let medS = prioCount(s, ["Medium", "Normal"]);
+  let lowS = prioCount(s, ["Low", "Lowest"]);
+  if (highS + medS + lowS === 0) {
+    // Severity not rolled up separately — mirror priority so High stays "important".
+    highS = highP;
+    medS = medP;
+    lowS = lowP;
+  }
+
+  let important = highS + medS;
+  let Q1 = Math.min(highP, important);
+  highP -= Q1;
+  important -= Q1;
+  const Q3 = highP;
+  const notUrgent = medP + lowP;
+  const Q2 = Math.min(notUrgent, important);
+  const Q4 = Math.max(0, notUrgent - Q2);
+  const untriaged = opts.notAssessed || q.Untriaged || 0;
+  return { Q1, Q2, Q3, Q4, ...(untriaged ? { Untriaged: untriaged } : {}) };
+}
