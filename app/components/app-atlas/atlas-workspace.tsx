@@ -699,9 +699,16 @@ export default function AtlasWorkspace() {
             <CoverageOverview
               client={client}
               canvasId={canvas?.id ?? null}
+              canvas={canvas}
+              endpoints={apiSpec.status === "ready" && apiSpec.data ? apiSpec.data.endpoints : []}
               onOpenSit={(opts) => {
                 setSitFocus(opts ?? null);
                 setTab("sit");
+              }}
+              onFocusNode={(nodeId) => {
+                setFocusNodeId(nodeId);
+                setPanelNodeId(nodeId);
+                setTab("canvas");
               }}
             />
           ) : tab === "reports" ? (

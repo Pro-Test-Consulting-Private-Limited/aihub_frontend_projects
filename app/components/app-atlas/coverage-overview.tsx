@@ -12,7 +12,8 @@ import {
   TbSparkles,
   TbX,
 } from "react-icons/tb";
-import type { SitEpic, SitJob, SitWorkbook } from "@/app/interfaces/appatlas";
+import type { Canvas, SitEpic, SitJob, SitWorkbook } from "@/app/interfaces/appatlas";
+import type { SpecEndpoint } from "@/app/interfaces/api-testing";
 import {
   dominantQuadrant,
   EISENHOWER_AXES,
@@ -21,7 +22,9 @@ import {
   EISENHOWER_MEANING,
   type EisenhowerQ,
 } from "@/app/lib/sit-eisenhower";
+import { liveAcForTickets } from "@/app/lib/coverage-gaps";
 import type { AtlasClient } from "@/app/services/appatlas";
+import { CoverageHub, ticketCoverageMeta } from "./coverage-hub";
 import { SitCaseDrawer } from "./sit-case-drawer";
 import { SitJobsChip } from "./sit-jobs-chip";
 
@@ -571,11 +574,17 @@ type DrawerTarget = {
 export function CoverageOverview({
   client,
   canvasId,
+  canvas: canvasProp = null,
+  endpoints = [],
   onOpenSit,
+  onFocusNode,
 }: {
   client: AtlasClient;
   canvasId: string | null;
+  canvas?: Canvas | null;
+  endpoints?: SpecEndpoint[];
   onOpenSit?: (opts?: { workbookId?: string; ticketKey?: string; testType?: string }) => void;
+  onFocusNode?: (nodeId: string) => void;
 }) {
   const [epics, setEpics] = useState<SitEpic[]>([]);
   const [sit, setSit] = useState<Record<string, SitCov>>({});
@@ -606,10 +615,37 @@ export function CoverageOverview({
   const [draftStart, setDraftStart] = useState<number | null>(null);
   const [draftEnd, setDraftEnd] = useState<number | null>(null);
   const [draftNever, setDraftNever] = useState(false);
+  const [covCanvas, setCovCanvas] = useState<Canvas | null>(canvasProp);
+  const [sortWeighted, setSortWeighted] = useState(false);
   const customBtnRef = useRef<HTMLButtonElement>(null);
   const depthInfoRef = useRef<HTMLButtonElement>(null);
   const qualityInfoRef = useRef<HTMLButtonElement>(null);
   const prioInfoRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    setCovCanvas(canvasProp);
+  }, [canvasProp]);
+
+  useEffect(() => {
+    if (!canvasId) return;
+    const needsFull =
+      !canvasProp?.jira ||
+      !(canvasProp.nodes || []).length ||
+      !Object.keys(canvasProp.jira?.nodes || {}).length;
+    if (!needsFull && canvasProp) return;
+    let cancelled = false;
+    void client
+      .getCanvas(canvasId, { view: "full" })
+      .then((full) => {
+        if (!cancelled) setCovCanvas(full);
+      })
+      .catch(() => {
+        /* keep prop canvas */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, canvasId, canvasProp]);
 
   useEffect(() => {
     try {
@@ -787,6 +823,18 @@ export function CoverageOverview({
 
   const allFlat = useMemo(() => rowsByEpic.flatMap((x) => x.tickets), [rowsByEpic]);
 
+  const liveByKey = useMemo(() => {
+    const jira = covCanvas?.jira;
+    if (!jira) return new Map<string, ReturnType<typeof liveAcForTickets>[number]>();
+    const rows = liveAcForTickets({
+      issues: jira.issues.filter((i) => i.level !== 1),
+      coverage: jira.coverage || {},
+      nodeMatches: jira.nodes || {},
+      nodes: (covCanvas?.nodes || []).map((n) => ({ id: n.id, title: n.title, path: n.path })),
+    });
+    return new Map(rows.map((r) => [r.key, r]));
+  }, [covCanvas]);
+
   const timeline = useMemo(() => {
     const stamps = allFlat.map((t) => t.generatedAt).filter((x): x is number => !!x);
     if (!stamps.length) return null;
@@ -919,9 +967,8 @@ export function CoverageOverview({
 
   const filteredRowsByEpic = useMemo(() => {
     return rowsByEpic
-      .map(({ epic, tickets }) => ({
-        epic,
-        tickets: tickets.filter((t) => {
+      .map(({ epic, tickets }) => {
+        let list = tickets.filter((t) => {
           if (typeFilter.size && ![...typeFilter].some((ty) => (t.byType[ty] || 0) > 0)) return false;
 
           if (freshPreset === "all") return true;
@@ -936,10 +983,20 @@ export function CoverageOverview({
 
           const key = freshnessOf(t.generatedAt).key;
           return key === freshPreset;
-        }),
-      }))
+        });
+        if (sortWeighted) {
+          list = [...list].sort((a, b) => {
+            const la = liveByKey.get(a.key);
+            const lb = liveByKey.get(b.key);
+            const wa = ticketCoverageMeta(a, la).weighted;
+            const wb = ticketCoverageMeta(b, lb).weighted;
+            return wb - wa;
+          });
+        }
+        return { epic, tickets: list };
+      })
       .filter((x) => x.tickets.length > 0);
-  }, [rowsByEpic, typeFilter, freshPreset, includeNever, rangeStart, rangeEnd]);
+  }, [rowsByEpic, typeFilter, freshPreset, includeNever, rangeStart, rangeEnd, sortWeighted, liveByKey]);
 
   const flat = filteredRowsByEpic.flatMap((x) => x.tickets);
   const overall = flat.length ? Math.round(flat.reduce((n, t) => n + t.depth, 0) / flat.length) : 0;
@@ -1158,11 +1215,30 @@ export function CoverageOverview({
             <TbLoader2 className="animate-spin" /> Loading coverage…
           </div>
         ) : !allFlat.length ? (
-          <p className="text-[13px] text-[#8a93a8]">
-            No saved SIT coverage yet. Open a Jira-connected canvas, generate on SIT Testing, then return here.
-          </p>
+          <>
+            <CoverageHub
+              client={client}
+              canvas={covCanvas}
+              endpoints={endpoints}
+              rowsByEpic={rowsByEpic}
+              onOpenSit={onOpenSit}
+              onFocusNode={onFocusNode}
+            />
+            <p className="text-[13px] text-[#8a93a8]">
+              No saved SIT coverage yet. Open a Jira-connected canvas, generate on SIT Testing, then return here.
+            </p>
+          </>
         ) : (
           <>
+            <CoverageHub
+              client={client}
+              canvas={covCanvas}
+              endpoints={endpoints}
+              rowsByEpic={rowsByEpic}
+              onOpenSit={onOpenSit}
+              onFocusNode={onFocusNode}
+            />
+
             <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
               {[
                 { label: "Total cases", value: String(totalCases), tip: undefined as string | undefined },
@@ -1487,7 +1563,7 @@ export function CoverageOverview({
 
             {prioSevView === "matrix" ? <EisenhowerBoard byQuadrant={eisenhowerTotals} /> : null}
 
-            <table className={`w-full border-collapse text-[13px] ${prioSevView === "matrix" ? "min-w-[1280px]" : "min-w-[1100px]"}`}>
+            <table className={`w-full border-collapse text-[13px] ${prioSevView === "matrix" ? "min-w-[1480px]" : "min-w-[1320px]"}`}>
               <thead>
                 <tr className="border-b border-[#E5E7EB] dark:border-[#2a2a2a]">
                   <th className={th}>Epic / Ticket</th>
@@ -1560,6 +1636,26 @@ export function CoverageOverview({
                         from Test depth.
                       </p>
                     </AnchoredPopover>
+                  </th>
+                  <th className={th} title="Passed / tests (manual SIT status until Verify-lite)">
+                    Verified %
+                  </th>
+                  <th className={th} title="≥1 Positive case = smoke-covered">
+                    Smoke
+                  </th>
+                  <th className={th} title="Live AC observed / total on mapped screens">
+                    Live AC
+                  </th>
+                  <th className={th}>
+                    <button
+                      type="button"
+                      className={`inline-flex items-center gap-1 ${sortWeighted ? "text-[#5B3FD1]" : ""}`}
+                      title="Priority × (missing AC + thin depth). Click to sort high→low."
+                      onClick={() => setSortWeighted((v) => !v)}
+                    >
+                      Weighted gap
+                      {sortWeighted ? " ↓" : ""}
+                    </button>
                   </th>
                   <th className={th}>Last generated</th>
                   <th className={th}>Freshness</th>
@@ -1688,6 +1784,10 @@ export function CoverageOverview({
                           </div>
                         </td>
                         <td className={`px-3 py-3 font-semibold ${band(q).text}`}>{epicHasCases ? `${q}/100` : "-"}</td>
+                        <td className="px-3 py-3 text-[11px] text-[#7E7E7E]">-</td>
+                        <td className="px-3 py-3 text-[11px] text-[#7E7E7E]">-</td>
+                        <td className="px-3 py-3 text-[11px] text-[#7E7E7E]">-</td>
+                        <td className="px-3 py-3 text-[11px] text-[#7E7E7E]">-</td>
                         <td className="px-3 py-3 text-[11px] text-[#7E7E7E]">
                           {oldest ? (
                             <Tip text={generatedTip(oldest)}>
@@ -1779,6 +1879,41 @@ export function CoverageOverview({
                               >
                                 {t.tests ? `${t.quality}/100` : "-"}
                               </td>
+                              {(() => {
+                                const meta = ticketCoverageMeta(t, liveByKey.get(t.key));
+                                return (
+                                  <>
+                                    <td
+                                      className="px-3 py-3 text-[11px] tabular-nums text-[#5b647a]"
+                                      title="Verified = cases marked Passed (manual until Verify-lite walk)"
+                                    >
+                                      {t.tests ? `${meta.verified}%` : "-"}
+                                    </td>
+                                    <td className="px-3 py-3">
+                                      {t.tests ? (
+                                        <span
+                                          className={`rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${
+                                            meta.smoke
+                                              ? "border-[#c5e0b4] bg-[#E2EFDA] text-[#375623]"
+                                              : "border-[#e5e7eb] bg-[#f9fafb] text-[#6b7280]"
+                                          }`}
+                                          title="Smoke = ≥1 Positive case; other types = deep"
+                                        >
+                                          {meta.smoke ? "Smoke" : "Deep only"}
+                                        </span>
+                                      ) : (
+                                        "-"
+                                      )}
+                                    </td>
+                                    <td className="px-3 py-3 text-[11px] tabular-nums text-[#5b647a]" title="Live AC on mapped screens">
+                                      {meta.acLabel}
+                                    </td>
+                                    <td className="px-3 py-3 text-[11px] font-semibold tabular-nums text-[#5b647a]" title="Priority × (missing AC + thin depth)">
+                                      {meta.weighted}
+                                    </td>
+                                  </>
+                                );
+                              })()}
                               <td className="px-3 py-3 text-[11px] text-[#7E7E7E]">
                                 <Tip text={generatedTip(t.generatedAt)}>
                                   <span>{agoShort(t.generatedAt)}</span>
