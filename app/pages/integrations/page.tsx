@@ -112,7 +112,7 @@ const CATEGORIES: IntegrationCategory[] = [
         id: "github",
         name: "GitHub",
         status: "disconnected",
-        description: "Scripts synced to main branch. Auto-commit on heal.",
+        description: "Sign in with GitHub — no personal access token needed. Scripts synced to main branch. Auto-commit on heal.",
         buttons: ["Connect GitHub"],
         Icon: SiGithub,
         color: "#24292E",
@@ -209,7 +209,7 @@ function IntegrationsContent() {
     disconnectProvider,
   } = useIntegrationStatus();
   const [busy, setBusy] = useState<string | null>(null);
-  const [connectProvider, setConnectProvider] = useState<LiveProvider | null>(null);
+  const [connectProvider, setConnectProvider] = useState<"jira" | "swagger" | null>(null);
   const handledCallback = useRef(false);
 
   useEffect(() => {
@@ -226,10 +226,17 @@ function IntegrationsContent() {
           await saveProviders([{ provider: "jira", meta: { label: "Jira Cloud" } }]);
           toast.success("Jira connected");
         } else if (connected === "github") {
+          const statusRes = await fetch("/api/auth/github/status", { cache: "no-store" });
+          const status = statusRes.ok ? await statusRes.json() : null;
           await saveProviders([
-            { provider: "github", meta: { username: "github-user" } },
+            {
+              provider: "github",
+              meta: { username: status?.username || "github-user" },
+            },
           ]);
-          toast.success("GitHub connected");
+          toast.success(
+            status?.username ? `GitHub connected as @${status.username}` : "GitHub connected",
+          );
         } else if (error) {
           toast.error(ERROR_MESSAGES[error] || "Connection failed");
         }
@@ -308,6 +315,12 @@ function IntegrationsContent() {
       } finally {
         setBusy(null);
       }
+      return;
+    }
+
+    if (tool.provider === "github" && label.startsWith("Connect")) {
+      setBusy("github");
+      window.location.href = `/api/auth/github/authorize?returnTo=${encodeURIComponent("/integrations")}`;
       return;
     }
 
@@ -429,7 +442,9 @@ function IntegrationsContent() {
                         >
                           {isBusy && label.startsWith("Disconnect")
                             ? "Disconnecting..."
-                            : label}
+                            : isBusy && tool.provider === "github" && label.startsWith("Connect")
+                              ? "Redirecting to GitHub..."
+                              : label}
                         </button>
                       ))}
                     </div>
@@ -453,13 +468,6 @@ function IntegrationsContent() {
                   meta: { label: meta?.siteName || "Jira Cloud" },
                 },
               ]);
-            } else if (connected === "github") {
-              await saveProviders([
-                {
-                  provider: "github",
-                  meta: { username: meta?.username || "github-user" },
-                },
-              ]);
             } else {
               await saveProviders([
                 {
@@ -474,13 +482,7 @@ function IntegrationsContent() {
           } catch {
             await refresh();
           }
-          toast.success(
-            connected === "github"
-              ? "GitHub connected"
-              : connected === "swagger"
-                ? "Swagger connected"
-                : "Jira connected",
-          );
+          toast.success(connected === "swagger" ? "Swagger connected" : "Jira connected");
         }}
       />
     </div>

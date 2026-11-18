@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Modal from "./modal";
 
-type Provider = "jira" | "github" | "swagger";
+type Provider = "jira" | "swagger";
 
 export default function ConnectIntegrationModal({
   provider,
@@ -13,25 +13,19 @@ export default function ConnectIntegrationModal({
   provider: Provider | null;
   onClose: () => void;
   onConnected: (
-    provider: Provider,
+    provider: Provider | "github",
     meta?: { title?: string; specUrl?: string; username?: string; siteName?: string },
   ) => void;
 }) {
   const [siteUrl, setSiteUrl] = useState("");
   const [email, setEmail] = useState("");
   const [apiToken, setApiToken] = useState("");
-  const [githubToken, setGithubToken] = useState("");
   const [specUrl, setSpecUrl] = useState("");
   const [swaggerToken, setSwaggerToken] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const title =
-    provider === "jira"
-      ? "Connect Jira"
-      : provider === "github"
-        ? "Connect GitHub"
-        : "Connect Swagger";
+  const title = provider === "jira" ? "Connect Jira" : "Connect Swagger";
 
   const handleSubmit = async () => {
     if (!provider) return;
@@ -41,9 +35,7 @@ export default function ConnectIntegrationModal({
       const body =
         provider === "jira"
           ? { siteUrl, email, apiToken }
-          : provider === "github"
-            ? { token: githubToken }
-            : { specUrl, token: swaggerToken || undefined };
+          : { specUrl, token: swaggerToken || undefined };
 
       const res = await fetch(`/api/auth/${provider}/connect`, {
         method: "POST",
@@ -80,9 +72,7 @@ export default function ConnectIntegrationModal({
       <p className="text-[13px] text-[#7E7E7E] dark:text-[#9ca3af] mb-4">
         {provider === "jira"
           ? "Use your Jira Cloud site, Atlassian email, and an API token. The app will verify the account and mark Jira as connected."
-          : provider === "github"
-            ? "Paste a GitHub personal access token. The app will verify it and mark GitHub as connected."
-            : "Paste an OpenAPI / Swagger JSON or YAML URL. Swagger UI pages like /docs are OK — we'll resolve the JSON. Add a bearer token only if the spec is private."}
+          : "Paste an OpenAPI / Swagger JSON or YAML URL. Swagger UI pages like /docs are OK — we'll resolve the JSON. Add a bearer token only if the spec is private."}
       </p>
 
       {provider === "jira" ? (
@@ -123,27 +113,6 @@ export default function ConnectIntegrationModal({
             className="text-[12px] text-[#2684FF]"
           >
             Create a Jira API token
-          </a>
-        </div>
-      ) : provider === "github" ? (
-        <div className="flex flex-col gap-3">
-          <label className="text-[12px] font-[600] text-[#1F1F1F] dark:text-[#ededed]">
-            Personal access token
-            <input
-              type="password"
-              value={githubToken}
-              onChange={(e) => setGithubToken(e.target.value)}
-              placeholder="ghp_..."
-              className="mt-1 w-full h-[38px] px-3 rounded-[8px] border border-[rgba(94,96,102,0.3)] dark:border-[#2a2a2a] bg-white dark:bg-[#1a1a1a] text-[13px] outline-none"
-            />
-          </label>
-          <a
-            href="https://github.com/settings/tokens"
-            target="_blank"
-            rel="noreferrer"
-            className="text-[12px] text-[#2684FF]"
-          >
-            Create a GitHub token
           </a>
         </div>
       ) : (
