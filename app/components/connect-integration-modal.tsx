@@ -20,7 +20,7 @@ export default function ConnectIntegrationModal({
   const [siteUrl, setSiteUrl] = useState("");
   const [email, setEmail] = useState("");
   const [apiToken, setApiToken] = useState("");
-  const [githubToken, setGithubToken] = useState("");
+  const [githubOrgUrl, setGithubOrgUrl] = useState("");
   const [specUrl, setSpecUrl] = useState("");
   const [swaggerToken, setSwaggerToken] = useState("");
   const [error, setError] = useState("");
@@ -38,12 +38,20 @@ export default function ConnectIntegrationModal({
     setError("");
     setSaving(true);
     try {
+      if (provider === "github") {
+        const org = githubOrgUrl.trim();
+        if (!org) {
+          setError("Enter your GitHub organization URL.");
+          return;
+        }
+        window.location.href = `/api/auth/github/authorize?org=${encodeURIComponent(org)}&returnTo=${encodeURIComponent("/integrations")}`;
+        return;
+      }
+
       const body =
         provider === "jira"
           ? { siteUrl, email, apiToken }
-          : provider === "github"
-            ? { token: githubToken }
-            : { specUrl, token: swaggerToken || undefined };
+          : { specUrl, token: swaggerToken || undefined };
 
       const res = await fetch(`/api/auth/${provider}/connect`, {
         method: "POST",
@@ -81,8 +89,8 @@ export default function ConnectIntegrationModal({
         {provider === "jira"
           ? "Use your Jira Cloud site, Atlassian email, and an API token. The app will verify the account and mark Jira as connected."
           : provider === "github"
-            ? "Paste a GitHub personal access token. The app will verify it and mark GitHub as connected."
-            : "Paste an OpenAPI / Swagger JSON or YAML URL. Swagger UI pages like /docs are OK  -  we'll resolve the JSON. Add a bearer token only if the spec is private."}
+            ? "Enter your GitHub organization URL, then continue to sign in with GitHub."
+            : "Paste an OpenAPI / Swagger JSON or YAML URL. Swagger UI pages like /docs are OK — we'll resolve the JSON. Add a bearer token only if the spec is private."}
       </p>
 
       {provider === "jira" ? (
@@ -128,23 +136,17 @@ export default function ConnectIntegrationModal({
       ) : provider === "github" ? (
         <div className="flex flex-col gap-3">
           <label className="text-[12px] font-[600] text-[#1F1F1F] dark:text-[#ededed]">
-            Personal access token
+            GitHub organization URL
             <input
-              type="password"
-              value={githubToken}
-              onChange={(e) => setGithubToken(e.target.value)}
-              placeholder="ghp_..."
+              value={githubOrgUrl}
+              onChange={(e) => setGithubOrgUrl(e.target.value)}
+              placeholder="https://github.com/organizations/Pro-Test-Consulting-Private-Limited"
               className="mt-1 w-full h-[38px] px-3 rounded-[8px] border border-[rgba(94,96,102,0.3)] dark:border-[#2a2a2a] bg-white dark:bg-[#1a1a1a] text-[13px] outline-none"
             />
           </label>
-          <a
-            href="https://github.com/settings/tokens"
-            target="_blank"
-            rel="noreferrer"
-            className="text-[12px] text-[#2684FF]"
-          >
-            Create a GitHub token
-          </a>
+          <p className="text-[12px] text-[#7E7E7E] dark:text-[#9ca3af]">
+            Example: https://github.com/Pro-Test-Consulting-Private-Limited
+          </p>
         </div>
       ) : (
         <div className="flex flex-col gap-3">
@@ -188,7 +190,13 @@ export default function ConnectIntegrationModal({
         onClick={handleSubmit}
         className="mt-5 w-full h-[40px] rounded-[8px] bg-[#8664f2] text-white text-[13px] font-[500] disabled:opacity-60"
       >
-        {saving ? "Connecting..." : title}
+        {saving
+          ? provider === "github"
+            ? "Continuing to GitHub..."
+            : "Connecting..."
+          : provider === "github"
+            ? "Continue with GitHub"
+            : title}
       </button>
     </Modal>
   );

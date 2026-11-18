@@ -29,6 +29,8 @@ export type GitHubStatus = {
   connected: boolean;
   health: ConnectionHealth;
   username: string | null;
+  org: string | null;
+  orgUrl: string | null;
   detail: string | null;
   checkedAt: number | null;
 };
@@ -62,6 +64,8 @@ const EMPTY_GITHUB: GitHubStatus = {
   connected: false,
   health: "disconnected",
   username: null,
+  org: null,
+  orgUrl: null,
   detail: null,
   checkedAt: null,
 };
@@ -177,6 +181,14 @@ export function useIntegrationStatus(opts?: { live?: boolean; refreshMs?: number
           (typeof dbGithub?.meta?.username === "string"
             ? dbGithub.meta.username
             : null) ||
+          null,
+        org:
+          cookieGithub.org ||
+          (typeof dbGithub?.meta?.org === "string" ? dbGithub.meta.org : null) ||
+          null,
+        orgUrl:
+          cookieGithub.orgUrl ||
+          (typeof dbGithub?.meta?.orgUrl === "string" ? dbGithub.meta.orgUrl : null) ||
           null,
         detail:
           cookieGithub.detail ||

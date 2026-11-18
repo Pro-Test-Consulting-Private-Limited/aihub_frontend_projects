@@ -70,6 +70,8 @@ const ERROR_MESSAGES: Record<string, string> = {
     "Jira is not configured. Add JIRA_CLIENT_ID, JIRA_CLIENT_SECRET, and JIRA_REDIRECT_URI to your environment.",
   github_not_configured:
     "GitHub is not configured. Add GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, and GITHUB_REDIRECT_URI to your environment.",
+  github_org_required:
+    "Enter a valid GitHub organization URL, for example https://github.com/Pro-Test-Consulting-Private-Limited.",
   access_denied: "Connection was cancelled.",
 };
 
@@ -141,7 +143,7 @@ const CATEGORIES: IntegrationCategory[] = [
         id: "github",
         name: "GitHub",
         status: "disconnected",
-        description: "Scripts synced to main branch. Auto-commit on heal.",
+        description: "Connect with your GitHub organization, then sign in with GitHub. Scripts synced to main branch. Auto-commit on heal.",
         buttons: ["Connect GitHub"],
         Icon: SiGithub,
         color: "#24292E",
@@ -260,10 +262,26 @@ function IntegrationsContent() {
           await saveProviders([{ provider: "jira", meta: { label: "Jira Cloud" } }]);
           toast.success("Jira connected");
         } else if (connected === "github") {
+          const statusRes = await fetch("/api/auth/github/status", { cache: "no-store" });
+          const status = statusRes.ok ? await statusRes.json() : null;
           await saveProviders([
-            { provider: "github", meta: { username: "github-user" } },
+            {
+              provider: "github",
+              meta: {
+                username: status?.username || "github-user",
+                org: status?.org || null,
+                orgUrl: status?.orgUrl || null,
+              },
+            },
           ]);
-          toast.success("GitHub connected");
+          const who = status?.org
+            ? status.username
+              ? `${status.org} (@${status.username})`
+              : status.org
+            : status?.username
+              ? `@${status.username}`
+              : null;
+          toast.success(who ? `GitHub connected: ${who}` : "GitHub connected");
         } else if (error) {
           toast.error(ERROR_MESSAGES[error] || "Connection failed");
         }
@@ -320,6 +338,7 @@ function IntegrationsContent() {
 
     if (tool.provider === "github") {
       const status = healthToCard(github.health);
+      const orgLabel = github.org || github.orgUrl;
       return {
         ...tool,
         status,
@@ -327,10 +346,12 @@ function IntegrationsContent() {
         checkedAt: github.checkedAt,
         description:
           status === "connected"
-            ? `Active as @${github.username || "github-user"}. ${tool.description}`
+            ? `Active on ${orgLabel || "GitHub"}${
+                github.username ? ` as @${github.username}` : ""
+              }. ${tool.description}`
             : status === "needs_reconnect"
               ? github.detail ||
-                "GitHub token expired or was revoked. Reconnect to restore sync."
+                "GitHub session expired or was revoked. Reconnect to restore sync."
               : status === "error"
                 ? github.detail || "Could not reach GitHub to verify the connection."
                 : tool.description,
@@ -462,7 +483,7 @@ function IntegrationsContent() {
           {(
             [
               { name: "Jira", status: healthToCard(jira.health), detail: jira.detail, checkedAt: jira.checkedAt, site: jira.siteName || jira.user },
-              { name: "GitHub", status: healthToCard(github.health), detail: github.detail, checkedAt: github.checkedAt, site: github.username ? `@${github.username}` : null },
+              { name: "GitHub", status: healthToCard(github.health), detail: github.detail, checkedAt: github.checkedAt, site: github.org ? `${github.org}${github.username ? ` (@${github.username})` : ""}` : github.username ? `@${github.username}` : null },
               { name: "Swagger", status: healthToCard(swagger.health), detail: null, checkedAt: null, site: swagger.title },
               { name: "Teams", status: healthToCard(teams.health), detail: null, checkedAt: null, site: teams.label },
             ] as const
@@ -628,14 +649,7 @@ function IntegrationsContent() {
                   meta: { label: meta?.siteName || "Jira Cloud" },
                 },
               ]);
-            } else if (connected === "github") {
-              await saveProviders([
-                {
-                  provider: "github",
-                  meta: { username: meta?.username || "github-user" },
-                },
-              ]);
-            } else {
+            } else if (connected === "swagger") {
               await saveProviders([
                 {
                   provider: "swagger",
@@ -649,13 +663,7 @@ function IntegrationsContent() {
           } catch {
             await refresh();
           }
-          toast.success(
-            connected === "github"
-              ? "GitHub connected"
-              : connected === "swagger"
-                ? "Swagger connected"
-                : "Jira connected",
-          );
+          toast.success(connected === "swagger" ? "Swagger connected" : "Jira connected");
         }}
       />
     </div>

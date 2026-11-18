@@ -5,6 +5,8 @@ import { clearCookies, OAUTH_COOKIES } from "@/lib/oauth";
 const GITHUB_COOKIES = [
   OAUTH_COOKIES.githubToken,
   OAUTH_COOKIES.githubUsername,
+  OAUTH_COOKIES.githubOrg,
+  OAUTH_COOKIES.githubOrgUrl,
   OAUTH_COOKIES.githubState,
 ];
 
