@@ -41,6 +41,8 @@ const ERROR_MESSAGES: Record<string, string> = {
     "Jira is not configured. Add JIRA_CLIENT_ID, JIRA_CLIENT_SECRET, and JIRA_REDIRECT_URI to your environment.",
   github_not_configured:
     "GitHub is not configured. Add GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, and GITHUB_REDIRECT_URI to your environment.",
+  github_org_required:
+    "Enter a valid GitHub organization URL, for example https://github.com/Pro-Test-Consulting-Private-Limited.",
   access_denied: "Connection was cancelled.",
 };
 
@@ -112,7 +114,7 @@ const CATEGORIES: IntegrationCategory[] = [
         id: "github",
         name: "GitHub",
         status: "disconnected",
-        description: "Sign in with GitHub — no personal access token needed. Scripts synced to main branch. Auto-commit on heal.",
+        description: "Connect with your GitHub org URL, then sign in with GitHub — no personal access token. Scripts synced to main branch. Auto-commit on heal.",
         buttons: ["Connect GitHub"],
         Icon: SiGithub,
         color: "#24292E",
@@ -209,7 +211,7 @@ function IntegrationsContent() {
     disconnectProvider,
   } = useIntegrationStatus();
   const [busy, setBusy] = useState<string | null>(null);
-  const [connectProvider, setConnectProvider] = useState<"jira" | "swagger" | null>(null);
+  const [connectProvider, setConnectProvider] = useState<"jira" | "github" | "swagger" | null>(null);
   const handledCallback = useRef(false);
 
   useEffect(() => {
@@ -231,12 +233,21 @@ function IntegrationsContent() {
           await saveProviders([
             {
               provider: "github",
-              meta: { username: status?.username || "github-user" },
+              meta: {
+                username: status?.username || "github-user",
+                org: status?.org || null,
+                orgUrl: status?.orgUrl || null,
+              },
             },
           ]);
-          toast.success(
-            status?.username ? `GitHub connected as @${status.username}` : "GitHub connected",
-          );
+          const who = status?.org
+            ? status.username
+              ? `${status.org} (@${status.username})`
+              : status.org
+            : status?.username
+              ? `@${status.username}`
+              : null;
+          toast.success(who ? `GitHub connected: ${who}` : "GitHub connected");
         } else if (error) {
           toast.error(ERROR_MESSAGES[error] || "Connection failed");
         }
@@ -276,11 +287,14 @@ function IntegrationsContent() {
     }
 
     if (tool.provider === "github") {
+      const orgLabel = github.org || github.orgUrl;
       return {
         ...tool,
         status: github.connected ? "connected" : "disconnected",
         description: github.connected
-          ? `Connected as @${github.username || "protest-demo"}. ${tool.description}`
+          ? `Connected to ${orgLabel || "GitHub"}${
+              github.username ? ` as @${github.username}` : ""
+            }. ${tool.description}`
           : tool.description,
         buttons: github.connected ? ["Disconnect GitHub"] : ["Connect GitHub"],
       };
@@ -315,12 +329,6 @@ function IntegrationsContent() {
       } finally {
         setBusy(null);
       }
-      return;
-    }
-
-    if (tool.provider === "github" && label.startsWith("Connect")) {
-      setBusy("github");
-      window.location.href = `/api/auth/github/authorize?returnTo=${encodeURIComponent("/integrations")}`;
       return;
     }
 
@@ -442,9 +450,7 @@ function IntegrationsContent() {
                         >
                           {isBusy && label.startsWith("Disconnect")
                             ? "Disconnecting..."
-                            : isBusy && tool.provider === "github" && label.startsWith("Connect")
-                              ? "Redirecting to GitHub..."
-                              : label}
+                            : label}
                         </button>
                       ))}
                     </div>
@@ -468,7 +474,7 @@ function IntegrationsContent() {
                   meta: { label: meta?.siteName || "Jira Cloud" },
                 },
               ]);
-            } else {
+            } else if (connected === "swagger") {
               await saveProviders([
                 {
                   provider: "swagger",

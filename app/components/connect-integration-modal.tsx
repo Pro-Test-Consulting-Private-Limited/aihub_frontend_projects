@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Modal from "./modal";
 
-type Provider = "jira" | "swagger";
+type Provider = "jira" | "github" | "swagger";
 
 export default function ConnectIntegrationModal({
   provider,
@@ -13,25 +13,41 @@ export default function ConnectIntegrationModal({
   provider: Provider | null;
   onClose: () => void;
   onConnected: (
-    provider: Provider | "github",
+    provider: Provider,
     meta?: { title?: string; specUrl?: string; username?: string; siteName?: string },
   ) => void;
 }) {
   const [siteUrl, setSiteUrl] = useState("");
   const [email, setEmail] = useState("");
   const [apiToken, setApiToken] = useState("");
+  const [githubOrgUrl, setGithubOrgUrl] = useState("");
   const [specUrl, setSpecUrl] = useState("");
   const [swaggerToken, setSwaggerToken] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const title = provider === "jira" ? "Connect Jira" : "Connect Swagger";
+  const title =
+    provider === "jira"
+      ? "Connect Jira"
+      : provider === "github"
+        ? "Connect GitHub"
+        : "Connect Swagger";
 
   const handleSubmit = async () => {
     if (!provider) return;
     setError("");
     setSaving(true);
     try {
+      if (provider === "github") {
+        const org = githubOrgUrl.trim();
+        if (!org) {
+          setError("Enter your GitHub organization URL.");
+          return;
+        }
+        window.location.href = `/api/auth/github/authorize?org=${encodeURIComponent(org)}&returnTo=${encodeURIComponent("/integrations")}`;
+        return;
+      }
+
       const body =
         provider === "jira"
           ? { siteUrl, email, apiToken }
@@ -72,7 +88,9 @@ export default function ConnectIntegrationModal({
       <p className="text-[13px] text-[#7E7E7E] dark:text-[#9ca3af] mb-4">
         {provider === "jira"
           ? "Use your Jira Cloud site, Atlassian email, and an API token. The app will verify the account and mark Jira as connected."
-          : "Paste an OpenAPI / Swagger JSON or YAML URL. Swagger UI pages like /docs are OK — we'll resolve the JSON. Add a bearer token only if the spec is private."}
+          : provider === "github"
+            ? "Paste your GitHub organization URL. You’ll sign in with GitHub next — no personal access token needed."
+            : "Paste an OpenAPI / Swagger JSON or YAML URL. Swagger UI pages like /docs are OK — we'll resolve the JSON. Add a bearer token only if the spec is private."}
       </p>
 
       {provider === "jira" ? (
@@ -114,6 +132,21 @@ export default function ConnectIntegrationModal({
           >
             Create a Jira API token
           </a>
+        </div>
+      ) : provider === "github" ? (
+        <div className="flex flex-col gap-3">
+          <label className="text-[12px] font-[600] text-[#1F1F1F] dark:text-[#ededed]">
+            GitHub organization URL
+            <input
+              value={githubOrgUrl}
+              onChange={(e) => setGithubOrgUrl(e.target.value)}
+              placeholder="https://github.com/organizations/Pro-Test-Consulting-Private-Limited"
+              className="mt-1 w-full h-[38px] px-3 rounded-[8px] border border-[rgba(94,96,102,0.3)] dark:border-[#2a2a2a] bg-white dark:bg-[#1a1a1a] text-[13px] outline-none"
+            />
+          </label>
+          <p className="text-[12px] text-[#7E7E7E] dark:text-[#9ca3af]">
+            Example: https://github.com/Pro-Test-Consulting-Private-Limited
+          </p>
         </div>
       ) : (
         <div className="flex flex-col gap-3">
@@ -157,7 +190,13 @@ export default function ConnectIntegrationModal({
         onClick={handleSubmit}
         className="mt-5 w-full h-[40px] rounded-[8px] bg-[#8664f2] text-white text-[13px] font-[500] disabled:opacity-60"
       >
-        {saving ? "Connecting..." : title}
+        {saving
+          ? provider === "github"
+            ? "Continuing to GitHub..."
+            : "Connecting..."
+          : provider === "github"
+            ? "Continue with GitHub"
+            : title}
       </button>
     </Modal>
   );

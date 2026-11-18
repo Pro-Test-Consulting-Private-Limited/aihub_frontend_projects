@@ -1,6 +1,46 @@
 const AUTH_BASE = "https://github.com";
 const API_BASE = "https://api.github.com";
-const DEFAULT_SCOPES = "repo read:user user:email";
+const DEFAULT_SCOPES = "repo read:user user:email read:org";
+
+/** Accepts org login, github.com/ORG, or github.com/organizations/ORG. */
+export function parseGitHubOrgInput(raw: string): { org: string; orgUrl: string } | null {
+  const trimmed = String(raw || "").trim();
+  if (!trimmed) return null;
+
+  let candidate = trimmed;
+  try {
+    if (/^https?:\/\//i.test(trimmed)) {
+      const url = new URL(trimmed);
+      if (!/^(www\.)?github\.com$/i.test(url.hostname)) return null;
+      const parts = url.pathname.split("/").filter(Boolean);
+      if (parts[0]?.toLowerCase() === "organizations" && parts[1]) {
+        candidate = parts[1];
+      } else if (parts[0] && !["settings", "orgs", "login", "apps"].includes(parts[0].toLowerCase())) {
+        candidate = parts[0];
+      } else {
+        return null;
+      }
+    } else {
+      candidate = trimmed.replace(/^@/, "").replace(/\/+$/, "");
+      if (candidate.includes("/")) {
+        const parts = candidate.split("/").filter(Boolean);
+        if (parts[0]?.toLowerCase() === "organizations" && parts[1]) candidate = parts[1];
+        else candidate = parts[0];
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  if (!/^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$/.test(candidate)) {
+    return null;
+  }
+
+  return {
+    org: candidate,
+    orgUrl: `https://github.com/${candidate}`,
+  };
+}
 
 export interface GitHubTokenResponse {
   access_token: string;

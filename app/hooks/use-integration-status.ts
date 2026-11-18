@@ -21,6 +21,8 @@ export type JiraStatus = {
 export type GitHubStatus = {
   connected: boolean;
   username: string | null;
+  org: string | null;
+  orgUrl: string | null;
 };
 
 export type SwaggerStatus = {
@@ -38,6 +40,8 @@ const EMPTY_JIRA: JiraStatus = {
 const EMPTY_GITHUB: GitHubStatus = {
   connected: false,
   username: null,
+  org: null,
+  orgUrl: null,
 };
 
 const EMPTY_SWAGGER: SwaggerStatus = {
@@ -108,6 +112,14 @@ export function useIntegrationStatus() {
           (typeof dbGithub?.meta?.username === "string"
             ? dbGithub.meta.username
             : null) ||
+          null,
+        org:
+          cookieGithub.org ||
+          (typeof dbGithub?.meta?.org === "string" ? dbGithub.meta.org : null) ||
+          null,
+        orgUrl:
+          cookieGithub.orgUrl ||
+          (typeof dbGithub?.meta?.orgUrl === "string" ? dbGithub.meta.orgUrl : null) ||
           null,
       });
 
