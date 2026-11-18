@@ -114,7 +114,7 @@ const CATEGORIES: IntegrationCategory[] = [
         id: "github",
         name: "GitHub",
         status: "disconnected",
-        description: "Connect with your GitHub org URL, then sign in with GitHub — no personal access token. Scripts synced to main branch. Auto-commit on heal.",
+        description: "Connect with your GitHub organization, then sign in with GitHub. Scripts synced to main branch. Auto-commit on heal.",
         buttons: ["Connect GitHub"],
         Icon: SiGithub,
         color: "#24292E",
