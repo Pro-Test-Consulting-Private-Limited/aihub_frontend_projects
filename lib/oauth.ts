@@ -61,13 +61,51 @@ export function withReturnTo(res: NextResponse, returnTo: string) {
   return res;
 }
 
+/** Public site origin for OAuth return redirects (nginx → container is often localhost:3000). */
+export function publicOrigin(req: NextRequest): string {
+  const forwardedHost = req.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
+  const forwardedProto = req.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  if (forwardedHost) {
+    const proto = forwardedProto || (forwardedHost.includes("localhost") ? "http" : "https");
+    return `${proto}://${forwardedHost}`;
+  }
+
+  for (const raw of [
+    process.env.OAUTH_PUBLIC_ORIGIN,
+    process.env.GITHUB_REDIRECT_URI,
+    process.env.NEXT_PUBLIC_MICROSOFT_ENTRA_AD_REDIRECT_URI,
+    process.env.NEXT_PUBLIC_API_BASE_URL,
+  ]) {
+    if (!raw) continue;
+    try {
+      const u = new URL(raw);
+      if (u.hostname && u.hostname !== "localhost" && u.hostname !== "127.0.0.1") {
+        return u.origin;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  try {
+    const u = new URL(req.url);
+    if (u.hostname && u.hostname !== "localhost" && u.hostname !== "127.0.0.1") {
+      return u.origin;
+    }
+  } catch {
+    /* ignore */
+  }
+
+  return "https://ai-hub.protestcorp.com";
+}
+
 export function redirectToApp(
   req: NextRequest,
   params: Record<string, string>,
   returnTo?: string,
 ) {
   const target = isSafeReturnTo(returnTo) ? returnTo : DEFAULT_RETURN_TO;
-  const url = new URL(target, req.url);
+  const url = new URL(target, `${publicOrigin(req)}/`);
   for (const [key, value] of Object.entries(params)) {
     url.searchParams.set(key, value);
   }
