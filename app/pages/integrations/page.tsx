@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Suspense, useEffect, useRef, useState } from "react";
+import React, { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "react-toastify";
 import { IconType } from "react-icons";
@@ -16,7 +16,7 @@ import {
 } from "@/app/hooks/use-integration-status";
 import ConnectIntegrationModal from "@/app/components/connect-integration-modal";
 import { useMsal } from "@azure/msal-react";
-import { getGraphAccessToken } from "@/app/lib/auth-client";
+import { getFreshIdToken, getGraphAccessToken } from "@/app/lib/auth-client";
 
 type LiveProvider = "jira" | "github" | "swagger" | "teams";
 
@@ -247,6 +247,24 @@ function IntegrationsContent() {
   const [busy, setBusy] = useState<string | null>(null);
   const [connectProvider, setConnectProvider] = useState<Exclude<LiveProvider, "teams"> | null>(null);
   const handledCallback = useRef(false);
+  const githubLinkAttempted = useRef(false);
+
+  /** Forward the GitHub OAuth cookie to AppAtlas token vault (server-side). */
+  const linkGithubVault = useCallback(async () => {
+    const post = async (forceRefresh: boolean) => {
+      const token = await getFreshIdToken(instance, accounts, forceRefresh);
+      return fetch("/api/integrations/github/link", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+    };
+    let res = await post(false);
+    if (res.status === 401) res = await post(true);
+    return res;
+  }, [instance, accounts]);
 
   useEffect(() => {
     if (handledCallback.current) return;
@@ -274,6 +292,9 @@ function IntegrationsContent() {
               },
             },
           ]);
+          // Best-effort vault link; cookie connect already succeeded.
+          await linkGithubVault().catch(() => undefined);
+          githubLinkAttempted.current = true;
           const who = status?.org
             ? status.username
               ? `${status.org} (@${status.username})`
@@ -293,7 +314,15 @@ function IntegrationsContent() {
     };
 
     void persist();
-  }, [searchParams, router, saveProviders]);
+  }, [searchParams, router, saveProviders, linkGithubVault]);
+
+  // People who connected GitHub earlier: link the vault once when cookies say connected.
+  useEffect(() => {
+    if (githubLinkAttempted.current || loading) return;
+    if (!github.connected || github.health !== "active") return;
+    githubLinkAttempted.current = true;
+    void linkGithubVault().catch(() => undefined);
+  }, [github.connected, github.health, loading, linkGithubVault]);
 
   const resolveTool = (tool: IntegrationTool): IntegrationTool => {
     if (tool.provider === "swagger") {
