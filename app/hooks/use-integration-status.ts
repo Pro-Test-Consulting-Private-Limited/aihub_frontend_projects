@@ -297,9 +297,12 @@ export function useIntegrationStatus(opts?: { live?: boolean; refreshMs?: number
       }
 
       if (provider !== "teams") {
-        await fetch(`/api/auth/${provider}/disconnect`, { method: "POST" }).catch(
-          () => undefined,
-        );
+        // Pass Authorization so GitHub disconnect can also DELETE the AppAtlas vault row.
+        const auth = await authHeaders(false);
+        await fetch(`/api/auth/${provider}/disconnect`, {
+          method: "POST",
+          headers: auth,
+        }).catch(() => undefined);
       }
 
       await refresh();

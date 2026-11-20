@@ -16,9 +16,10 @@ import {
   TbListCheck,
   TbPlus,
 } from "react-icons/tb";
-import { SiJira, SiSwagger } from "react-icons/si";
+import { SiGithub, SiJira, SiSwagger } from "react-icons/si";
 import type { Canvas, CanvasSummary } from "@/app/interfaces/appatlas";
 import type { CanvasSwagger } from "@/app/lib/canvas-swagger";
+import { gitSyncDotClass, gitSyncTone, repoNameOnly, type GitSyncStatusInput } from "@/app/lib/git-sync-ui";
 
 const iconButton =
   "flex h-[26px] w-[26px] items-center justify-center rounded-[6px] text-[#5E6066] hover:bg-[#F2EBFB] hover:text-[#8664F2] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[#5E6066] dark:text-[#9ca3af] dark:hover:bg-[#2a2440]";
@@ -46,6 +47,17 @@ type Props = {
   onConnect: (c: CanvasSummary) => void;
   /** Swagger spec connected to the selected canvas. Independent of Jira. */
   swagger: CanvasSwagger | null;
+  gitConnected?: boolean;
+  gitCard?: {
+    repo: string | null;
+    branch?: string | null;
+    lastStatus: string | null;
+    lastSyncedAt: number | null;
+    lastError?: string | null;
+    dirty?: boolean;
+    syncing?: boolean;
+    masterOff?: boolean;
+  } | null;
   view: "screens" | "api" | "sit";
   /** e.g. "6 Modules, 25 End-Points" */
   apiSummary: string;
@@ -236,7 +248,7 @@ export function Explorer(props: Props) {
                       />
                     </div>
                   )}
-                  {active && (c.isMine || c.jiraProjectKey || props.swagger) && (
+                  {active && (c.isMine || c.jiraProjectKey || props.swagger || props.gitConnected) && (
                     <div className="mt-2.5 flex flex-col gap-1.5">
                       {c.jiraProjectKey && (
                         <ConnectedAppButton
@@ -256,7 +268,10 @@ export function Explorer(props: Props) {
                           onConnect={props.onConnect}
                         />
                       )}
-                      {!c.jiraProjectKey && !props.swagger && (
+                      {props.gitConnected && (
+                        <GitHubExplorerPill canvas={c} gitCard={props.gitCard} onConnect={props.onConnect} />
+                      )}
+                      {!c.jiraProjectKey && !props.swagger && !props.gitConnected && (
                         <ConnectedAppButton
                           canvas={c}
                           label="Connect"
@@ -381,6 +396,7 @@ function ConnectedAppButton({
   title,
   bare,
   onConnect,
+  trailing,
 }: {
   canvas: CanvasSummary;
   label: string;
@@ -388,6 +404,7 @@ function ConnectedAppButton({
   title: string;
   bare?: boolean;
   onConnect: (c: CanvasSummary) => void;
+  trailing?: React.ReactNode;
 }) {
   return (
     <button
@@ -398,14 +415,59 @@ function ConnectedAppButton({
         e.stopPropagation();
         onConnect(canvas);
       }}
-      className="flex min-w-0 items-center justify-center gap-2 rounded-[8px] border border-[#C9B8F7] bg-[#F4EFFE] py-2 text-[12.5px] font-medium text-[#8664F2] hover:bg-[#EDE4FD] disabled:cursor-default disabled:hover:bg-[#F4EFFE] dark:border-[#3a3060] dark:bg-[#1e1a2e]"
+      className="flex h-[36px] min-w-0 w-full items-center gap-2 rounded-[8px] border border-[#C9B8F7] bg-[#F4EFFE] px-2.5 py-0 text-[12.5px] font-medium text-[#8664F2] hover:bg-[#EDE4FD] disabled:cursor-default disabled:hover:bg-[#F4EFFE] dark:border-[#3a3060] dark:bg-[#1e1a2e]"
     >
       {bare ? (
         icon
       ) : (
-        <span className="flex h-[20px] w-[20px] items-center justify-center rounded-[5px] bg-white shadow-sm dark:bg-[#2a2440]">{icon}</span>
+        <span className="flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-[5px] bg-white shadow-sm dark:bg-[#2a2440]">
+          {icon}
+        </span>
       )}
-      <span>{label}</span>
+      <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+      {trailing}
     </button>
+  );
+}
+
+function GitHubExplorerPill({
+  canvas,
+  gitCard,
+  onConnect,
+}: {
+  canvas: CanvasSummary;
+  gitCard?: GitSyncStatusInput & { repo?: string | null; branch?: string | null; lastSyncedAt?: number | null } | null;
+  onConnect: (c: CanvasSummary) => void;
+}) {
+  const tone = gitSyncTone({
+    connected: true,
+    lastStatus: gitCard?.lastStatus,
+    lastError: gitCard?.lastError,
+    dirty: gitCard?.dirty,
+    syncing: gitCard?.syncing,
+    masterOff: gitCard?.masterOff,
+  });
+  const name = repoNameOnly(gitCard?.repo);
+  const tipParts = [
+    gitCard?.repo ? `Repo: ${gitCard.repo}` : null,
+    gitCard?.branch ? `Branch: ${gitCard.branch}` : null,
+    gitCard?.lastStatus ? `Status: ${gitCard.lastStatus}` : null,
+    gitCard?.lastSyncedAt ? `Last synced: ${new Date(gitCard.lastSyncedAt).toLocaleString()}` : null,
+  ].filter(Boolean);
+  return (
+    <ConnectedAppButton
+      canvas={canvas}
+      label={`GitHub · ${name}`}
+      icon={<SiGithub size={12} color="#24292F" />}
+      title={tipParts.join(" · ") || "Manage GitHub sync"}
+      onConnect={onConnect}
+      trailing={
+        <span
+          className={`h-[8px] w-[8px] shrink-0 rounded-full ${gitSyncDotClass(tone)}`}
+          aria-label={tone}
+          title={tone}
+        />
+      }
+    />
   );
 }

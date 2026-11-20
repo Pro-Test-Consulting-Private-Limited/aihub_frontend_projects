@@ -159,6 +159,17 @@ export default function AtlasWorkspace() {
 
   // Swagger is connected per canvas and is independent of Jira (canvas.jiraProjectKey).
   const [swagger, setSwagger] = useState<CanvasSwagger | null>(null);
+  const [gitConnected, setGitConnected] = useState(false);
+  const [gitCard, setGitCard] = useState<{
+    repo: string | null;
+    branch: string | null;
+    lastStatus: string | null;
+    lastSyncedAt: number | null;
+    lastError: string | null;
+    dirty: boolean;
+    syncing: boolean;
+    masterOff: boolean;
+  } | null>(null);
   const [view, setView] = useState<"screens" | "api" | "sit">("screens");
   const [sitFocus, setSitFocus] = useState<{ workbookId?: string; ticketKey?: string; testType?: string } | null>(null);
   const [cicdPageTrial, setCicdPageTrial] = useState(false);
@@ -195,6 +206,43 @@ export default function AtlasWorkspace() {
     setChangedNodeIds([]);
     setChangedSinceRelease(null);
   }, [selectedId]);
+
+  const refreshGitStatus = useCallback(
+    (canvasId: string | null) => {
+      if (!canvasId) {
+        setGitConnected(false);
+        setGitCard(null);
+        return;
+      }
+      void Promise.all([
+        client.getCanvasGit(canvasId),
+        client.gitSyncAvailability().catch(() => ({ available: true as boolean })),
+      ])
+        .then(([st, avail]) => {
+          const masterOff = avail.available === false;
+          setGitConnected(Boolean(st.connected));
+          setGitCard({
+            repo: st.repo,
+            branch: st.branch,
+            lastStatus: st.lastStatus,
+            lastSyncedAt: st.lastSyncedAt,
+            lastError: st.lastError,
+            dirty: Boolean(st.dirty),
+            syncing: Boolean(st.syncing),
+            masterOff,
+          });
+        })
+        .catch(() => {
+          setGitConnected(false);
+          setGitCard(null);
+        });
+    },
+    [client],
+  );
+
+  useEffect(() => {
+    refreshGitStatus(selectedId);
+  }, [selectedId, refreshGitStatus]);
 
   useEffect(() => {
     const pid = project?.id || projectId;
@@ -474,7 +522,12 @@ export default function AtlasWorkspace() {
 
   const save = async (name: string, description: string) => {
     if (!unsaved) return;
-    const created = await client.saveCanvas({ sessionId: unsaved.id, name, description: description || undefined });
+    const created = await client.saveCanvas({
+      sessionId: unsaved.id,
+      name,
+      description: description || undefined,
+      projectId: project?.id || projectId || undefined,
+    });
     setSaveOpen(false);
     setUnsaved(null);
     setCanvases((prev) => [created, ...prev.filter((c) => c.id !== created.id)]);
@@ -705,6 +758,8 @@ export default function AtlasWorkspace() {
             onFocusNode={setFocusNodeId}
             onConnect={setConnectFor}
             swagger={swagger}
+            gitConnected={gitConnected}
+            gitCard={gitCard}
             view={view}
             apiSummary={apiSummary}
             onView={(v) => {
@@ -936,6 +991,12 @@ export default function AtlasWorkspace() {
           onSwaggerChange={onSwaggerChange}
           onConnected={onJiraConnected}
           onClose={() => setConnectFor(null)}
+          projectId={project?.id || projectId}
+          gitConnected={connectFor.id === selectedId ? gitConnected : false}
+          onGitChange={() => {
+            refreshGitStatus(connectFor.id);
+            setConnectFor(null);
+          }}
         />
       )}
     </div>
