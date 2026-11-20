@@ -292,9 +292,9 @@ function IntegrationsContent() {
               },
             },
           ]);
-          // Best-effort vault link; cookie connect already succeeded.
-          await linkGithubVault().catch(() => undefined);
+          // Best-effort vault link; set the guard first so the page-load effect cannot double-call.
           githubLinkAttempted.current = true;
+          await linkGithubVault().catch(() => undefined);
           const who = status?.org
             ? status.username
               ? `${status.org} (@${status.username})`
