@@ -349,10 +349,19 @@ function GithubStep({
       setBusy("load");
       setError(null);
       try {
+        type ProjectGitMap = {
+          connected: boolean;
+          owner?: string;
+          repo?: string;
+          branch?: string;
+          autoNewCanvases?: boolean;
+          folderPrefix?: string;
+        };
+        const emptyMap: ProjectGitMap = { connected: false };
         const [st, allow, map] = await Promise.all([
           client.getCanvasGit(canvas.id).catch(() => null),
-          client.gitSyncAllowedRepos().catch(() => ({ repos: [], wildcardOwners: [] })),
-          pid ? client.getProjectGit(pid).catch(() => ({ connected: false })) : Promise.resolve({ connected: false }),
+          client.gitSyncAllowedRepos().catch(() => ({ repos: [] as string[], wildcardOwners: [] as string[] })),
+          pid ? client.getProjectGit(pid).catch((): ProjectGitMap => emptyMap) : Promise.resolve(emptyMap),
         ]);
         if (cancelled) return;
         if (st) {
