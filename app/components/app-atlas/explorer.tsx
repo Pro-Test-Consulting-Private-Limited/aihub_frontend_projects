@@ -16,7 +16,7 @@ import {
   TbListCheck,
   TbPlus,
 } from "react-icons/tb";
-import { SiJira, SiSwagger } from "react-icons/si";
+import { SiGithub, SiJira, SiSwagger } from "react-icons/si";
 import type { Canvas, CanvasSummary } from "@/app/interfaces/appatlas";
 import type { CanvasSwagger } from "@/app/lib/canvas-swagger";
 
@@ -46,6 +46,8 @@ type Props = {
   onConnect: (c: CanvasSummary) => void;
   /** Swagger spec connected to the selected canvas. Independent of Jira. */
   swagger: CanvasSwagger | null;
+  gitConnected?: boolean;
+  gitCard?: { repo: string | null; lastStatus: string | null; lastSyncedAt: number | null } | null;
   view: "screens" | "api" | "sit";
   /** e.g. "6 Modules, 25 End-Points" */
   apiSummary: string;
@@ -236,7 +238,7 @@ export function Explorer(props: Props) {
                       />
                     </div>
                   )}
-                  {active && (c.isMine || c.jiraProjectKey || props.swagger) && (
+                  {active && (c.isMine || c.jiraProjectKey || props.swagger || props.gitConnected) && (
                     <div className="mt-2.5 flex flex-col gap-1.5">
                       {c.jiraProjectKey && (
                         <ConnectedAppButton
@@ -256,7 +258,24 @@ export function Explorer(props: Props) {
                           onConnect={props.onConnect}
                         />
                       )}
-                      {!c.jiraProjectKey && !props.swagger && (
+                      {props.gitConnected && (
+                        <ConnectedAppButton
+                          canvas={c}
+                          label={
+                            props.gitCard?.repo
+                              ? `GitHub · ${props.gitCard.repo}${props.gitCard.lastStatus ? ` · ${props.gitCard.lastStatus}` : ""}`
+                              : "GitHub"
+                          }
+                          icon={<SiGithub size={12} color="#24292F" />}
+                          title={
+                            props.gitCard?.lastSyncedAt
+                              ? `Last synced ${new Date(props.gitCard.lastSyncedAt).toLocaleString()}`
+                              : "Manage GitHub sync"
+                          }
+                          onConnect={props.onConnect}
+                        />
+                      )}
+                      {!c.jiraProjectKey && !props.swagger && !props.gitConnected && (
                         <ConnectedAppButton
                           canvas={c}
                           label="Connect"

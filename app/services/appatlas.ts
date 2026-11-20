@@ -251,8 +251,60 @@ export function atlasClient({ instance, accounts }: Msal) {
       const view = opts?.view === "full" ? "full" : "lite";
       return request<Canvas>(`/canvases/${id}?view=${view}`);
     },
-    saveCanvas: (body: { sessionId: string; name: string; description?: string }) =>
+    saveCanvas: (body: { sessionId: string; name: string; description?: string; projectId?: string }) =>
       request<Canvas>("/canvases", json("POST", body)),
+    gitSyncAvailability: () =>
+      request<{ available: boolean; reason?: "master_off" | "not_configured" }>("/git-sync/availability"),
+    gitSyncAllowedRepos: () =>
+      request<{ repos: string[]; wildcardOwners: string[] }>("/git-sync/allowed-repos"),
+    getProjectGit: (projectId: string) =>
+      request<{
+        connected: boolean;
+        owner?: string;
+        repo?: string;
+        branch?: string;
+        autoNewCanvases?: boolean;
+        folderPrefix?: string;
+      }>(`/projects/${encodeURIComponent(projectId)}/git`),
+    putProjectGit: (
+      projectId: string,
+      body: {
+        owner?: string;
+        repo?: string;
+        branch?: string;
+        autoNewCanvases?: boolean;
+        confirmPublic?: boolean;
+      },
+    ) => request(`/projects/${encodeURIComponent(projectId)}/git`, json("PUT", body)),
+    deleteProjectGit: (projectId: string) =>
+      request<{ ok: boolean }>(`/projects/${encodeURIComponent(projectId)}/git`, json("DELETE")),
+    getCanvasGit: (canvasId: string) =>
+      request<{
+        connected: boolean;
+        projectId: string | null;
+        repo: string | null;
+        owner: string | null;
+        branch: string | null;
+        folder: string | null;
+        lastStatus: string | null;
+        lastError: string | null;
+        lastSyncedAt: number | null;
+        lastCommitSha: string | null;
+        dirty: boolean;
+      }>(`/canvases/${encodeURIComponent(canvasId)}/git`),
+    connectCanvasGit: (
+      canvasId: string,
+      body: {
+        projectId?: string;
+        owner?: string;
+        repo?: string;
+        branch?: string;
+        autoNewCanvases?: boolean;
+        confirmPublic?: boolean;
+      },
+    ) => request(`/canvases/${encodeURIComponent(canvasId)}/git`, json("PUT", body)),
+    disconnectCanvasGit: (canvasId: string) =>
+      request<{ connected: boolean }>(`/canvases/${encodeURIComponent(canvasId)}/git`, json("DELETE")),
     renameCanvas: (id: string, body: { name?: string; description?: string }) =>
       request<Canvas>(`/canvases/${id}`, json("PATCH", body)),
     deleteCanvas: (id: string) => request<void>(`/canvases/${id}`, json("DELETE")),

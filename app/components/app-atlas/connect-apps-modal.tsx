@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { TbArrowLeft, TbLink, TbLoader2 } from "react-icons/tb";
-import { SiJira, SiLinear, SiSwagger } from "react-icons/si";
+import { SiGithub, SiJira, SiLinear, SiSwagger } from "react-icons/si";
 import { FaBook, FaCode, FaMicrosoft, FaSlack } from "react-icons/fa";
 import type { Canvas, CanvasSummary, JiraProject } from "@/app/interfaces/appatlas";
 import type { AtlasClient } from "@/app/services/appatlas";
@@ -17,7 +17,7 @@ import { clearToken, getEnvironment, getToken, selectEnvProfile, setEnvironment,
 import { EnvProfileChips } from "@/app/components/app-atlas/endpoint-tests/env-profile-chips";
 import { Modal, fieldInput, fieldLabel, outlineButton, primaryButton } from "./modal";
 
-type AppId = "jira" | "linear" | "swagger" | "redocly" | "stoplight" | "teams" | "slack";
+type AppId = "jira" | "linear" | "swagger" | "redocly" | "stoplight" | "teams" | "slack" | "github";
 
 const CATEGORIES: { title: string; apps: { id: AppId; name: string; icon: React.ReactNode }[] }[] = [
   {
@@ -42,9 +42,13 @@ const CATEGORIES: { title: string; apps: { id: AppId; name: string; icon: React.
       { id: "slack", name: "Slack", icon: <FaSlack size={26} color="#4A154B" /> },
     ],
   },
+  {
+    title: "Source Control & Version Control",
+    apps: [{ id: "github", name: "GitHub", icon: <SiGithub size={26} color="#24292F" /> }],
+  },
 ];
 
-const CAN_MAP: AppId[] = ["jira", "swagger", "teams"];
+const CAN_MAP: AppId[] = ["jira", "swagger", "teams", "github"];
 
 function healthLabel(health: ConnectionHealth, linkedOnCanvas: boolean): string {
   if (health === "active") return linkedOnCanvas ? "Active · linked to this canvas" : "Active · ready to connect";
@@ -60,6 +64,9 @@ export function ConnectAppsModal({
   onSwaggerChange,
   onConnected,
   onClose,
+  projectId,
+  gitConnected = false,
+  onGitChange,
 }: {
   client: AtlasClient;
   canvas: CanvasSummary;
@@ -68,35 +75,60 @@ export function ConnectAppsModal({
   onSwaggerChange: (conn: CanvasSwagger | null) => void;
   onConnected: (c: Canvas) => void;
   onClose: () => void;
+  projectId?: string | null;
+  gitConnected?: boolean;
+  onGitChange?: () => void;
 }) {
   const router = useRouter();
   const {
     jira,
+    github,
     swagger: swaggerIntegration,
     teams,
     loading: statusLoading,
     probing,
   } = useIntegrationStatus({ live: true, refreshMs: 60_000 });
   const teamsConnected = teams.connected;
+  const [gitAvailable, setGitAvailable] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    client
+      .gitSyncAvailability()
+      .then((r) => {
+        if (!cancelled) setGitAvailable(r.available);
+      })
+      .catch(() => {
+        if (!cancelled) setGitAvailable(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
 
   const healthOf = (id: AppId): ConnectionHealth => {
     if (id === "jira") return jira.health;
     if (id === "swagger") return swaggerIntegration.health;
     if (id === "teams") return teams.health;
+    if (id === "github") {
+      if (gitAvailable === false) return "disconnected";
+      return github.health;
+    }
     return "disconnected";
   };
 
   /** Usable for Connect: Active only. Expired/disconnected must go to Integrations. */
   const canUse = (id: AppId) => {
+    if (id === "github" && gitAvailable === false) return false;
     const h = healthOf(id);
     return h === "active";
   };
 
-  const [step, setStep] = useState<"apps" | "jira" | "swagger" | "teams">("apps");
+  const [step, setStep] = useState<"apps" | "jira" | "swagger" | "teams" | "github">("apps");
   const [picked, setPicked] = useState<AppId | null>(canvas.jiraProjectKey ? "jira" : null);
 
   const confirmPick = () => {
-    if (picked === "jira" || picked === "swagger" || picked === "teams") setStep(picked);
+    if (picked === "jira" || picked === "swagger" || picked === "teams" || picked === "github") setStep(picked);
   };
 
   const stepTitle =
@@ -106,7 +138,9 @@ export function ConnectAppsModal({
         ? "Connect Jira"
         : step === "teams"
           ? "Link Teams channel"
-          : "Connect Swagger";
+          : step === "github"
+            ? "Connect GitHub"
+            : "Connect Swagger";
 
   return (
     <Modal title={stepTitle} onClose={onClose} width={480}>
@@ -127,19 +161,25 @@ export function ConnectAppsModal({
                   const linkedOnCanvas =
                     (app.id === "jira" && !!canvas.jiraProjectKey) ||
                     (app.id === "swagger" && !!swagger) ||
-                    (app.id === "teams" && !!linkedTeams?.teamId);
+                    (app.id === "teams" && !!linkedTeams?.teamId) ||
+                    (app.id === "github" && gitConnected);
                   const selected = picked === app.id;
                   const expired = health === "expired";
-                  const needsIntegrate = mappable && (health === "disconnected" || health === "error" || expired);
+                  const gitAdminOff = app.id === "github" && gitAvailable === false;
+                  const needsIntegrate =
+                    mappable && !gitAdminOff && (health === "disconnected" || health === "error" || expired);
 
-                  const statusText = mappable
-                    ? healthLabel(health, linkedOnCanvas)
-                    : "Coming soon";
+                  const statusText = gitAdminOff
+                    ? "Not enabled by your admin"
+                    : mappable
+                      ? healthLabel(health, linkedOnCanvas)
+                      : "Coming soon";
                   const tooltip = selected
                     ? `${app.name}: ${statusText}. Selected. Click again to unselect.`
                     : `${app.name}: ${statusText}`;
 
                   const onAppClick = () => {
+                    if (gitAdminOff) return;
                     if (needsIntegrate) {
                       router.push("/integrations");
                       return;
@@ -169,6 +209,7 @@ export function ConnectAppsModal({
                                 ? "border border-dashed border-[#C4B5E8] opacity-70 hover:border-[#8664F2] hover:opacity-100"
                                 : "cursor-default border border-[#E5E7EB] opacity-40 grayscale dark:border-[#2a2a2a]"
                       }`}
+                      disabled={gitAdminOff}
                     >
                       {app.icon}
                       {/* Connection status: corner chip (green / amber / +) */}
@@ -230,6 +271,19 @@ export function ConnectAppsModal({
           onBack={() => setStep("apps")}
           onConnected={onConnected}
         />
+      ) : step === "github" ? (
+        <GithubStep
+          client={client}
+          canvas={canvas}
+          projectId={projectId}
+          githubConnected={github.connected && github.health === "active"}
+          gitConnected={gitConnected}
+          onBack={() => setStep("apps")}
+          onConnected={() => {
+            onGitChange?.();
+            onClose();
+          }}
+        />
       ) : (
         <SwaggerStep
           client={client}
@@ -241,6 +295,248 @@ export function ConnectAppsModal({
         />
       )}
     </Modal>
+  );
+}
+
+function GithubStep({
+  client,
+  canvas,
+  projectId,
+  githubConnected,
+  gitConnected,
+  onBack,
+  onConnected,
+}: {
+  client: AtlasClient;
+  canvas: CanvasSummary;
+  projectId?: string | null;
+  githubConnected: boolean;
+  gitConnected: boolean;
+  onBack: () => void;
+  onConnected: () => void;
+}) {
+  const router = useRouter();
+  const [busy, setBusy] = useState<"load" | "connect" | "disconnect" | null>("load");
+  const [error, setError] = useState<string | null>(null);
+  const [mapping, setMapping] = useState<{
+    connected: boolean;
+    owner?: string;
+    repo?: string;
+    branch?: string;
+    autoNewCanvases?: boolean;
+  } | null>(null);
+  const [allowed, setAllowed] = useState<{ repos: string[]; wildcardOwners: string[] }>({
+    repos: [],
+    wildcardOwners: [],
+  });
+  const [repo, setRepo] = useState("");
+  const [branch, setBranch] = useState("appatlas-sync");
+  const [autoNew, setAutoNew] = useState(false);
+  const [status, setStatus] = useState<{
+    connected: boolean;
+    folder: string | null;
+    repo: string | null;
+    branch: string | null;
+    lastStatus: string | null;
+  } | null>(null);
+
+  const pid = projectId || null;
+  const folderPreview = pid ? `projects/${pid}/canvases/${canvas.id}/` : null;
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setBusy("load");
+      setError(null);
+      try {
+        const [st, allow, map] = await Promise.all([
+          client.getCanvasGit(canvas.id).catch(() => null),
+          client.gitSyncAllowedRepos().catch(() => ({ repos: [], wildcardOwners: [] })),
+          pid ? client.getProjectGit(pid).catch(() => ({ connected: false })) : Promise.resolve({ connected: false }),
+        ]);
+        if (cancelled) return;
+        if (st) {
+          setStatus({
+            connected: st.connected,
+            folder: st.folder,
+            repo: st.repo,
+            branch: st.branch,
+            lastStatus: st.lastStatus,
+          });
+        }
+        setAllowed(allow);
+        setMapping(map);
+        if (map.connected && map.owner && map.repo) {
+          setRepo(`${map.owner}/${map.repo}`);
+          setBranch(map.branch || "appatlas-sync");
+          setAutoNew(Boolean(map.autoNewCanvases));
+        } else if (allow.repos[0]) {
+          setRepo(allow.repos[0]);
+        }
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Could not load GitHub sync.");
+      } finally {
+        if (!cancelled) setBusy(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [client, canvas.id, pid]);
+
+  const connect = async (confirmPublic = false) => {
+    if (!pid) {
+      setError("Open App Atlas from a project so this canvas has a project id.");
+      return;
+    }
+    setBusy("connect");
+    setError(null);
+    try {
+      const body: {
+        projectId: string;
+        repo?: string;
+        branch?: string;
+        autoNewCanvases?: boolean;
+        confirmPublic?: boolean;
+      } = { projectId: pid, confirmPublic: confirmPublic || undefined };
+      if (!mapping?.connected) {
+        body.repo = repo.trim();
+        body.branch = branch.trim() || "appatlas-sync";
+        body.autoNewCanvases = autoNew;
+      }
+      await client.connectCanvasGit(canvas.id, body);
+      onConnected();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Connect failed";
+      if (/public/i.test(msg) && !confirmPublic) {
+        if (window.confirm("This repository is public. Canvas data will be visible on GitHub. Continue?")) {
+          await connect(true);
+          return;
+        }
+      }
+      setError(msg);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const disconnect = async () => {
+    setBusy("disconnect");
+    setError(null);
+    try {
+      await client.disconnectCanvasGit(canvas.id);
+      onConnected();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Disconnect failed");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  if (!githubConnected) {
+    return (
+      <div className="mt-4 space-y-3">
+        <p className="text-[13px] text-[#5A5A5A]">Connect your GitHub account in Integrations first, then return here.</p>
+        <div className="flex gap-2">
+          <button type="button" className={outlineButton} onClick={onBack}>
+            <TbArrowLeft size={14} /> Back
+          </button>
+          <button type="button" className={primaryButton} onClick={() => router.push("/integrations")}>
+            Open Integrations
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4 space-y-3">
+      {busy === "load" && <p className="text-[12px] text-[#7E7E7E]">Loading…</p>}
+      {error && <p className="text-[12px] text-[#DC3545]">{error}</p>}
+      {(gitConnected || status?.connected) && (
+        <div className="rounded-[10px] border border-[#E6E1F5] bg-[#FAFAFA] p-3 text-[12.5px] dark:border-[#2a2a2a] dark:bg-[#101010]">
+          <div>
+            <strong>Repo:</strong> {status?.repo || repo}
+          </div>
+          <div>
+            <strong>Branch:</strong> {status?.branch || branch}
+          </div>
+          <div className="break-all">
+            <strong>Folder:</strong> {status?.folder || folderPreview}
+          </div>
+          {status?.lastStatus && (
+            <div>
+              <strong>Status:</strong> {status.lastStatus}
+            </div>
+          )}
+        </div>
+      )}
+      {!gitConnected && mapping?.connected && (
+        <div className="rounded-[10px] border border-[#E6E1F5] bg-[#FAFAFA] p-3 text-[12.5px] dark:border-[#2a2a2a] dark:bg-[#101010]">
+          <div>
+            Project repo: {mapping.owner}/{mapping.repo}
+          </div>
+          <div>Branch: {mapping.branch || "appatlas-sync"}</div>
+          <div className="break-all">Folder: {folderPreview}</div>
+        </div>
+      )}
+      {!gitConnected && !mapping?.connected && (
+        <>
+          <label className={fieldLabel}>
+            Repository
+            {allowed.repos.length > 0 ? (
+              <select className={fieldInput} value={repo} onChange={(e) => setRepo(e.target.value)}>
+                {allowed.repos.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                className={fieldInput}
+                value={repo}
+                onChange={(e) => setRepo(e.target.value)}
+                placeholder={
+                  allowed.wildcardOwners.length
+                    ? `${allowed.wildcardOwners[0]}/repo-name`
+                    : "owner/repo (must be allowlisted)"
+                }
+              />
+            )}
+          </label>
+          <label className={fieldLabel}>
+            Branch
+            <input className={fieldInput} value={branch} onChange={(e) => setBranch(e.target.value)} />
+          </label>
+          <label className="flex items-center gap-2 text-[12.5px] text-[#5A5A5A]">
+            <input type="checkbox" checked={autoNew} onChange={(e) => setAutoNew(e.target.checked)} />
+            Automatically connect new canvases in this project
+          </label>
+        </>
+      )}
+      <div className="flex flex-wrap gap-2 pt-1">
+        <button type="button" className={outlineButton} onClick={onBack}>
+          <TbArrowLeft size={14} /> Back
+        </button>
+        {(gitConnected || status?.connected) && (
+          <button type="button" className={outlineButton} disabled={busy !== null} onClick={disconnect}>
+            {busy === "disconnect" ? "Disconnecting…" : "Disconnect"}
+          </button>
+        )}
+        {!gitConnected && !status?.connected && (
+          <button type="button" className={primaryButton} disabled={busy !== null || !pid} onClick={() => connect(false)}>
+            {busy === "connect" ? (
+              <>
+                <TbLoader2 className="animate-spin" size={14} /> Connecting…
+              </>
+            ) : (
+              "Connect"
+            )}
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 
