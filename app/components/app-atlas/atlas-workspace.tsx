@@ -121,6 +121,8 @@ const AVATAR_COLORS = ["bg-[#3B82F6]", "bg-[#22C55E]", "bg-[#8664F2]", "bg-[#E19
 export default function AtlasWorkspace() {
   const { instance, accounts } = useMsal();
   const client = useMemo(() => atlasClient({ instance, accounts }), [instance, accounts]);
+  /** Resolve once per mount (not inline in JSX) so minifiers cannot negate an IIFE flag check. */
+  const sitUiV2 = useMemo(() => isSitUiV2Enabled(), []);
   const router = useRouter();
   const searchParams = useSearchParams();
   const { projects, loading: projectsLoading } = useProjects();
@@ -780,7 +782,7 @@ export default function AtlasWorkspace() {
           {tab === "cicd" ? (
             <CicdView client={client} canvasId={canvas?.id ?? null} />
           ) : tab === "sit" || (tab === "canvas" && view === "sit") ? (
-            isSitUiV2Enabled() ? (
+            sitUiV2 ? (
               <SitTestingViewV2
                 client={client}
                 canvasId={canvas?.id ?? null}
