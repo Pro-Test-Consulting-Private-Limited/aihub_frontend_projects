@@ -2,7 +2,8 @@
 
 import { useMemo, useState, useEffect, useRef } from "react";
 import { TbChevronDown, TbChevronRight, TbPlus } from "react-icons/tb";
-import type { SitSheetRow, SitWorkbook } from "@/app/interfaces/appatlas";
+import type { SitEpic, SitSheetRow, SitWorkbook } from "@/app/interfaces/appatlas";
+import { displayModuleFeature } from "@/app/lib/sit-module-feature";
 import { CopyField, OriginBadge } from "./sit-v2-bits";
 
 const TYPE_STYLE: Record<string, string> = {
@@ -84,6 +85,7 @@ function TestDataBlock({ row }: { row: SitSheetRow }) {
 
 export function SitV2Grid({
   workbook,
+  epics,
   editMode,
   ticketFilter,
   typeFilter,
@@ -96,6 +98,7 @@ export function SitV2Grid({
   onAdd,
 }: {
   workbook: SitWorkbook;
+  epics: SitEpic[];
   editMode: boolean;
   ticketFilter: string | "all";
   typeFilter: string | null;
@@ -149,7 +152,7 @@ export function SitV2Grid({
   const drawerRow = rows.find((r) => r.id === drawer);
 
   return (
-    <div className="flex h-[calc(100%-2.5rem)] min-h-[320px] overflow-hidden rounded-[10px] border border-[#e2e6ef] bg-white dark:border-[#1a1a1a] dark:bg-[#101010]">
+    <div className="flex h-full min-h-0 flex-1 overflow-hidden rounded-[10px] border border-[#e2e6ef] bg-white dark:border-[#1a1a1a] dark:bg-[#101010]">
       <div className="min-w-0 flex-1 overflow-auto">
         <table className="min-w-[1100px] w-full border-collapse text-[12px]">
           <thead className="sticky top-0 z-[2] bg-[#1F4E78] text-white">
@@ -183,6 +186,7 @@ export function SitV2Grid({
             {rows.map((row) => {
               const open = !!expanded[row.id];
               const edited = row.cells.edited === "1";
+              const mf = displayModuleFeature(row.cells, epics);
               return (
                 <tr
                   key={row.id}
@@ -212,27 +216,11 @@ export function SitV2Grid({
                       {row.cells.caseId || row.cells.tcId}
                     </button>
                   </td>
-                  <td className="px-2 py-2 align-top">
-                    {editMode ? (
-                      <input
-                        className="w-full rounded border border-transparent bg-transparent px-1 hover:border-[#e2e6ef] focus:border-[#8664F2]"
-                        defaultValue={row.cells.module}
-                        onBlur={(e) => schedulePatch(row.id, { module: e.target.value })}
-                      />
-                    ) : (
-                      row.cells.module
-                    )}
+                  <td className="px-2 py-2 align-top" title="Derived from Jira epic (not editable)">
+                    {mf.module}
                   </td>
-                  <td className="px-2 py-2 align-top">
-                    {editMode ? (
-                      <input
-                        className="w-full rounded border border-transparent bg-transparent px-1 hover:border-[#e2e6ef] focus:border-[#8664F2]"
-                        defaultValue={row.cells.feature}
-                        onBlur={(e) => schedulePatch(row.id, { feature: e.target.value })}
-                      />
-                    ) : (
-                      row.cells.feature
-                    )}
+                  <td className="px-2 py-2 align-top" title="Derived from ticket summary (not editable)">
+                    {mf.feature}
                   </td>
                   <td className="px-2 py-2 align-top">
                     <div className="flex flex-wrap gap-1">

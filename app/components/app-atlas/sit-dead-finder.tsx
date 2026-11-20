@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import type { DeadFlag, DeadFlagHit, SitDeadAudit } from "@/app/interfaces/appatlas";
 
 export const DEAD_FLAG_LABEL: Record<DeadFlag, string> = {
@@ -85,6 +86,96 @@ export function DeadTestFinderStrip({
       <span className="ml-auto text-[10.5px] text-[#92400e]/70 dark:text-[#FCD34D]/70">
         Stub, empty oracle, orphan, duplicate  -  no run history needed
       </span>
+    </div>
+  );
+}
+
+/**
+ * Compact toolbar control: "Quality: N flagged" opens a popover with the same filters
+ * as DeadTestFinderStrip (does not push the results grid down).
+ */
+export function DeadTestFinderToolbar({
+  audit,
+  loading,
+  activeFlag,
+  onFlag,
+}: {
+  audit: SitDeadAudit | null;
+  loading?: boolean;
+  activeFlag: DeadFlag | null;
+  onFlag: (flag: DeadFlag | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const flagged = audit?.flaggedRows ?? 0;
+  const summary = audit?.summary;
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  return (
+    <div className="relative" ref={rootRef}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={`rounded-[8px] border px-3 py-1.5 text-[12.5px] font-medium transition ${
+          activeFlag || flagged > 0
+            ? "border-[#fcd34d] bg-[#fffbeb] text-[#92400e]"
+            : "border-[#e2e6ef] text-[#5b647a] dark:border-[#2a2a2a]"
+        }`}
+        title="Dead Test Finder"
+      >
+        {loading && !audit
+          ? "Quality…"
+          : `Quality: ${flagged} flagged${activeFlag ? " · filter on" : ""}`}
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full z-30 mt-1 w-[min(420px,90vw)] rounded-[10px] border border-[#fcd34d] bg-[#fffbeb] p-3 shadow-lg dark:border-[#78350f] dark:bg-[#2a2210]">
+          <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#92400e] dark:text-[#FCD34D]">
+            Dead Test Finder
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              type="button"
+              onClick={() => onFlag(null)}
+              className={`${CHIP} ${
+                activeFlag === null
+                  ? "border-[#d97706] bg-[#d97706] text-white"
+                  : "border-[#fcd34d] bg-white text-[#92400e] dark:bg-[#1a1408] dark:text-[#FCD34D]"
+              }`}
+            >
+              {flagged === 0 ? "0 flagged — looks live" : `${flagged} flagged`}
+            </button>
+            {DEAD_FLAG_ORDER.map((flag) => {
+              const n = summary?.[flag] ?? 0;
+              if (!n && activeFlag !== flag) return null;
+              return (
+                <button
+                  key={flag}
+                  type="button"
+                  onClick={() => onFlag(activeFlag === flag ? null : flag)}
+                  className={`${CHIP} ${
+                    activeFlag === flag
+                      ? "border-[#b45309] bg-[#b45309] text-white"
+                      : "border-[#fcd34d] bg-white text-[#92400e] dark:bg-[#1a1408] dark:text-[#FCD34D]"
+                  }`}
+                >
+                  {DEAD_FLAG_LABEL[flag]} · {n}
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-2 text-[10.5px] text-[#92400e]/70 dark:text-[#FCD34D]/70">
+            Stub, empty oracle, orphan, duplicate — no run history needed
+          </p>
+        </div>
+      )}
     </div>
   );
 }

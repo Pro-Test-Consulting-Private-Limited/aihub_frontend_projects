@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import type { SitWorkbook } from "@/app/interfaces/appatlas";
 
 export type TicketGenChoice = {
   issueKey: string;
@@ -10,12 +11,21 @@ export type TicketGenChoice = {
   caseCount: number;
 };
 
+function ago(ts: number) {
+  const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if (s < 3600) return `${Math.max(1, Math.floor(s / 60))}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+}
+
 export function SitV2GenerateDialog({
   choices,
+  history = [],
   onCancel,
   onConfirm,
 }: {
   choices: TicketGenChoice[];
+  history?: SitWorkbook[];
   onCancel: () => void;
   onConfirm: (choices: TicketGenChoice[]) => void;
 }) {
@@ -44,36 +54,54 @@ export function SitV2GenerateDialog({
           Choose what to do for each. Edited and human rows are never overwritten.
         </p>
         <ul className="mt-3 max-h-64 space-y-3 overflow-y-auto">
-          {existing.map((c) => (
-            <li key={c.issueKey} className="rounded-[8px] border border-[#e2e6ef] p-3 dark:border-[#2a2a2a]">
-              <div className="mb-2 text-[13px] font-medium">
-                {c.issueKey}{" "}
-                <span className="font-normal text-[#8a93a8]">({c.caseCount} cases)</span>
-              </div>
-              <div className="flex flex-col gap-1.5 text-[12.5px]">
-                {(
-                  [
-                    ["open", "Open existing"],
-                    ["new", "Generate new version (keep old)"],
-                    ["append", "Add more cases to existing (append, skip duplicates)"],
-                  ] as const
-                ).map(([mode, label]) => (
-                  <label key={mode} className="flex cursor-pointer items-center gap-2">
-                    <input
-                      type="radio"
-                      name={`mode-${c.issueKey}`}
-                      checked={c.mode === mode}
-                      onChange={() =>
-                        setLocal((prev) => prev.map((x) => (x.issueKey === c.issueKey ? { ...x, mode } : x)))
-                      }
-                      className="accent-[#8664F2]"
-                    />
-                    {label}
-                  </label>
-                ))}
-              </div>
-            </li>
-          ))}
+          {existing.map((c) => {
+            const versions = history
+              .filter((h) => h.sourceIssueKeys.includes(c.issueKey))
+              .slice(0, 5);
+            return (
+              <li key={c.issueKey} className="rounded-[8px] border border-[#e2e6ef] p-3 dark:border-[#2a2a2a]">
+                <div className="mb-2 text-[13px] font-medium">
+                  {c.issueKey}{" "}
+                  <span className="font-normal text-[#8a93a8]">
+                    ({c.caseCount} cases
+                    {versions.length > 1 ? ` · ${versions.length} versions` : ""})
+                  </span>
+                </div>
+                {versions.length > 0 && (
+                  <ul className="mb-2 space-y-0.5 rounded-[6px] bg-[#fafafa] px-2 py-1.5 text-[11px] text-[#6b7280] dark:bg-[#141414]">
+                    {versions.map((h) => (
+                      <li key={h.id}>
+                        {ago(h.createdAt)} · {h.generator} ·{" "}
+                        {h.sheets.find((s) => s.kind === "test-cases")?.rows.length || 0} cases
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <div className="flex flex-col gap-1.5 text-[12.5px]">
+                  {(
+                    [
+                      ["open", "Open existing"],
+                      ["new", "Generate new version (keep old)"],
+                      ["append", "Add more cases to existing (append, skip duplicates)"],
+                    ] as const
+                  ).map(([mode, label]) => (
+                    <label key={mode} className="flex cursor-pointer items-center gap-2">
+                      <input
+                        type="radio"
+                        name={`mode-${c.issueKey}`}
+                        checked={c.mode === mode}
+                        onChange={() =>
+                          setLocal((prev) => prev.map((x) => (x.issueKey === c.issueKey ? { ...x, mode } : x)))
+                        }
+                        className="accent-[#8664F2]"
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              </li>
+            );
+          })}
         </ul>
         {fresh.length > 0 && (
           <p className="mt-3 text-[12px] text-[#6b7280]">

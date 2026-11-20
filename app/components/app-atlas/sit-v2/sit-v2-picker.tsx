@@ -15,14 +15,19 @@ export function SitV2Picker({
   epics,
   selected,
   clarifications,
+  activeTicketKey,
   onChange,
   onClose,
+  onActivateTicket,
 }: {
   epics: SitEpic[];
   selected: SitTicket[];
   clarifications: CanvasClarification[];
+  /** Ticket currently shown in the results grid (Active tag). */
+  activeTicketKey?: string | null;
   onChange: (tickets: SitTicket[]) => void;
   onClose: () => void;
+  onActivateTicket?: (key: string) => void;
 }) {
   const [q, setQ] = useState("");
   const [expanded, setExpanded] = useState<Record<string, boolean>>(() => {
@@ -100,7 +105,7 @@ export function SitV2Picker({
           <div className="flex items-start justify-between gap-3 border-b border-[#eef0f5] px-4 py-3 dark:border-[#1a1a1a]">
             <div>
               <h2 id="sit-picker-title" className="text-[12px] font-semibold uppercase tracking-wide text-[#6b7280]">
-                Epic / Ticket hierarchy
+                Epic / Ticket Hierarchy
               </h2>
               <p className="mt-0.5 text-[12px] text-[#8a93a8]">
                 {epicCount} Epics · {storyCount} Active Stories
@@ -190,7 +195,7 @@ export function SitV2Picker({
                               >
                                 <span className="font-medium text-[#1F1F1F] dark:text-[#ededed]">{t.key}</span>
                                 <span className="text-[#5b647a]">: {t.summary}</span>
-                                <div className="mt-1 flex flex-wrap gap-1.5">
+                                <div className="mt-1 flex flex-wrap items-center gap-1.5">
                                   {rcq && (
                                     <span
                                       className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
@@ -213,9 +218,28 @@ export function SitV2Picker({
                                     {gen
                                       ? `${gen.caseCount} cases · ${gen.generator === "huggingface" ? "AI" : "Template"} · ${ago(gen.at)}${
                                           gen.edited ? " · edited" : ""
-                                        }`
+                                        }${gen.versions > 1 ? ` · v${gen.versions}` : ""}`
                                       : "Not generated"}
                                   </span>
+                                  {activeTicketKey === t.key && (
+                                    <span className="inline-flex items-center gap-0.5 rounded-full bg-[#8664F2] px-2 py-0.5 text-[10px] font-semibold text-white">
+                                      Active →
+                                    </span>
+                                  )}
+                                  {onActivateTicket && (
+                                    <button
+                                      type="button"
+                                      className="text-[10px] font-medium text-[#8664F2] underline-offset-2 hover:underline"
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        setFocusKey(t.key);
+                                        onActivateTicket(t.key);
+                                      }}
+                                    >
+                                      View
+                                    </button>
+                                  )}
                                 </div>
                               </button>
                             </label>

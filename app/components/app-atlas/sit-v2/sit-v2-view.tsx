@@ -6,10 +6,11 @@ import {
   TbLoader2,
   TbPlus,
   TbChevronDown,
-  TbX,
 } from "react-icons/tb";
 import type {
   CanvasClarification,
+  DeadFlag,
+  SitDeadAudit,
   SitEpic,
   SitModelStatus,
   SitSheetRow,
@@ -17,6 +18,7 @@ import type {
   SitWorkbook,
 } from "@/app/interfaces/appatlas";
 import type { AtlasClient } from "@/app/services/appatlas";
+import { DeadTestFinderToolbar, filterRowsByDeadFlag } from "../sit-dead-finder";
 import { SitV2Picker } from "./sit-v2-picker";
 import { SitV2GenerateDialog, type TicketGenChoice } from "./sit-v2-generate-dialog";
 import { SitV2Grid } from "./sit-v2-grid";
@@ -28,14 +30,6 @@ function modelLabel(model: SitModelStatus | null) {
   if (model.state === "unconfigured") return "Not configured";
   if (model.state === "down") return "Down";
   return model.label || "Unknown";
-}
-
-function ago(ts: number) {
-  const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
-  if (s < 60) return `${s}s ago`;
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  return `${Math.floor(s / 86400)}d ago`;
 }
 
 type Progress = Record<string, { status: string; count: number; message?: string }>;
@@ -74,6 +68,9 @@ export function SitTestingViewV2({
   const [originFilter, setOriginFilter] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [undoRow, setUndoRow] = useState<{ workbookId: string; rowId: string } | null>(null);
+  const [deadFlag, setDeadFlag] = useState<DeadFlag | null>(null);
+  const [deadAudit, setDeadAudit] = useState<SitDeadAudit | null>(null);
+  const [deadLoading, setDeadLoading] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const firstRowAt = useRef<number | null>(null);
 
@@ -118,6 +115,39 @@ export function SitTestingViewV2({
     const t = setTimeout(() => setUndoRow(null), 10_000);
     return () => clearTimeout(t);
   }, [undoRow]);
+
+  useEffect(() => {
+    if (!workbook?.id || workbook.id === "pending") {
+      setDeadAudit(null);
+      setDeadFlag(null);
+      return;
+    }
+    let cancelled = false;
+    setDeadLoading(true);
+    void client
+      .getSitWorkbookAudit(workbook.id, canvasId)
+      .then((audit) => {
+        if (!cancelled) setDeadAudit(audit);
+      })
+      .catch(() => {
+        if (!cancelled) setDeadAudit(null);
+      })
+      .finally(() => {
+        if (!cancelled) setDeadLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, workbook?.id, workbook?.updatedAt, canvasId]);
+
+  const activateTicket = (key: string) => {
+    setTicketFilter(key);
+    const match = history.find((h) => h.sourceIssueKeys.includes(key));
+    if (match) setWorkbook(match);
+    const all = epics.flatMap((e) => e.tickets);
+    const t = all.find((x) => x.key === key);
+    if (t && !selected.some((s) => s.key === key)) setSelected((s) => [...s, t]);
+  };
 
   const modelReady = model?.state === "up";
   const modelInactive = model?.state === "idle" || model?.state === "unconfigured" || model?.state === "down";
@@ -305,8 +335,21 @@ export function SitTestingViewV2({
     setWorkbook(res.workbook);
   };
 
+  const displayWorkbook = useMemo(() => {
+    if (!workbook || !deadFlag || !deadAudit) return workbook;
+    return {
+      ...workbook,
+      sheets: workbook.sheets.map((s) =>
+        s.kind !== "test-cases"
+          ? s
+          : { ...s, rows: filterRowsByDeadFlag(s.rows, deadAudit, deadFlag) },
+      ),
+    };
+  }, [workbook, deadFlag, deadAudit]);
+
   const counts = useMemo(() => {
-    const rows = workbook?.sheets.find((s) => s.kind === "test-cases")?.rows.filter((r) => r.cells.deleted !== "1") || [];
+    const rows =
+      workbook?.sheets.find((s) => s.kind === "test-cases")?.rows.filter((r) => r.cells.deleted !== "1") || [];
     let ai = 0;
     let human = 0;
     let edited = 0;
@@ -322,11 +365,12 @@ export function SitTestingViewV2({
 
   const metaProject = projectName || projectKey || "—";
   const metaModule = canvasName || "—";
+  const activeTicketKey = ticketFilter !== "all" ? ticketFilter : workbook?.sourceIssueKeys?.[0] || null;
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-[#f7f8fb] dark:bg-[#0a0a0a]">
-      {/* Toolbar */}
-      <div className="border-b border-[#EEE] bg-white px-4 py-3 dark:border-[#1a1a1a] dark:bg-[#0a0a0a]">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#f7f8fb] dark:bg-[#0a0a0a]">
+      {/* Toolbar + meta only (matches designer mock) */}
+      <div className="shrink-0 border-b border-[#EEE] bg-white px-4 py-3 dark:border-[#1a1a1a] dark:bg-[#0a0a0a]">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1.5 text-[15px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">
@@ -366,6 +410,14 @@ export function SitTestingViewV2({
             >
               Clear All
             </button>
+            {workbook && workbook.id !== "pending" && (
+              <DeadTestFinderToolbar
+                audit={deadAudit}
+                loading={deadLoading}
+                activeFlag={deadFlag}
+                onFlag={setDeadFlag}
+              />
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -435,95 +487,71 @@ export function SitTestingViewV2({
           </div>
         </div>
 
-        {/* Selected chips */}
-        {selected.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {selected.map((t) => (
-              <span
-                key={t.key}
-                className="inline-flex items-center gap-1 rounded-full border border-[#ddd6fe] bg-[#f5f3ff] px-2.5 py-0.5 text-[11.5px] text-[#5b21b6]"
-              >
-                {t.key}
-                <button type="button" aria-label={`Remove ${t.key}`} onClick={() => setSelected((s) => s.filter((x) => x.key !== t.key))}>
-                  <TbX size={12} />
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
-
-        <div className="mt-2 flex flex-wrap gap-3 text-[11.5px] text-[#6b7280]">
+        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11.5px] text-[#6b7280]">
           <span>
-            Project: <strong className="text-[#1F1F1F] dark:text-[#ededed]">{metaProject}</strong>
+            Project Name: <strong className="text-[#1F1F1F] dark:text-[#ededed]">{metaProject}</strong>
           </span>
           <span>
-            Module tested: <strong className="text-[#1F1F1F] dark:text-[#ededed]">{metaModule}</strong>
+            Module Tested: <strong className="text-[#1F1F1F] dark:text-[#ededed]">{metaModule}</strong>
           </span>
           <span>
-            Testing type: <strong className="text-[#1F1F1F] dark:text-[#ededed]">SIT</strong>
+            Testing Type: <strong className="text-[#1F1F1F] dark:text-[#ededed]">SIT</strong>
           </span>
+          {generating && Object.keys(progress).length > 0 && (
+            <span className="text-[#5b21b6]">
+              {Object.entries(progress)
+                .map(([k, v]) =>
+                  v.status === "done"
+                    ? `${k} done (${v.count})`
+                    : v.status === "error"
+                      ? `${k} error`
+                      : `${k} ${v.count}…`,
+                )
+                .join(" · ")}
+            </span>
+          )}
           {saveState !== "idle" && (
             <span className="ml-auto text-[#8664F2]">
               {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved" : "Save failed — retry edit"}
             </span>
           )}
+          {(error || note) && (
+            <span className={`ml-auto max-w-md truncate ${error ? "text-[#b42318]" : "text-[#92400e]"}`} title={error || note || ""}>
+              {error || note}
+              {error && (
+                <button type="button" className="ml-1 underline" onClick={() => setError(null)}>
+                  dismiss
+                </button>
+              )}
+            </span>
+          )}
         </div>
       </div>
 
-      {/* Progress strip */}
-      {generating && Object.keys(progress).length > 0 && (
-        <div className="flex flex-wrap gap-2 border-b border-[#e2e6ef] bg-[#fafafa] px-4 py-2 text-[11.5px] dark:border-[#1a1a1a] dark:bg-[#141414]">
-          {Object.entries(progress).map(([k, v]) => (
-            <span
-              key={k}
-              className={`rounded-full border px-2.5 py-0.5 ${
-                v.status === "done"
-                  ? "border-[#bbf7d0] bg-[#f0fdf4] text-[#166534]"
-                  : v.status === "error"
-                    ? "border-[#fecaca] bg-[#fff5f5] text-[#b91c1c]"
-                    : "border-[#ddd6fe] bg-[#f5f3ff] text-[#5b21b6]"
-              }`}
-            >
-              {k}: {v.status === "done" ? `done (${v.count})` : v.status === "error" ? v.message || "error" : `${v.count} of ~8 cases`}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {(error || note) && (
-        <div
-          className={`mx-4 mt-3 rounded-[8px] border px-3 py-2 text-[12.5px] ${
-            error ? "border-[#f5c2c7] bg-[#fff5f5] text-[#b42318]" : "border-[#fde68a] bg-[#fffbeb] text-[#92400e]"
-          }`}
-        >
-          {error || note}
-        </div>
-      )}
-
-      <div className="min-h-0 flex-1 overflow-hidden p-4">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-3">
         {loading ? (
           <div className="flex items-center gap-2 text-[13px] text-[#8a93a8]">
             <TbLoader2 className="animate-spin" /> Loading…
           </div>
-        ) : workbook ? (
-          <>
-            {/* Filters / counts */}
-            <div className="mb-2 flex flex-wrap items-center gap-2">
+        ) : displayWorkbook ? (
+          <div className="flex min-h-0 flex-1 flex-col gap-2">
+            {/* Compact in-grid chrome: ticket chips + filters (not a Saved-runs list) */}
+            <div className="flex shrink-0 flex-wrap items-center gap-1.5">
               <button
                 type="button"
                 onClick={() => setTicketFilter("all")}
-                className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
                   ticketFilter === "all" ? "bg-[#8664F2] text-white" : "border border-[#e2e6ef] bg-white"
                 }`}
               >
-                All tickets
+                All
               </button>
-              {(workbook.sourceIssueKeys || []).map((k) => (
+              {(displayWorkbook.sourceIssueKeys || []).map((k) => (
                 <button
                   key={k}
                   type="button"
                   onClick={() => setTicketFilter(k)}
-                  className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                  className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
                     ticketFilter === k ? "bg-[#8664F2] text-white" : "border border-[#e2e6ef] bg-white"
                   }`}
                 >
@@ -531,11 +559,11 @@ export function SitTestingViewV2({
                 </button>
               ))}
               <select
-                className="rounded-[6px] border border-[#e2e6ef] bg-white px-2 py-1 text-[11px] dark:border-[#2a2a2a] dark:bg-[#141414]"
+                className="rounded-[6px] border border-[#e2e6ef] bg-white px-2 py-0.5 text-[11px] dark:border-[#2a2a2a] dark:bg-[#141414]"
                 value={typeFilter || ""}
                 onChange={(e) => setTypeFilter(e.target.value || null)}
               >
-                <option value="">All types</option>
+                <option value="">Type</option>
                 {["Positive", "Negative", "Boundary", "Business Rule", "Concurrency", "Security"].map((t) => (
                   <option key={t} value={t}>
                     {t}
@@ -543,11 +571,11 @@ export function SitTestingViewV2({
                 ))}
               </select>
               <select
-                className="rounded-[6px] border border-[#e2e6ef] bg-white px-2 py-1 text-[11px] dark:border-[#2a2a2a] dark:bg-[#141414]"
+                className="rounded-[6px] border border-[#e2e6ef] bg-white px-2 py-0.5 text-[11px] dark:border-[#2a2a2a] dark:bg-[#141414]"
                 value={statusFilter || ""}
                 onChange={(e) => setStatusFilter(e.target.value || null)}
               >
-                <option value="">All statuses</option>
+                <option value="">Status</option>
                 {["Not run", "Passed", "Failed", "Partial"].map((t) => (
                   <option key={t} value={t}>
                     {t}
@@ -555,11 +583,11 @@ export function SitTestingViewV2({
                 ))}
               </select>
               <select
-                className="rounded-[6px] border border-[#e2e6ef] bg-white px-2 py-1 text-[11px] dark:border-[#2a2a2a] dark:bg-[#141414]"
+                className="rounded-[6px] border border-[#e2e6ef] bg-white px-2 py-0.5 text-[11px] dark:border-[#2a2a2a] dark:bg-[#141414]"
                 value={originFilter || ""}
                 onChange={(e) => setOriginFilter(e.target.value || null)}
               >
-                <option value="">All origins</option>
+                <option value="">Origin</option>
                 <option value="ai">AI</option>
                 <option value="human">Human</option>
                 <option value="template">Template</option>
@@ -569,45 +597,26 @@ export function SitTestingViewV2({
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search…"
-                className="rounded-[6px] border border-[#e2e6ef] bg-white px-2 py-1 text-[11px] dark:border-[#2a2a2a] dark:bg-[#141414]"
+                className="w-28 rounded-[6px] border border-[#e2e6ef] bg-white px-2 py-0.5 text-[11px] dark:border-[#2a2a2a] dark:bg-[#141414]"
               />
               <span className="text-[11px] text-[#6b7280]">
-                {counts.total} cases · {counts.ai} AI · {counts.edited} edited · {counts.human} human
-                {counts.template ? ` · ${counts.template} template` : ""}
+                {counts.total} · {counts.ai} AI · {counts.edited} edited
+                {counts.human ? ` · ${counts.human} human` : ""}
               </span>
               {editMode && (
                 <button
                   type="button"
                   onClick={() => void addRow()}
-                  className="ml-auto inline-flex items-center gap-1 rounded-[8px] border border-[#e2e6ef] px-2.5 py-1 text-[11.5px] dark:border-[#2a2a2a]"
+                  className="ml-auto inline-flex items-center gap-1 rounded-[8px] border border-[#e2e6ef] px-2 py-0.5 text-[11px] dark:border-[#2a2a2a]"
                 >
-                  <TbPlus size={14} /> Add test case
+                  <TbPlus size={12} /> Add
                 </button>
-              )}
-              {/* Per-ticket versions */}
-              {history.length > 1 && ticketFilter !== "all" && (
-                <select
-                  className="rounded-[6px] border border-[#e2e6ef] bg-white px-2 py-1 text-[11px]"
-                  defaultValue={workbook.id}
-                  onChange={(e) => {
-                    const wb = history.find((h) => h.id === e.target.value);
-                    if (wb) setWorkbook(wb);
-                  }}
-                >
-                  {history
-                    .filter((h) => h.sourceIssueKeys.includes(ticketFilter))
-                    .map((h) => (
-                      <option key={h.id} value={h.id}>
-                        Versions · {ago(h.createdAt)} · {h.generator} ·{" "}
-                        {h.sheets.find((s) => s.kind === "test-cases")?.rows.length || 0} cases
-                      </option>
-                    ))}
-                </select>
               )}
             </div>
 
             <SitV2Grid
-              workbook={workbook}
+              workbook={displayWorkbook}
+              epics={epics}
               editMode={editMode}
               ticketFilter={ticketFilter}
               typeFilter={typeFilter}
@@ -619,10 +628,10 @@ export function SitTestingViewV2({
               onDelete={(rowId) => void softDelete(rowId)}
               onAdd={() => void addRow()}
             />
-          </>
+          </div>
         ) : (
           <p className="text-[13px] text-[#8a93a8]">
-            Open <strong>Jira Tickets</strong>, select stories mapped to this canvas, then Generate. Existing suites appear after the first run.
+            Open <strong>Jira Tickets</strong>, select stories mapped to this canvas, then Generate.
           </p>
         )}
       </div>
@@ -641,14 +650,20 @@ export function SitTestingViewV2({
           epics={epics}
           selected={selected}
           clarifications={clarifications}
+          activeTicketKey={activeTicketKey}
           onChange={setSelected}
           onClose={() => setPickerOpen(false)}
+          onActivateTicket={(key) => {
+            activateTicket(key);
+            setPickerOpen(false);
+          }}
         />
       )}
 
       {genDialog && (
         <SitV2GenerateDialog
           choices={genDialog}
+          history={history}
           onCancel={() => setGenDialog(null)}
           onConfirm={(choices) => void startGenerate(choices, false)}
         />
