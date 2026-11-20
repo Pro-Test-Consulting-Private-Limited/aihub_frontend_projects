@@ -4,9 +4,6 @@ import React, { Suspense, useCallback, useEffect, useRef, useState } from "react
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "react-toastify";
 import { IconType } from "react-icons";
-import { SiJira, SiLinear, SiGithub, SiGitlab, SiGit, SiFigma, SiSwagger } from "react-icons/si";
-import { VscAzureDevops } from "react-icons/vsc";
-import { FaMicrosoft, FaAws, FaSlack, FaBook, FaCode } from "react-icons/fa";
 import Breadcrumbs from "../../components/breadcrumbs";
 import { IntegrationsBreadcrumbs } from "../../constants/metrics";
 import AuthGuard from "@/app/lib/authguard";
@@ -17,8 +14,13 @@ import {
 import ConnectIntegrationModal from "@/app/components/connect-integration-modal";
 import { useMsal } from "@azure/msal-react";
 import { getFreshIdToken, getGraphAccessToken } from "@/app/lib/auth-client";
+import { SiJira } from "react-icons/si";
+import {
+  INTEGRATION_CATEGORIES,
+  type CanvasConnectProvider,
+} from "@/app/lib/integrations-registry";
 
-type LiveProvider = "jira" | "github" | "swagger" | "teams";
+type LiveProvider = CanvasConnectProvider;
 
 type CardStatus = "connected" | "disconnected" | "needs_reconnect" | "error";
 
@@ -75,159 +77,20 @@ const ERROR_MESSAGES: Record<string, string> = {
   access_denied: "Connection was cancelled.",
 };
 
-const CATEGORIES: IntegrationCategory[] = [
-  {
-    title: "AGILE PROJECT MANAGEMENT & ISSUE TRACKING",
-    subtitle: "Product ops, sprints, and issue tracking",
-    tools: [
-      {
-        id: "jira",
-        name: "Jira",
-        status: "disconnected",
-        description: "Test cases push as issues. Execution results sync back.",
-        buttons: ["Connect Jira"],
-        Icon: SiJira,
-        color: "#2684FF",
-        provider: "jira",
-      },
-      {
-        id: "linear",
-        name: "Linear",
-        status: "disconnected",
-        description: "Connect to push test cases as Linear issues.",
-        buttons: ["Connect Linear"],
-        Icon: SiLinear,
-        color: "#5E6AD2",
-      },
-    ],
-  },
-  {
-    title: "API DESIGN & DOCUMENTATION",
-    subtitle: "Define, mock, and validate API contracts",
-    tools: [
-      {
-        id: "swagger",
-        name: "Swagger / OpenAPI",
-        status: "disconnected",
-        description: "Import API specs to generate and validate test cases.",
-        buttons: ["Connect Swagger"],
-        Icon: SiSwagger,
-        color: "#85EA2D",
-        provider: "swagger",
-      },
-      {
-        id: "redocly",
-        name: "Redoc / Redocly",
-        status: "disconnected",
-        description: "Pull published API docs to keep contracts in sync.",
-        buttons: ["Connect Redocly"],
-        Icon: FaBook,
-        color: "#263238",
-      },
-      {
-        id: "stoplight",
-        name: "Stoplight",
-        status: "disconnected",
-        description: "Sync API design and mock servers for contract testing.",
-        buttons: ["Connect Stoplight"],
-        Icon: FaCode,
-        color: "#0B5FFF",
-      },
-    ],
-  },
-  {
-    title: "SOURCE CODE MANAGEMENT & VERSION CONTROL",
-    subtitle: "Repos, branches, and script commits",
-    tools: [
-      {
-        id: "github",
-        name: "GitHub",
-        status: "disconnected",
-        description: "Connect with your GitHub organization, then sign in with GitHub. Scripts synced to main branch. Auto-commit on heal.",
-        buttons: ["Connect GitHub"],
-        Icon: SiGithub,
-        color: "#24292E",
-        provider: "github",
-      },
-      {
-        id: "gitlab",
-        name: "GitLab",
-        status: "disconnected",
-        description: "Sync page objects and tests to a GitLab repository.",
-        buttons: ["Connect GitLab"],
-        Icon: SiGitlab,
-        color: "#FC6D26",
-      },
-      {
-        id: "gitbucket",
-        name: "GitBucket",
-        status: "disconnected",
-        description: "Self-hosted Git  -  sync scripts to your GitBucket instance.",
-        buttons: ["Connect GitBucket"],
-        Icon: SiGit,
-        color: "#F05032",
-      },
-      {
-        id: "codecommit",
-        name: "AWS CodeCommit",
-        status: "disconnected",
-        description: "Push generated test scripts to an AWS CodeCommit repo.",
-        buttons: ["Connect CodeCommit"],
-        Icon: FaAws,
-        color: "#FF9900",
-      },
-      {
-        id: "azure-repos",
-        name: "Azure Repos",
-        status: "disconnected",
-        description: "Sync with Azure DevOps Repos for source control.",
-        buttons: ["Connect Azure Repos"],
-        Icon: VscAzureDevops,
-        color: "#0078D7",
-      },
-    ],
-  },
-  {
-    title: "UI/UX DESIGN & PROTOTYPING",
-    subtitle: "Compare specs against crawled screens",
-    tools: [
-      {
-        id: "figma",
-        name: "Figma",
-        status: "disconnected",
-        description: "Compare UI specs against crawled screenshots.",
-        buttons: ["Connect Figma"],
-        Icon: SiFigma,
-        color: "#F24E1E",
-      },
-    ],
-  },
-  {
-    title: "TEAM COLLABORATION & COMMUNICATION",
-    subtitle: "Alerts, summaries, and notifications",
-    tools: [
-      {
-        id: "teams",
-        name: "Microsoft Teams",
-        status: "disconnected",
-        description: "Connect once with your Microsoft account. Then link a team and channel on each canvas.",
-        buttons: ["Connect Teams"],
-        Icon: FaMicrosoft,
-        color: "#6264A7",
-        provider: "teams",
-      },
-      {
-        id: "slack",
-        name: "Slack",
-        status: "disconnected",
-        description: "Failure alerts to #qa-alerts. Daily summary to #engineering.",
-        buttons: ["Connect Slack"],
-        Icon: FaSlack,
-        color: "#4A154B",
-      },
-    ],
-  },
-];
+const CATEGORIES: IntegrationCategory[] = INTEGRATION_CATEGORIES.map((category) => ({
+  title: category.title,
+  subtitle: category.subtitle,
+  tools: category.tools.map((tool) => ({
+    id: tool.id,
+    name: tool.name,
+    status: "disconnected" as CardStatus,
+    description: tool.description,
+    buttons: [tool.connectButton],
+    Icon: tool.Icon,
+    color: tool.color,
+    provider: tool.accountProvider,
+  })),
+}));
 
 function IntegrationsContent() {
   const router = useRouter();

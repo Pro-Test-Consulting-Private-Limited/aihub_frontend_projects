@@ -291,6 +291,7 @@ export function atlasClient({ instance, accounts }: Msal) {
         lastSyncedAt: number | null;
         lastCommitSha: string | null;
         dirty: boolean;
+        syncing: boolean;
       }>(`/canvases/${encodeURIComponent(canvasId)}/git`),
     connectCanvasGit: (
       canvasId: string,

@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { TbArrowLeft, TbLink, TbLoader2 } from "react-icons/tb";
-import { SiGithub, SiJira, SiLinear, SiSwagger } from "react-icons/si";
-import { FaBook, FaCode, FaMicrosoft, FaSlack } from "react-icons/fa";
+import { TbArrowLeft, TbChevronDown, TbChevronRight, TbCopy, TbExternalLink, TbLink, TbLoader2 } from "react-icons/tb";
+import { SiGithub, SiJira, SiSwagger } from "react-icons/si";
+import { FaMicrosoft } from "react-icons/fa";
 import type { Canvas, CanvasSummary, JiraProject } from "@/app/interfaces/appatlas";
 import type { AtlasClient } from "@/app/services/appatlas";
 import {
@@ -15,40 +15,26 @@ import {
 import { clearCanvasSwagger, setCanvasSwagger, type CanvasSwagger } from "@/app/lib/canvas-swagger";
 import { clearToken, getEnvironment, getToken, selectEnvProfile, setEnvironment, setToken, validateBaseUrl, type TestEnvironment } from "@/app/lib/api-testing/environment";
 import { EnvProfileChips } from "@/app/components/app-atlas/endpoint-tests/env-profile-chips";
+import {
+  INTEGRATION_CATEGORIES,
+  isCanvasConnectProvider,
+  type CanvasConnectProvider,
+  type IntegrationProviderId,
+} from "@/app/lib/integrations-registry";
+import {
+  gitSyncGuidance,
+  gitSyncPillClass,
+  gitSyncStatusLabel,
+  gitSyncTone,
+  githubBranchUrl,
+  githubCommitUrl,
+  githubRepoUrl,
+  relativeTime,
+  shortSha,
+} from "@/app/lib/git-sync-ui";
 import { Modal, fieldInput, fieldLabel, outlineButton, primaryButton } from "./modal";
 
-type AppId = "jira" | "linear" | "swagger" | "redocly" | "stoplight" | "teams" | "slack" | "github";
-
-const CATEGORIES: { title: string; apps: { id: AppId; name: string; icon: React.ReactNode }[] }[] = [
-  {
-    title: "Agile Project Management & Issue Tracking",
-    apps: [
-      { id: "jira", name: "Jira", icon: <SiJira size={26} color="#2684FF" /> },
-      { id: "linear", name: "Linear", icon: <SiLinear size={24} color="#5E6AD2" /> },
-    ],
-  },
-  {
-    title: "API Design & Documentation",
-    apps: [
-      { id: "swagger", name: "Swagger / OpenAPI", icon: <SiSwagger size={26} color="#85EA2D" /> },
-      { id: "redocly", name: "Redoc / Redocly", icon: <FaBook size={22} color="#263238" /> },
-      { id: "stoplight", name: "Stoplight", icon: <FaCode size={22} color="#0B5FFF" /> },
-    ],
-  },
-  {
-    title: "Team Collaboration & Communication",
-    apps: [
-      { id: "teams", name: "Microsoft Teams", icon: <FaMicrosoft size={24} color="#6264A7" /> },
-      { id: "slack", name: "Slack", icon: <FaSlack size={26} color="#4A154B" /> },
-    ],
-  },
-  {
-    title: "Source Control & Version Control",
-    apps: [{ id: "github", name: "GitHub", icon: <SiGithub size={26} color="#24292F" /> }],
-  },
-];
-
-const CAN_MAP: AppId[] = ["jira", "swagger", "teams", "github"];
+type AppId = IntegrationProviderId;
 
 function healthLabel(health: ConnectionHealth, linkedOnCanvas: boolean): string {
   if (health === "active") return linkedOnCanvas ? "Active · linked to this canvas" : "Active · ready to connect";
@@ -119,16 +105,16 @@ export function ConnectAppsModal({
 
   /** Usable for Connect: Active only. Expired/disconnected must go to Integrations. */
   const canUse = (id: AppId) => {
+    if (!isCanvasConnectProvider(id)) return false;
     if (id === "github" && gitAvailable === false) return false;
-    const h = healthOf(id);
-    return h === "active";
+    return healthOf(id) === "active";
   };
 
-  const [step, setStep] = useState<"apps" | "jira" | "swagger" | "teams" | "github">("apps");
+  const [step, setStep] = useState<"apps" | CanvasConnectProvider>("apps");
   const [picked, setPicked] = useState<AppId | null>(canvas.jiraProjectKey ? "jira" : null);
 
   const confirmPick = () => {
-    if (picked === "jira" || picked === "swagger" || picked === "teams" || picked === "github") setStep(picked);
+    if (picked && isCanvasConnectProvider(picked)) setStep(picked);
   };
 
   const stepTitle =
@@ -143,20 +129,22 @@ export function ConnectAppsModal({
             : "Connect Swagger";
 
   return (
-    <Modal title={stepTitle} onClose={onClose} width={480}>
+    <Modal title={stepTitle} onClose={onClose} width={520} scrollBody>
       {step === "apps" ? (
-        <div className="mt-4 space-y-3">
+        <div className="mt-4 space-y-3 pb-1">
           {(statusLoading || probing) && (
             <p className="text-[11.5px] text-[#7E7E7E]">Checking integrations…</p>
           )}
-          {CATEGORIES.map((cat) => (
+          {INTEGRATION_CATEGORIES.map((cat) => (
             <div key={cat.title} className="rounded-[12px] border border-[#ECECEC] bg-[#FAFAFA] p-4 dark:border-[#2a2a2a] dark:bg-[#101010]">
-              <div className="text-[14px] font-medium text-[#1F1F1F] dark:text-[#ededed]">{cat.title}</div>
-              <div className="mt-3 flex flex-wrap gap-3">
-                {cat.apps.map((app) => {
+              <div className="text-[12px] font-semibold tracking-wide text-[#1F1F1F] dark:text-[#ededed]">{cat.title}</div>
+              <div className="mt-0.5 text-[11px] text-[#7E7E7E] dark:text-[#9ca3af]">{cat.subtitle}</div>
+              <div className="mt-3 flex flex-wrap gap-x-3 gap-y-4">
+                {cat.tools.map((app) => {
+                  const Icon = app.Icon;
                   const health = healthOf(app.id);
                   const ok = canUse(app.id);
-                  const mappable = CAN_MAP.includes(app.id);
+                  const mappable = app.canvasConnect;
                   const linkedTeams = (canvas as CanvasSummary & { teams?: { teamId?: string } | null }).teams;
                   const linkedOnCanvas =
                     (app.id === "jira" && !!canvas.jiraProjectKey) ||
@@ -174,86 +162,90 @@ export function ConnectAppsModal({
                     : mappable
                       ? healthLabel(health, linkedOnCanvas)
                       : "Coming soon";
-                  const tooltip = selected
-                    ? `${app.name}: ${statusText}. Selected. Click again to unselect.`
-                    : `${app.name}: ${statusText}`;
+                  const tooltip = !mappable
+                    ? `${app.name}: Coming soon`
+                    : selected
+                      ? `${app.name}: ${statusText}. Selected. Click again to unselect.`
+                      : `${app.name}: ${statusText}`;
 
                   const onAppClick = () => {
+                    if (!mappable) return;
                     if (gitAdminOff) return;
                     if (needsIntegrate) {
                       router.push("/integrations");
                       return;
                     }
-                    if (!mappable) return;
                     if (!ok) return;
-                    // Toggle: clicking the already-selected icon unselects it.
                     setPicked((prev) => (prev === app.id ? null : app.id));
                   };
 
                   return (
-                    <button
-                      key={app.id}
-                      type="button"
-                      onClick={onAppClick}
-                      title={tooltip}
-                      aria-label={tooltip}
-                      aria-pressed={selected}
-                      className={`relative flex h-[56px] w-[56px] items-center justify-center rounded-[10px] bg-white shadow-sm transition dark:bg-[#1a1a1a] ${
-                        selected && ok
-                          ? "border-2 border-[#8664F2] ring-2 ring-[#8664F2]/35 scale-105"
-                          : ok
-                            ? "border-2 border-[#22C55E] hover:scale-105"
-                            : expired
-                              ? "border-2 border-[#F59E0B] hover:ring-2 hover:ring-[#F59E0B]/30"
-                              : needsIntegrate
-                                ? "border border-dashed border-[#C4B5E8] opacity-70 hover:border-[#8664F2] hover:opacity-100"
-                                : "cursor-default border border-[#E5E7EB] opacity-40 grayscale dark:border-[#2a2a2a]"
-                      }`}
-                      disabled={gitAdminOff}
-                    >
-                      {app.icon}
-                      {/* Connection status: corner chip (green / amber / +) */}
-                      {ok && (
-                        <span
-                          className="absolute -right-1 -top-1 h-[12px] w-[12px] rounded-full border-2 border-white bg-[#22C55E]"
-                          title={statusText}
-                        />
-                      )}
-                      {expired && (
-                        <span
-                          className="absolute -right-1 -top-1 h-[12px] w-[12px] rounded-full border-2 border-white bg-[#F59E0B]"
-                          title={statusText}
-                        />
-                      )}
-                      {needsIntegrate && !expired && (
-                        <span
-                          className="absolute -right-1 -top-1 flex h-[14px] w-[14px] items-center justify-center rounded-full border-2 border-white bg-[#8664F2] text-[9px] font-bold text-white"
-                          title={statusText}
-                        >
-                          +
-                        </span>
-                      )}
-                      {linkedOnCanvas && ok && (
-                        <span
-                          className="absolute -bottom-1 left-1/2 h-[3px] w-[18px] -translate-x-1/2 rounded-full bg-[#2563EB]"
-                          title="Linked to this canvas"
-                        />
-                      )}
-                    </button>
+                    <div key={app.id} className="flex w-[64px] flex-col items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={onAppClick}
+                        title={tooltip}
+                        aria-label={tooltip}
+                        aria-pressed={selected}
+                        disabled={gitAdminOff || !mappable}
+                        className={`relative flex h-[56px] w-[56px] items-center justify-center rounded-[10px] bg-white shadow-sm transition dark:bg-[#1a1a1a] ${
+                          selected && ok
+                            ? "scale-105 border-2 border-[#8664F2] ring-2 ring-[#8664F2]/35"
+                            : ok
+                              ? "border-2 border-[#22C55E] hover:scale-105"
+                              : expired
+                                ? "border-2 border-[#F59E0B] hover:ring-2 hover:ring-[#F59E0B]/30"
+                                : needsIntegrate
+                                  ? "border border-dashed border-[#C4B5E8] opacity-70 hover:border-[#8664F2] hover:opacity-100"
+                                  : "cursor-default border border-[#E5E7EB] opacity-40 grayscale dark:border-[#2a2a2a]"
+                        }`}
+                      >
+                        <Icon size={24} color={app.color} />
+                        {ok && (
+                          <span
+                            className="absolute -right-1 -top-1 h-[12px] w-[12px] rounded-full border-2 border-white bg-[#22C55E]"
+                            title={statusText}
+                          />
+                        )}
+                        {expired && (
+                          <span
+                            className="absolute -right-1 -top-1 h-[12px] w-[12px] rounded-full border-2 border-white bg-[#F59E0B]"
+                            title={statusText}
+                          />
+                        )}
+                        {needsIntegrate && !expired && (
+                          <span
+                            className="absolute -right-1 -top-1 flex h-[14px] w-[14px] items-center justify-center rounded-full border-2 border-white bg-[#8664F2] text-[9px] font-bold text-white"
+                            title={statusText}
+                          >
+                            +
+                          </span>
+                        )}
+                        {linkedOnCanvas && ok && (
+                          <span
+                            className="absolute -bottom-1 left-1/2 h-[3px] w-[18px] -translate-x-1/2 rounded-full bg-[#2563EB]"
+                            title="Linked to this canvas"
+                          />
+                        )}
+                      </button>
+                      <span className="w-full truncate text-center text-[10px] leading-tight text-[#5E6066] dark:text-[#9ca3af]" title={app.name}>
+                        {app.name}
+                      </span>
+                    </div>
                   );
                 })}
               </div>
             </div>
           ))}
-          {picked && canUse(picked) && (
+          {picked && isCanvasConnectProvider(picked) && canUse(picked) && (
             <p className="text-[12px] font-medium text-[#8664F2]">
-              Selected: {CATEGORIES.flatMap((c) => c.apps).find((a) => a.id === picked)?.name}. Click Connect
-              (or click the icon again to unselect).
+              Selected: {INTEGRATION_CATEGORIES.flatMap((c) => c.tools).find((a) => a.id === picked)?.name}. Click
+              Connect (or click the icon again to unselect).
             </p>
           )}
           <button
             type="button"
-            disabled={!picked || !CAN_MAP.includes(picked) || !canUse(picked)}
+            disabled={!picked || !isCanvasConnectProvider(picked) || !canUse(picked)}
             onClick={confirmPick}
             className="mt-1 flex w-full items-center justify-center gap-2 rounded-[10px] border border-[#E6E1F5] bg-white py-2.5 text-[14px] font-medium text-[#8664F2] disabled:cursor-not-allowed disabled:text-[#C4B5E8] dark:border-[#2a2a2a] dark:bg-[#141414]"
           >
@@ -277,7 +269,9 @@ export function ConnectAppsModal({
           canvas={canvas}
           projectId={projectId}
           githubConnected={github.connected && github.health === "active"}
+          needsReconnectAccount={github.health === "expired" || github.health === "error"}
           gitConnected={gitConnected}
+          masterOff={gitAvailable === false}
           onBack={() => setStep("apps")}
           onConnected={() => {
             onGitChange?.();
@@ -303,7 +297,9 @@ function GithubStep({
   canvas,
   projectId,
   githubConnected,
+  needsReconnectAccount,
   gitConnected,
+  masterOff,
   onBack,
   onConnected,
 }: {
@@ -311,13 +307,17 @@ function GithubStep({
   canvas: CanvasSummary;
   projectId?: string | null;
   githubConnected: boolean;
+  needsReconnectAccount?: boolean;
   gitConnected: boolean;
+  masterOff?: boolean;
   onBack: () => void;
   onConnected: () => void;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<"load" | "connect" | "disconnect" | null>("load");
   const [error, setError] = useState<string | null>(null);
+  const [folderOpen, setFolderOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [mapping, setMapping] = useState<{
     connected: boolean;
     owner?: string;
@@ -336,12 +336,19 @@ function GithubStep({
     connected: boolean;
     folder: string | null;
     repo: string | null;
+    owner: string | null;
     branch: string | null;
     lastStatus: string | null;
+    lastError: string | null;
+    lastSyncedAt: number | null;
+    lastCommitSha: string | null;
+    dirty: boolean;
+    syncing: boolean;
   } | null>(null);
 
   const pid = projectId || null;
   const folderPreview = pid ? `projects/${pid}/canvases/${canvas.id}/` : null;
+  const connected = gitConnected || Boolean(status?.connected);
 
   useEffect(() => {
     let cancelled = false;
@@ -369,8 +376,14 @@ function GithubStep({
             connected: st.connected,
             folder: st.folder,
             repo: st.repo,
+            owner: st.owner,
             branch: st.branch,
             lastStatus: st.lastStatus,
+            lastError: st.lastError,
+            lastSyncedAt: st.lastSyncedAt,
+            lastCommitSha: st.lastCommitSha,
+            dirty: st.dirty,
+            syncing: Boolean(st.syncing),
           });
         }
         setAllowed(allow);
@@ -430,6 +443,9 @@ function GithubStep({
   };
 
   const disconnect = async () => {
+    if (!window.confirm("Disconnect GitHub sync for this canvas? Files already on GitHub stay; new edits will not sync.")) {
+      return;
+    }
     setBusy("disconnect");
     setError(null);
     try {
@@ -442,13 +458,42 @@ function GithubStep({
     }
   };
 
+  const copyFolder = async () => {
+    const path = status?.folder || folderPreview;
+    if (!path) return;
+    try {
+      await navigator.clipboard.writeText(path);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setError("Could not copy folder path.");
+    }
+  };
+
   if (!githubConnected) {
     return (
-      <div className="mt-4 space-y-3">
-        <p className="text-[13px] text-[#5A5A5A]">Connect your GitHub account in Integrations first, then return here.</p>
-        <div className="flex gap-2">
+      <div>
+        <button type="button" onClick={onBack} className="mt-3 flex items-center gap-1 text-[12px] text-[#5E6066] hover:text-[#8664F2]">
+          <TbArrowLeft size={14} /> All apps
+        </button>
+        <div className="mt-3 rounded-[10px] border border-[#ECECEC] p-4 dark:border-[#2a2a2a]">
+          <div className="flex items-center gap-3">
+            <span className="flex h-[38px] w-[38px] items-center justify-center rounded-[8px] border border-[#E5E7EB] bg-white dark:border-[#2a2a2a]">
+              <SiGithub size={20} color="#24292F" />
+            </span>
+            <div>
+              <div className="text-[13px] font-medium text-[#1F1F1F] dark:text-[#ededed]">Connect GitHub</div>
+              <div className="text-[12px] text-[#7E7E7E]">
+                {needsReconnectAccount
+                  ? "Your GitHub session expired. Reconnect on the Integrations page."
+                  : "Connect your GitHub account in Integrations first, then return here."}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="mt-5 flex justify-end gap-3">
           <button type="button" className={outlineButton} onClick={onBack}>
-            <TbArrowLeft size={14} /> Back
+            Back
           </button>
           <button type="button" className={primaryButton} onClick={() => router.push("/integrations")}>
             Open Integrations
@@ -458,38 +503,167 @@ function GithubStep({
     );
   }
 
+  if (connected && status) {
+    const tone = gitSyncTone({
+      connected: true,
+      lastStatus: status.lastStatus,
+      lastError: status.lastError,
+      dirty: status.dirty,
+      syncing: status.syncing,
+      masterOff,
+      needsReconnectAccount,
+    });
+    const repoFull = status.repo || repo;
+    const repoLink = githubRepoUrl(status.owner, repoFull);
+    const branchLink = githubBranchUrl(repoFull, status.branch || branch);
+    const commitLink = githubCommitUrl(repoFull, status.lastCommitSha);
+    const folder = status.folder || folderPreview;
+
+    return (
+      <div>
+        <button type="button" onClick={onBack} disabled={!!busy} className="mt-3 flex items-center gap-1 text-[12px] text-[#5E6066] hover:text-[#8664F2]">
+          <TbArrowLeft size={14} /> All apps
+        </button>
+        <div className="mt-3 flex items-center gap-3 rounded-[10px] border border-[#ECECEC] p-3 dark:border-[#2a2a2a]">
+          <span className="flex h-[38px] w-[38px] items-center justify-center rounded-[8px] border-2 border-[#22C55E] bg-white dark:bg-[#1a1a1a]">
+            <SiGithub size={20} color="#24292F" />
+          </span>
+          <div className="min-w-0 text-[12.5px]">
+            <div className="font-medium text-[#1F1F1F] dark:text-[#ededed]">Connected to GitHub</div>
+            <div className="truncate text-[#7E7E7E]">{repoFull}</div>
+          </div>
+        </div>
+
+        <div className="mt-3 space-y-2.5 rounded-[10px] border border-[#ECECEC] bg-[#FAFAFA] p-3 text-[12.5px] dark:border-[#2a2a2a] dark:bg-[#101010]">
+          <div className="flex items-start justify-between gap-2">
+            <span className="shrink-0 text-[#7E7E7E]">Repository</span>
+            {repoLink ? (
+              <a href={repoLink} target="_blank" rel="noreferrer" className="min-w-0 truncate text-right font-medium text-[#8664F2] hover:underline">
+                {repoFull}
+              </a>
+            ) : (
+              <span className="min-w-0 truncate text-right font-medium text-[#1F1F1F] dark:text-[#ededed]">{repoFull}</span>
+            )}
+          </div>
+          <div className="flex items-start justify-between gap-2">
+            <span className="shrink-0 text-[#7E7E7E]">Branch</span>
+            {branchLink ? (
+              <a href={branchLink} target="_blank" rel="noreferrer" className="font-medium text-[#8664F2] hover:underline">
+                {status.branch || branch}
+              </a>
+            ) : (
+              <span className="font-medium text-[#1F1F1F] dark:text-[#ededed]">{status.branch || branch}</span>
+            )}
+          </div>
+          <div className="flex items-start justify-between gap-2">
+            <span className="shrink-0 text-[#7E7E7E]">Last synced</span>
+            <span className="text-right font-medium text-[#1F1F1F] dark:text-[#ededed]">
+              {relativeTime(status.lastSyncedAt)}
+              {status.lastCommitSha ? (
+                <>
+                  {" · "}
+                  {commitLink ? (
+                    <a href={commitLink} target="_blank" rel="noreferrer" className="font-mono text-[#8664F2] hover:underline">
+                      {shortSha(status.lastCommitSha)}
+                    </a>
+                  ) : (
+                    <span className="font-mono">{shortSha(status.lastCommitSha)}</span>
+                  )}
+                </>
+              ) : null}
+            </span>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[#7E7E7E]">Status</span>
+            <span className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${gitSyncPillClass(tone)}`}>
+              {gitSyncStatusLabel(tone)}
+            </span>
+          </div>
+        </div>
+
+        {folder && (
+          <div className="mt-3 rounded-[10px] border border-[#ECECEC] dark:border-[#2a2a2a]">
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12.5px] font-medium text-[#1F1F1F] dark:text-[#ededed]"
+              onClick={() => setFolderOpen((o) => !o)}
+            >
+              {folderOpen ? <TbChevronDown size={14} /> : <TbChevronRight size={14} />}
+              Folder in repo
+            </button>
+            {folderOpen && (
+              <div className="flex items-start gap-2 border-t border-[#ECECEC] px-3 py-2 dark:border-[#2a2a2a]">
+                <code className="min-w-0 flex-1 break-all font-mono text-[11px] text-[#5E6066] dark:text-[#9ca3af]">{folder}</code>
+                <button type="button" className={outlineButton + " !px-2 !py-1 text-[11px]"} onClick={() => void copyFolder()} title="Copy path">
+                  <TbCopy size={13} />
+                  {copied ? "Copied" : "Copy"}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        <p className="mt-3 text-[12px] leading-relaxed text-[#5E6066] dark:text-[#9ca3af]">{gitSyncGuidance(tone, status.lastError)}</p>
+        {error && <div className="mt-3 rounded-[8px] bg-[#FDF1F1] px-3 py-2 text-[12px] text-[#991B1B]">{error}</div>}
+
+        <div className="mt-5 flex flex-wrap justify-end gap-3">
+          <button type="button" className={outlineButton} onClick={onBack} disabled={!!busy}>
+            Back
+          </button>
+          <button type="button" className={outlineButton} onClick={() => void disconnect()} disabled={!!busy}>
+            {busy === "disconnect" ? "Disconnecting…" : "Disconnect"}
+          </button>
+          {repoLink && (
+            <a href={repoLink} target="_blank" rel="noreferrer" className={primaryButton}>
+              <TbExternalLink size={14} />
+              View on GitHub
+            </a>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="mt-4 space-y-3">
-      {busy === "load" && <p className="text-[12px] text-[#7E7E7E]">Loading…</p>}
-      {error && <p className="text-[12px] text-[#DC3545]">{error}</p>}
-      {(gitConnected || status?.connected) && (
-        <div className="rounded-[10px] border border-[#E6E1F5] bg-[#FAFAFA] p-3 text-[12.5px] dark:border-[#2a2a2a] dark:bg-[#101010]">
+    <div>
+      <button type="button" onClick={onBack} disabled={!!busy} className="mt-3 flex items-center gap-1 text-[12px] text-[#5E6066] hover:text-[#8664F2]">
+        <TbArrowLeft size={14} /> All apps
+      </button>
+      <div className="mt-3 flex items-center gap-3 rounded-[10px] border border-[#ECECEC] p-3 dark:border-[#2a2a2a]">
+        <span className="flex h-[38px] w-[38px] items-center justify-center rounded-[8px] border-2 border-[#22C55E] bg-white dark:bg-[#1a1a1a]">
+          <SiGithub size={20} color="#24292F" />
+        </span>
+        <div className="min-w-0 text-[12.5px]">
+          <div className="font-medium text-[#1F1F1F] dark:text-[#ededed]">Connect this canvas to GitHub</div>
+          <div className="text-[#7E7E7E]">Changes sync automatically to your project’s repo.</div>
+        </div>
+      </div>
+
+      {busy === "load" && (
+        <div className="mt-3 flex items-center gap-2 text-[13px] text-[#7E7E7E]">
+          <TbLoader2 size={15} className="animate-spin" /> Loading…
+        </div>
+      )}
+
+      {mapping?.connected ? (
+        <div className="mt-3 space-y-2 rounded-[10px] border border-[#ECECEC] bg-[#FAFAFA] p-3 text-[12.5px] dark:border-[#2a2a2a] dark:bg-[#101010]">
           <div>
-            <strong>Repo:</strong> {status?.repo || repo}
+            <span className="text-[#7E7E7E]">Project repo · </span>
+            <span className="font-medium text-[#1F1F1F] dark:text-[#ededed]">
+              {mapping.owner}/{mapping.repo}
+            </span>
           </div>
           <div>
-            <strong>Branch:</strong> {status?.branch || branch}
+            <span className="text-[#7E7E7E]">Branch · </span>
+            <span className="font-medium">{mapping.branch || "appatlas-sync"}</span>
           </div>
-          <div className="break-all">
-            <strong>Folder:</strong> {status?.folder || folderPreview}
-          </div>
-          {status?.lastStatus && (
-            <div>
-              <strong>Status:</strong> {status.lastStatus}
+          {folderPreview && (
+            <div className="text-[#7E7E7E]">
+              Folder · <code className="font-mono text-[11px] text-[#5E6066] dark:text-[#9ca3af]">{folderPreview}</code>
             </div>
           )}
         </div>
-      )}
-      {!gitConnected && mapping?.connected && (
-        <div className="rounded-[10px] border border-[#E6E1F5] bg-[#FAFAFA] p-3 text-[12.5px] dark:border-[#2a2a2a] dark:bg-[#101010]">
-          <div>
-            Project repo: {mapping.owner}/{mapping.repo}
-          </div>
-          <div>Branch: {mapping.branch || "appatlas-sync"}</div>
-          <div className="break-all">Folder: {folderPreview}</div>
-        </div>
-      )}
-      {!gitConnected && !mapping?.connected && (
+      ) : (
         <>
           <label className={fieldLabel}>
             Repository
@@ -507,9 +681,7 @@ function GithubStep({
                 value={repo}
                 onChange={(e) => setRepo(e.target.value)}
                 placeholder={
-                  allowed.wildcardOwners.length
-                    ? `${allowed.wildcardOwners[0]}/repo-name`
-                    : "owner/repo (must be allowlisted)"
+                  allowed.wildcardOwners.length ? `${allowed.wildcardOwners[0]}/repo-name` : "owner/repo (must be allowlisted)"
                 }
               />
             )}
@@ -518,32 +690,31 @@ function GithubStep({
             Branch
             <input className={fieldInput} value={branch} onChange={(e) => setBranch(e.target.value)} />
           </label>
-          <label className="flex items-center gap-2 text-[12.5px] text-[#5A5A5A]">
+          <label className="mt-3 flex items-center gap-2 text-[12.5px] text-[#5A5A5A] dark:text-[#9ca3af]">
             <input type="checkbox" checked={autoNew} onChange={(e) => setAutoNew(e.target.checked)} />
             Automatically connect new canvases in this project
           </label>
         </>
       )}
-      <div className="flex flex-wrap gap-2 pt-1">
-        <button type="button" className={outlineButton} onClick={onBack}>
-          <TbArrowLeft size={14} /> Back
+
+      {error && <div className="mt-3 rounded-[8px] bg-[#FDF1F1] px-3 py-2 text-[12px] text-[#991B1B]">{error}</div>}
+      {!pid && (
+        <p className="mt-3 text-[12px] text-[#B45309]">Open App Atlas from a project so this canvas has a project id.</p>
+      )}
+
+      <div className="mt-5 flex justify-end gap-3">
+        <button type="button" className={outlineButton} onClick={onBack} disabled={!!busy}>
+          Back
         </button>
-        {(gitConnected || status?.connected) && (
-          <button type="button" className={outlineButton} disabled={busy !== null} onClick={disconnect}>
-            {busy === "disconnect" ? "Disconnecting…" : "Disconnect"}
-          </button>
-        )}
-        {!gitConnected && !status?.connected && (
-          <button type="button" className={primaryButton} disabled={busy !== null || !pid} onClick={() => connect(false)}>
-            {busy === "connect" ? (
-              <>
-                <TbLoader2 className="animate-spin" size={14} /> Connecting…
-              </>
-            ) : (
-              "Connect"
-            )}
-          </button>
-        )}
+        <button type="button" className={primaryButton} disabled={busy !== null || !pid} onClick={() => void connect(false)}>
+          {busy === "connect" ? (
+            <>
+              <TbLoader2 className="animate-spin" size={14} /> Connecting…
+            </>
+          ) : (
+            "Connect"
+          )}
+        </button>
       </div>
     </div>
   );
