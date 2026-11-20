@@ -585,6 +585,15 @@ export type AtlasSettings = {
   cicdCanvasTrial: boolean;
 };
 
+export type SitTicketGenerationMeta = {
+  caseCount: number;
+  generator: string;
+  at: number;
+  edited: boolean;
+  workbookId: string;
+  versions: number;
+};
+
 export type SitTicket = {
   key: string;
   summary: string;
@@ -593,6 +602,11 @@ export type SitTicket = {
   statusCategory: string;
   epicKey: string | null;
   url: string;
+  /** v2 picker enrichment (optional for legacy responses) */
+  rcqCount?: number;
+  rcqComplete?: boolean;
+  hasNotes?: boolean;
+  generation?: SitTicketGenerationMeta | null;
 };
 
 export type SitEpic = {

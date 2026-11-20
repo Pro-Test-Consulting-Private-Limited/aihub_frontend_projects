@@ -427,8 +427,76 @@ export function atlasClient({ instance, accounts }: Msal) {
         note?: string;
         executionStatus?: string;
         eisenhower?: string;
+        cells?: Record<string, string>;
+        softDelete?: boolean;
+        undelete?: boolean;
+        revertAi?: boolean;
       },
     ) => request<SitWorkbook>(`/sit/workbooks/${workbookId}/cases/${rowId}`, json("PATCH", body)),
+    addSitCase: (workbookId: string, ticketKey: string) =>
+      request<{ workbook: SitWorkbook; row: { id: string; cells: Record<string, string> } }>(
+        `/sit/workbooks/${workbookId}/cases`,
+        json("POST", { ticketKey }),
+      ),
+    /**
+     * SIT v2 SSE generate. Calls onEvent for each SSE payload.
+     * Returns when the stream ends. Abort via signal.
+     */
+    streamSitGenerate: async (
+      body: {
+        canvasId: string;
+        tickets: Array<{ issueKey: string; mode: "new" | "append" | "open" | "template"; workbookId?: string }>;
+        useTemplate?: boolean;
+      },
+      onEvent: (event: string, data: unknown) => void,
+      signal?: AbortSignal,
+    ) => {
+      const bypass = isLocalAuthBypassEnabled();
+      const token = bypass ? null : await getFreshIdToken(instance, accounts);
+      const res = await fetch(`${atlasApiBase()}/sit/generate-stream`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(bypass ? { "X-Proxy-Auth": "bypass" } : {}),
+        },
+        body: JSON.stringify(body),
+        signal,
+      });
+      if (!res.ok || !res.body) {
+        const text = await res.text().catch(() => "");
+        throw new AtlasError(text || `Generate stream failed (${res.status})`, res.status);
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      let currentEvent = "message";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const chunks = buf.split("\n\n");
+        buf = chunks.pop() || "";
+        for (const chunk of chunks) {
+          const lines = chunk.split("\n");
+          let dataLine = "";
+          for (const line of lines) {
+            if (line.startsWith("event:")) currentEvent = line.slice(6).trim();
+            else if (line.startsWith("data:")) dataLine += line.slice(5).trim();
+            else if (line.startsWith(":")) {
+              /* heartbeat */
+            }
+          }
+          if (!dataLine) continue;
+          try {
+            onEvent(currentEvent, JSON.parse(dataLine));
+          } catch {
+            onEvent(currentEvent, dataLine);
+          }
+          currentEvent = "message";
+        }
+      }
+    },
     getSitRiskRubric: () => request<Record<string, unknown>>("/sit/risk-rubric"),
     getSitRiskEval: (workbookId: string) =>
       request<Record<string, unknown>>(`/sit/risk-eval?workbookId=${encodeURIComponent(workbookId)}`),

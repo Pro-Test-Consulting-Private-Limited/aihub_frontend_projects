@@ -38,6 +38,7 @@ import {
 import { useApiSpec, useApiSpecView } from "@/app/hooks/use-api-spec";
 import { clearCanvasSwagger, getCanvasSwagger, setCanvasSwagger, type CanvasSwagger } from "@/app/lib/canvas-swagger";
 import { isLocalAuthBypassEnabled } from "@/app/lib/auth-bypass";
+import { isSitUiV2Enabled } from "@/app/lib/sit-ui-v2";
 import { UserProfileMenu } from "@/app/components/user-profile-menu";
 import { fetchGraphProfilePhotoDataUrl, msalSelfKeys } from "@/app/lib/auth-client";
 
@@ -56,6 +57,10 @@ const CicdView = dynamic(() => import("./cicd-view").then((m) => m.CicdView), {
   loading: () => tabFallback,
 });
 const SitTestingView = dynamic(() => import("./sit-testing-view").then((m) => m.SitTestingView), {
+  ssr: false,
+  loading: () => tabFallback,
+});
+const SitTestingViewV2 = dynamic(() => import("./sit-v2/sit-v2-view").then((m) => m.SitTestingViewV2), {
   ssr: false,
   loading: () => tabFallback,
 });
@@ -775,14 +780,23 @@ export default function AtlasWorkspace() {
           {tab === "cicd" ? (
             <CicdView client={client} canvasId={canvas?.id ?? null} />
           ) : tab === "sit" || (tab === "canvas" && view === "sit") ? (
-            <SitTestingView
-              client={client}
-              canvasId={canvas?.id ?? null}
-              canvasName={canvas?.name}
-              focusWorkbookId={sitFocus?.workbookId}
-              focusTicketKey={sitFocus?.ticketKey}
-              focusTestType={sitFocus?.testType}
-            />
+            isSitUiV2Enabled() ? (
+              <SitTestingViewV2
+                client={client}
+                canvasId={canvas?.id ?? null}
+                canvasName={canvas?.name}
+                projectName={project?.name}
+              />
+            ) : (
+              <SitTestingView
+                client={client}
+                canvasId={canvas?.id ?? null}
+                canvasName={canvas?.name}
+                focusWorkbookId={sitFocus?.workbookId}
+                focusTicketKey={sitFocus?.ticketKey}
+                focusTestType={sitFocus?.testType}
+              />
+            )
           ) : tab === "api" || (tab === "canvas" && view === "api") ? (
             swagger ? (
               <ApiTestingView spec={apiSpec} onReload={apiSpec.reload} specUrl={swagger.specUrl} />
