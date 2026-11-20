@@ -33,6 +33,7 @@ import {
   shortSha,
 } from "@/app/lib/git-sync-ui";
 import { Modal, fieldInput, fieldLabel, outlineButton, primaryButton } from "./modal";
+import { InlineConfirm } from "./inline-confirm";
 
 type AppId = IntegrationProviderId;
 
@@ -316,6 +317,8 @@ function GithubStep({
   const router = useRouter();
   const [busy, setBusy] = useState<"load" | "connect" | "disconnect" | null>("load");
   const [error, setError] = useState<string | null>(null);
+  const [confirmKind, setConfirmKind] = useState<null | "disconnect" | "public">(null);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
   const [folderOpen, setFolderOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [mapping, setMapping] = useState<{
@@ -413,6 +416,7 @@ function GithubStep({
     }
     setBusy("connect");
     setError(null);
+    setConfirmError(null);
     try {
       const body: {
         projectId: string;
@@ -427,32 +431,33 @@ function GithubStep({
         body.autoNewCanvases = autoNew;
       }
       await client.connectCanvasGit(canvas.id, body);
+      setConfirmKind(null);
       onConnected();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Connect failed";
       if (/public/i.test(msg) && !confirmPublic) {
-        if (window.confirm("This repository is public. Canvas data will be visible on GitHub. Continue?")) {
-          await connect(true);
-          return;
-        }
+        setConfirmKind("public");
+        setConfirmError(null);
+        setBusy(null);
+        return;
       }
-      setError(msg);
+      if (confirmPublic) setConfirmError(msg);
+      else setError(msg);
     } finally {
       setBusy(null);
     }
   };
 
   const disconnect = async () => {
-    if (!window.confirm("Disconnect GitHub sync for this canvas? Files already on GitHub stay; new edits will not sync.")) {
-      return;
-    }
     setBusy("disconnect");
+    setConfirmError(null);
     setError(null);
     try {
       await client.disconnectCanvasGit(canvas.id);
+      setConfirmKind(null);
       onConnected();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Disconnect failed");
+      setConfirmError(err instanceof Error ? err.message : "Disconnect failed");
     } finally {
       setBusy(null);
     }
@@ -604,22 +609,50 @@ function GithubStep({
         )}
 
         <p className="mt-3 text-[12px] leading-relaxed text-[#5E6066] dark:text-[#9ca3af]">{gitSyncGuidance(tone, status.lastError)}</p>
-        {error && <div className="mt-3 rounded-[8px] bg-[#FDF1F1] px-3 py-2 text-[12px] text-[#991B1B]">{error}</div>}
+        {error && confirmKind !== "disconnect" && (
+          <div className="mt-3 rounded-[8px] bg-[#FDF1F1] px-3 py-2 text-[12px] text-[#991B1B]">{error}</div>
+        )}
 
-        <div className="mt-5 flex flex-wrap justify-end gap-3">
-          <button type="button" className={outlineButton} onClick={onBack} disabled={!!busy}>
-            Back
-          </button>
-          <button type="button" className={outlineButton} onClick={() => void disconnect()} disabled={!!busy}>
-            {busy === "disconnect" ? "Disconnecting…" : "Disconnect"}
-          </button>
-          {repoLink && (
-            <a href={repoLink} target="_blank" rel="noreferrer" className={primaryButton}>
-              <TbExternalLink size={14} />
-              View on GitHub
-            </a>
-          )}
-        </div>
+        {confirmKind === "disconnect" ? (
+          <InlineConfirm
+            title="Disconnect GitHub?"
+            message="Disconnect GitHub sync for this canvas? Files already on GitHub stay; new edits will not sync."
+            confirmLabel="Disconnect"
+            cancelLabel="Cancel"
+            busyLabel="Disconnecting…"
+            busy={busy === "disconnect"}
+            error={confirmError}
+            onCancel={() => {
+              if (busy === "disconnect") return;
+              setConfirmKind(null);
+              setConfirmError(null);
+            }}
+            onConfirm={() => void disconnect()}
+          />
+        ) : (
+          <div className="mt-5 flex flex-wrap justify-end gap-3">
+            <button type="button" className={outlineButton} onClick={onBack} disabled={!!busy}>
+              Back
+            </button>
+            <button
+              type="button"
+              className={outlineButton}
+              onClick={() => {
+                setConfirmError(null);
+                setConfirmKind("disconnect");
+              }}
+              disabled={!!busy}
+            >
+              Disconnect
+            </button>
+            {repoLink && (
+              <a href={repoLink} target="_blank" rel="noreferrer" className={primaryButton}>
+                <TbExternalLink size={14} />
+                View on GitHub
+              </a>
+            )}
+          </div>
+        )}
       </div>
     );
   }
@@ -697,25 +730,45 @@ function GithubStep({
         </>
       )}
 
-      {error && <div className="mt-3 rounded-[8px] bg-[#FDF1F1] px-3 py-2 text-[12px] text-[#991B1B]">{error}</div>}
+      {error && confirmKind !== "public" && (
+        <div className="mt-3 rounded-[8px] bg-[#FDF1F1] px-3 py-2 text-[12px] text-[#991B1B]">{error}</div>
+      )}
       {!pid && (
         <p className="mt-3 text-[12px] text-[#B45309]">Open App Atlas from a project so this canvas has a project id.</p>
       )}
 
-      <div className="mt-5 flex justify-end gap-3">
-        <button type="button" className={outlineButton} onClick={onBack} disabled={!!busy}>
-          Back
-        </button>
-        <button type="button" className={primaryButton} disabled={busy !== null || !pid} onClick={() => void connect(false)}>
-          {busy === "connect" ? (
-            <>
-              <TbLoader2 className="animate-spin" size={14} /> Connecting…
-            </>
-          ) : (
-            "Connect"
-          )}
-        </button>
-      </div>
+      {confirmKind === "public" ? (
+        <InlineConfirm
+          title="Public repository"
+          message="This repository is public. Canvas data will be visible on GitHub. Continue?"
+          confirmLabel="Connect anyway"
+          cancelLabel="Cancel"
+          busyLabel="Connecting…"
+          busy={busy === "connect"}
+          error={confirmError}
+          onCancel={() => {
+            if (busy === "connect") return;
+            setConfirmKind(null);
+            setConfirmError(null);
+          }}
+          onConfirm={() => void connect(true)}
+        />
+      ) : (
+        <div className="mt-5 flex justify-end gap-3">
+          <button type="button" className={outlineButton} onClick={onBack} disabled={!!busy}>
+            Back
+          </button>
+          <button type="button" className={primaryButton} disabled={busy !== null || !pid} onClick={() => void connect(false)}>
+            {busy === "connect" ? (
+              <>
+                <TbLoader2 className="animate-spin" size={14} /> Connecting…
+              </>
+            ) : (
+              "Connect"
+            )}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { TbX } from "react-icons/tb";
 
 export function Modal({
@@ -18,6 +19,15 @@ export function Modal({
   scrollBody?: boolean;
   maxBodyHeight?: string;
 }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    // Bubble phase so InlineConfirm (capture) can cancel first.
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   return (
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 p-4"
