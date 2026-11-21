@@ -807,8 +807,8 @@ export function SitV2Grid({
                   : ""}
                 {drawerRow.cells.statusSource ? ` · source ${drawerRow.cells.statusSource}` : ""}
               </p>
-              {drawerRow.cells.generationVersion || workbook.version != null ? (
-                <p>Generation version: {drawerRow.cells.generationVersion || String(workbook.version)}</p>
+              {drawerRow.cells.generationVersion || drawerRow.cells.version ? (
+                <p>Generation version: {drawerRow.cells.generationVersion || drawerRow.cells.version}</p>
               ) : null}
             </div>
           )}
