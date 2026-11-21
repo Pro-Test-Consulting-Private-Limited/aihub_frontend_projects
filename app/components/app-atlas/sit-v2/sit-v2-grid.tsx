@@ -11,7 +11,7 @@ import {
 } from "react-icons/tb";
 import type { SitEpic, SitSheetRow, SitWorkbook } from "@/app/interfaces/appatlas";
 import { displayModuleFeature } from "@/app/lib/sit-module-feature";
-import { CopyField, OriginBadge } from "./sit-v2-bits";
+import { CopyField, OriginBadge, OriginGlyph, originRowTint, provenanceTooltip } from "./sit-v2-bits";
 import { SitV2EditableCell, type CellCoord } from "./sit-v2-editable-cell";
 import { SitV2ListEditor } from "./sit-v2-list-editor";
 
@@ -341,8 +341,7 @@ export function SitV2Grid({
               <th className="sticky left-0 z-[3] w-8 bg-[#1F4E78] px-2 py-2">
                 <span className="sr-only">Select</span>
               </th>
-              <th className="w-16 bg-[#1F4E78] px-2 py-2 text-left text-[10px] font-semibold">Origin</th>
-              <th className="sticky left-8 z-[3] min-w-[88px] bg-[#1F4E78] px-2 py-2 text-left text-[10px] font-semibold">
+              <th className="sticky left-8 z-[3] min-w-[100px] bg-[#1F4E78] px-2 py-2 text-left text-[10px] font-semibold">
                 ID
               </th>
               <th className="min-w-[72px] px-2 py-2 text-left text-[10px] font-semibold">Module</th>
@@ -352,15 +351,14 @@ export function SitV2Grid({
               <th className="min-w-[140px] px-2 py-2 text-left text-[10px] font-semibold">Preconditions</th>
               <th className="min-w-[280px] px-2 py-2 text-left text-[10px] font-semibold">Test Steps</th>
               <th className="min-w-[160px] px-2 py-2 text-left text-[10px] font-semibold">Expected Result</th>
-              <th className="min-w-[100px] px-2 py-2 text-left text-[10px] font-semibold">Status</th>
-              <th className="w-8 bg-[#1F4E78]" />
+              <th className="min-w-[110px] px-2 py-2 text-left text-[10px] font-semibold">Status</th>
             </tr>
           </thead>
           <tbody>
             {generating && rows.length === 0 &&
               [0, 1, 2].map((i) => (
                 <tr key={`sk-${i}`} className="animate-pulse">
-                  <td colSpan={12} className="border-b border-[#f3f4f6] px-3 py-4">
+                  <td colSpan={10} className="border-b border-[#f3f4f6] px-3 py-4">
                     <div className="h-4 w-3/4 rounded bg-[#e5e7eb]" />
                   </td>
                 </tr>
@@ -371,10 +369,13 @@ export function SitV2Grid({
               const mf = displayModuleFeature(row.cells, epics);
               const isSel = (f: string) => selected?.rowId === row.id && selected.field === f;
               const isEdit = (f: string) => editing?.rowId === row.id && editing.field === f;
+              const tint = originRowTint(row.cells.origin, edited);
+              const tip = provenanceTooltip(row.cells);
               return (
                 <tr
                   key={row.id}
-                  className="group border-b border-[#f3f4f6] hover:bg-[#fafafa] dark:border-[#1a1a1a] dark:hover:bg-[#141414]"
+                  className={`group border-b border-[#f3f4f6] hover:bg-[#fafafa] dark:border-[#1a1a1a] dark:hover:bg-[#141414] ${tint}`}
+                  data-origin={row.cells.origin || "ai"}
                 >
                   <td className="sticky left-0 z-[1] bg-white px-2 py-2 dark:bg-[#101010]">
                     <input
@@ -391,17 +392,18 @@ export function SitV2Grid({
                       className="accent-[#8664F2]"
                     />
                   </td>
-                  <td className="px-2 py-2 align-top">
-                    <OriginBadge origin={row.cells.origin} edited={edited} />
-                  </td>
-                  <td className="sticky left-8 z-[1] bg-white px-2 py-2 align-top font-mono text-[11px] font-semibold dark:bg-[#101010]">
+                  <td
+                    className="sticky left-8 z-[1] bg-white px-2 py-2 align-top font-mono text-[11px] font-semibold dark:bg-[#101010]"
+                    title={tip}
+                  >
                     <button
                       type="button"
-                      className="inline-flex items-center gap-0.5 text-left"
+                      className="inline-flex items-center gap-1 text-left"
                       onClick={() => setExpanded((e) => ({ ...e, [row.id]: !e[row.id] }))}
                     >
                       {open ? <TbChevronDown size={12} /> : <TbChevronRight size={12} />}
-                      {row.cells.caseId || row.cells.tcId}
+                      <OriginGlyph origin={row.cells.origin} edited={edited} title={tip} />
+                      <span>{row.cells.caseId || row.cells.tcId}</span>
                     </button>
                   </td>
                   <td className="px-2 py-2 align-top" title="Derived from Jira epic (not editable)">
@@ -550,37 +552,37 @@ export function SitV2Grid({
                     )}
                   />
                   <td className="px-2 py-2 align-top">
-                    <select
-                      disabled={!canEdit}
-                      className={`rounded-full border-0 px-2 py-0.5 text-[10.5px] font-semibold disabled:opacity-80 ${
-                        STATUS_STYLE[row.cells.executionStatus || "Not run"] || STATUS_STYLE["Not run"]
-                      }`}
-                      value={row.cells.executionStatus || "Not run"}
-                      title={
-                        row.cells.statusBy
-                          ? `Set by ${row.cells.statusBy}${
-                              row.cells.statusAt
-                                ? ` · ${new Date(Number(row.cells.statusAt)).toLocaleString()}`
-                                : ""
-                            }`
-                          : "Status is set by a human (does not mark the row Edited)"
-                      }
-                      onChange={(e) => onPatch(row.id, { executionStatus: e.target.value })}
-                    >
-                      {["Not run", "Passed", "Failed", "Partial"].map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="px-1 py-2 align-top">
-                    <RowMenu
-                      canEdit={canEdit}
-                      onDuplicate={() => onDuplicate(row.id)}
-                      onDelete={() => onDelete(row.id)}
-                      onOpenDrawer={() => setDrawer(row.id)}
-                    />
+                    <div className="flex items-start gap-1">
+                      <select
+                        disabled={!canEdit}
+                        className={`rounded-full border-0 px-2 py-0.5 text-[10.5px] font-semibold disabled:opacity-80 ${
+                          STATUS_STYLE[row.cells.executionStatus || "Not run"] || STATUS_STYLE["Not run"]
+                        }`}
+                        value={row.cells.executionStatus || "Not run"}
+                        title={
+                          row.cells.statusBy
+                            ? `Set by ${row.cells.statusBy}${
+                                row.cells.statusAt
+                                  ? ` · ${new Date(Number(row.cells.statusAt)).toLocaleString()}`
+                                  : ""
+                              }`
+                            : "Status is set by a human (does not mark the row Edited)"
+                        }
+                        onChange={(e) => onPatch(row.id, { executionStatus: e.target.value })}
+                      >
+                        {["Not run", "Passed", "Failed", "Partial"].map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </select>
+                      <RowMenu
+                        canEdit={canEdit}
+                        onDuplicate={() => onDuplicate(row.id)}
+                        onDelete={() => onDelete(row.id)}
+                        onOpenDrawer={() => setDrawer(row.id)}
+                      />
+                    </div>
                   </td>
                 </tr>
               );

@@ -749,17 +749,39 @@ export function SitTestingViewV2({
                   </option>
                 ))}
               </select>
-              <select
-                className="rounded-[6px] border border-[#e2e6ef] bg-white px-2 py-0.5 text-[11px] dark:border-[#2a2a2a] dark:bg-[#141414]"
-                value={originFilter || ""}
-                onChange={(e) => setOriginFilter(e.target.value || null)}
+              <div
+                className="inline-flex items-center gap-0.5 rounded-[8px] border border-[#e2e6ef] bg-white p-0.5 dark:border-[#2a2a2a] dark:bg-[#141414]"
+                role="group"
+                aria-label="Origin filter"
+                data-testid="sit-origin-filter-chips"
               >
-                <option value="">Origin</option>
-                <option value="ai">AI</option>
-                <option value="human">Human</option>
-                <option value="template">Template</option>
-                <option value="edited">Edited</option>
-              </select>
+                {(
+                  [
+                    { id: null, label: "All" },
+                    { id: "ai", label: "AI" },
+                    { id: "human", label: "Human" },
+                    { id: "template", label: "Template" },
+                    { id: "edited", label: "Edited" },
+                  ] as const
+                ).map((o) => {
+                  const active = (originFilter || null) === o.id;
+                  return (
+                    <button
+                      key={o.label}
+                      type="button"
+                      className={`rounded-[6px] px-2 py-0.5 text-[11px] font-medium transition ${
+                        active
+                          ? "bg-[#f3f0ff] text-[#5b21b6]"
+                          : "text-[#5b647a] hover:bg-[#f8fafc]"
+                      }`}
+                      aria-pressed={active}
+                      onClick={() => setOriginFilter(o.id)}
+                    >
+                      {o.label}
+                    </button>
+                  );
+                })}
+              </div>
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
