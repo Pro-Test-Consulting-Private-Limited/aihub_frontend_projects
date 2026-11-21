@@ -1,0 +1,11 @@
+{
+  "fonts": {
+    "cellFont": "ui-sans-serif, system-ui, sans-serif",
+    "headerFont": "ui-sans-serif, system-ui, sans-serif",
+    "selectFont": "ui-sans-serif, system-ui, sans-serif",
+    "inputFont": "ui-sans-serif, system-ui, sans-serif",
+    "drawerFont": "ui-sans-serif, system-ui, sans-serif",
+    "toolbarFont": "ui-sans-serif, system-ui, sans-serif"
+  },
+  "same": true
+}
