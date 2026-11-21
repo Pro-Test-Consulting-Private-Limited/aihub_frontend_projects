@@ -842,6 +842,17 @@ export function SitTestingViewV2({
                   }}
                 />
               )}
+              {activeTicketKey &&
+                epics.flatMap((e) => e.tickets).find((x) => x.key === activeTicketKey)?.hasScreenContext ===
+                  false && (
+                  <span
+                    className="rounded-full border border-[#fde68a] bg-[#fffbeb] px-2.5 py-0.5 text-[11px] font-medium text-[#92400e]"
+                    title="This ticket is not mapped to a canvas screen"
+                    data-testid="sit-no-screen-chip"
+                  >
+                    No mapped screen: steps may be less specific
+                  </span>
+                )}
               <span className="relative inline-flex items-center gap-1 text-[11px] text-[#6b7280]">
                 {counts.total} · {counts.ai} AI · {counts.edited} edited
                 {counts.human ? ` · ${counts.human} human` : ""}

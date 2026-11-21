@@ -608,6 +608,8 @@ export type SitTicket = {
   rcqCount?: number;
   rcqComplete?: boolean;
   hasNotes?: boolean;
+  /** False when ticket has no canvas screen mapping (steps may be less specific). */
+  hasScreenContext?: boolean;
   generation?: SitTicketGenerationMeta | null;
 };
 
