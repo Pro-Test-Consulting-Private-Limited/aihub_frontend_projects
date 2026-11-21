@@ -25,6 +25,15 @@ import { SitV2Grid } from "./sit-v2-grid";
 import { SitV2AcChip } from "./sit-v2-ac-chip";
 import { SitV2Select } from "./sit-v2-select";
 import {
+  loadHiddenColumns,
+  loadSitDensity,
+  saveHiddenColumns,
+  saveSitDensity,
+  SIT_OPTIONAL_COLUMNS,
+  type SitColumnId,
+  type SitDensity,
+} from "./sit-v2-prefs";
+import {
   buildXlsxBlob,
   downloadBlob,
   toCopyTable,
@@ -84,6 +93,9 @@ export function SitTestingViewV2({
   const [deadLoading, setDeadLoading] = useState(false);
   const [legendOpen, setLegendOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [density, setDensity] = useState<SitDensity>("comfortable");
+  const [hiddenColumns, setHiddenColumns] = useState<SitColumnId[]>([]);
+  const [columnsOpen, setColumnsOpen] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const firstRowAt = useRef<number | null>(null);
 
@@ -115,6 +127,11 @@ export function SitTestingViewV2({
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- initial load only when canvas changes
   }, [client, canvasId]);
+
+  useEffect(() => {
+    setDensity(loadSitDensity());
+    setHiddenColumns(loadHiddenColumns());
+  }, []);
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -818,8 +835,8 @@ export function SitTestingViewV2({
                   ?
                 </button>
                 {legendOpen && (
-                  <div className="absolute left-0 top-full z-30 mt-1 w-[320px] rounded-[8px] border border-[#e2e6ef] bg-white p-3 text-left text-[11.5px] leading-snug text-[#374151] shadow-lg dark:border-[#2a2a2a] dark:bg-[#151515] dark:text-[#d1d5db]">
-                    <div className="mb-1 font-semibold text-[#1F1F1F] dark:text-[#ededed]">Origin legend</div>
+                  <div className="absolute left-0 top-full z-30 mt-1 w-[340px] rounded-[8px] border border-[#e2e6ef] bg-white p-3 text-left text-[11.5px] leading-snug text-[#374151] shadow-lg dark:border-[#2a2a2a] dark:bg-[#151515] dark:text-[#d1d5db]">
+                    <div className="mb-1 font-semibold text-[#1F1F1F] dark:text-[#ededed]">Legend & shortcuts</div>
                     <p>
                       <strong>AI</strong> — written by the model.
                     </p>
@@ -831,8 +848,26 @@ export function SitTestingViewV2({
                       down).
                     </p>
                     <p>
-                      <strong>Edited</strong> — a person changed an AI or Template row.
+                      <strong>Edited</strong> — a person changed an AI or Template row (orange dot on ID).
                     </p>
+                    <div className="mt-2 border-t border-[#eef0f5] pt-2 text-[11px]">
+                      <p>
+                        <kbd>Enter</kbd> / <kbd>F2</kbd> — edit selected cell
+                      </p>
+                      <p>
+                        <kbd>Esc</kbd> — cancel · <kbd>Enter</kbd> — commit
+                      </p>
+                      <p>
+                        <kbd>Shift</kbd>+<kbd>Enter</kbd> — line break in multi-line
+                      </p>
+                      <p>
+                        <kbd>Tab</kbd> / arrows — move · double-click — edit
+                      </p>
+                      <p>
+                        List editor: <kbd>Ctrl</kbd>+<kbd>Enter</kbd> save · type <code>{"{{"}</code> for
+                        placeholders
+                      </p>
+                    </div>
                     <button
                       type="button"
                       className="mt-2 text-[#8664F2]"
@@ -843,6 +878,63 @@ export function SitTestingViewV2({
                   </div>
                 )}
               </span>
+              <div
+                className="inline-flex items-center gap-0.5 rounded-[8px] border border-[#e2e6ef] bg-white p-0.5 dark:border-[#2a2a2a]"
+                role="group"
+                aria-label="Density"
+              >
+                {(["comfortable", "compact"] as SitDensity[]).map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    className={`rounded-[6px] px-2 py-0.5 text-[11px] capitalize ${
+                      density === d ? "bg-[#f3f0ff] text-[#5b21b6]" : "text-[#5b647a]"
+                    }`}
+                    onClick={() => {
+                      setDensity(d);
+                      saveSitDensity(d);
+                    }}
+                  >
+                    {d}
+                  </button>
+                ))}
+              </div>
+              <div className="relative">
+                <button
+                  type="button"
+                  className="rounded-[6px] border border-[#e2e6ef] bg-white px-2 py-0.5 text-[11px] dark:border-[#2a2a2a]"
+                  onClick={() => setColumnsOpen((v) => !v)}
+                >
+                  Columns
+                </button>
+                {columnsOpen && (
+                  <div className="absolute right-0 z-30 mt-1 w-48 rounded-[8px] border border-[#e2e6ef] bg-white py-1 text-[11px] shadow-lg dark:border-[#2a2a2a] dark:bg-[#151515]">
+                    <p className="px-3 py-1 text-[10px] text-[#9ca3af]">ID, Scenario, Status always visible</p>
+                    {SIT_OPTIONAL_COLUMNS.map((c) => {
+                      const hidden = hiddenColumns.includes(c.id);
+                      return (
+                        <label
+                          key={c.id}
+                          className="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-[#f3f0ff]"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={!hidden}
+                            onChange={() => {
+                              const next = hidden
+                                ? hiddenColumns.filter((x) => x !== c.id)
+                                : [...hiddenColumns, c.id];
+                              setHiddenColumns(next);
+                              saveHiddenColumns(next);
+                            }}
+                          />
+                          {c.label}
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
               {canEdit && (
                 <button
                   type="button"
@@ -864,6 +956,8 @@ export function SitTestingViewV2({
               originFilter={originFilter}
               search={search}
               generating={generating}
+              density={density}
+              hiddenColumns={hiddenColumns}
               onPatch={(rowId, body) => {
                 if (!canEdit) return;
                 void patchRow(rowId, body);

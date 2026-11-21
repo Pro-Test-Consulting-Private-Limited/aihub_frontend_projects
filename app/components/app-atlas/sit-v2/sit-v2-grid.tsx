@@ -191,6 +191,8 @@ export function SitV2Grid({
   originFilter,
   search,
   generating,
+  density = "comfortable",
+  hiddenColumns = [],
   onPatch,
   onDelete,
   onAdd,
@@ -205,6 +207,8 @@ export function SitV2Grid({
   originFilter: string | null;
   search: string;
   generating?: boolean;
+  density?: "comfortable" | "compact";
+  hiddenColumns?: string[];
   onPatch: (rowId: string, body: Record<string, unknown>) => void;
   onDelete: (rowId: string) => void;
   onAdd: () => void;
@@ -212,10 +216,14 @@ export function SitV2Grid({
 }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [drawer, setDrawer] = useState<string | null>(null);
+  const [drawerTab, setDrawerTab] = useState<"details" | "testdata" | "coverage" | "history">("details");
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<CellCoord | null>(null);
   const [editing, setEditing] = useState<CellCoord | null>(null);
   const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const hide = (id: string) => hiddenColumns.includes(id);
+  const cellPad = density === "compact" ? "px-1.5 py-1" : "px-2 py-2";
+  const tableText = density === "compact" ? "text-[11px]" : "text-[12px]";
 
   const rows = useMemo(() => {
     const tc = workbook.sheets.find((s) => s.kind === "test-cases");
@@ -336,23 +344,35 @@ export function SitV2Grid({
             </button>
           </div>
         )}
-        <table className="min-w-[1100px] w-full border-collapse font-sans text-[12px]">
+        <table className={`min-w-[1100px] w-full border-collapse font-sans ${tableText}`}>
           <thead className="sticky top-0 z-[2] bg-[#1F4E78] text-white">
             <tr>
-              <th className="sticky left-0 z-[3] w-8 bg-[#1F4E78] px-2 py-2">
+              <th className={`sticky left-0 z-[3] w-8 bg-[#1F4E78] ${cellPad}`}>
                 <span className="sr-only">Select</span>
               </th>
-              <th className="sticky left-8 z-[3] min-w-[100px] bg-[#1F4E78] px-2 py-2 text-left text-[10px] font-semibold">
+              <th className={`sticky left-8 z-[3] min-w-[100px] bg-[#1F4E78] ${cellPad} text-left text-[10px] font-semibold`}>
                 ID
               </th>
-              <th className="min-w-[72px] px-2 py-2 text-left text-[10px] font-semibold">Module</th>
-              <th className="min-w-[72px] px-2 py-2 text-left text-[10px] font-semibold">Feature</th>
-              <th className="min-w-[100px] px-2 py-2 text-left text-[10px] font-semibold">Prio / Sev</th>
-              <th className="min-w-[180px] px-2 py-2 text-left text-[10px] font-semibold">Scenario</th>
-              <th className="min-w-[140px] px-2 py-2 text-left text-[10px] font-semibold">Preconditions</th>
-              <th className="min-w-[280px] px-2 py-2 text-left text-[10px] font-semibold">Test Steps</th>
-              <th className="min-w-[160px] px-2 py-2 text-left text-[10px] font-semibold">Expected Result</th>
-              <th className="min-w-[110px] px-2 py-2 text-left text-[10px] font-semibold">Status</th>
+              {!hide("module") && (
+                <th className={`min-w-[72px] ${cellPad} text-left text-[10px] font-semibold`}>Module</th>
+              )}
+              {!hide("feature") && (
+                <th className={`min-w-[72px] ${cellPad} text-left text-[10px] font-semibold`}>Feature</th>
+              )}
+              {!hide("prioSev") && (
+                <th className={`min-w-[100px] ${cellPad} text-left text-[10px] font-semibold`}>Prio / Sev</th>
+              )}
+              <th className={`min-w-[180px] ${cellPad} text-left text-[10px] font-semibold`}>Scenario</th>
+              {!hide("preconditions") && (
+                <th className={`min-w-[140px] ${cellPad} text-left text-[10px] font-semibold`}>Preconditions</th>
+              )}
+              {!hide("steps") && (
+                <th className={`min-w-[280px] ${cellPad} text-left text-[10px] font-semibold`}>Test Steps</th>
+              )}
+              {!hide("expected") && (
+                <th className={`min-w-[160px] ${cellPad} text-left text-[10px] font-semibold`}>Expected Result</th>
+              )}
+              <th className={`min-w-[110px] ${cellPad} text-left text-[10px] font-semibold`}>Status</th>
             </tr>
           </thead>
           <tbody>
@@ -407,38 +427,44 @@ export function SitV2Grid({
                       <span>{row.cells.caseId || row.cells.tcId}</span>
                     </button>
                   </td>
-                  <td className="px-2 py-2 align-top" title="Derived from Jira epic (not editable)">
-                    {mf.module}
-                  </td>
-                  <td className="px-2 py-2 align-top" title="Derived from ticket summary (not editable)">
-                    {mf.feature}
-                  </td>
-                  <td className="px-2 py-2 align-top">
-                    <div className="flex flex-wrap gap-1">
-                      {(["priority", "severity"] as const).map((field) => {
-                        const val = row.cells[field] || "Medium";
-                        const style =
-                          val === "High"
-                            ? "bg-[#fee2e2] text-[#991b1b]"
-                            : val === "Low"
-                              ? "bg-[#e0e7ff] text-[#3730a3]"
-                              : "bg-[#fef3c7] text-[#92400e]";
-                        return (
-                          <SitV2Select
-                            key={field}
-                            pill
-                            disabled={!canEdit}
-                            value={val}
-                            aria-label={field}
-                            data-testid={`sit-${field}-select`}
-                            buttonClassName={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold font-[inherit] ${style}`}
-                            options={["High", "Medium", "Low"].map((v) => ({ value: v, label: v }))}
-                            onChange={(v) => onPatch(row.id, { [field]: v })}
-                          />
-                        );
-                      })}
-                    </div>
-                  </td>
+                  {!hide("module") && (
+                    <td className={`${cellPad} align-top`} title="Derived from Jira epic (not editable)">
+                      {mf.module}
+                    </td>
+                  )}
+                  {!hide("feature") && (
+                    <td className={`${cellPad} align-top`} title="Derived from ticket summary (not editable)">
+                      {mf.feature}
+                    </td>
+                  )}
+                  {!hide("prioSev") && (
+                    <td className={`${cellPad} align-top`}>
+                      <div className="flex flex-wrap gap-1">
+                        {(["priority", "severity"] as const).map((field) => {
+                          const val = row.cells[field] || "Medium";
+                          const style =
+                            val === "High"
+                              ? "bg-[#fee2e2] text-[#991b1b]"
+                              : val === "Low"
+                                ? "bg-[#e0e7ff] text-[#3730a3]"
+                                : "bg-[#fef3c7] text-[#92400e]";
+                          return (
+                            <SitV2Select
+                              key={field}
+                              pill
+                              disabled={!canEdit}
+                              value={val}
+                              aria-label={field}
+                              data-testid={`sit-${field}-select`}
+                              buttonClassName={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold font-[inherit] ${style}`}
+                              options={["High", "Medium", "Low"].map((v) => ({ value: v, label: v }))}
+                              onChange={(v) => onPatch(row.id, { [field]: v })}
+                            />
+                          );
+                        })}
+                      </div>
+                    </td>
+                  )}
                   <SitV2EditableCell
                     rowId={row.id}
                     field="scenario"
@@ -466,99 +492,105 @@ export function SitV2Grid({
                       </div>
                     }
                   />
-                  <SitV2EditableCell
-                    rowId={row.id}
-                    field="preconditions"
-                    value={row.cells.preconditions || ""}
-                    canEdit={canEdit}
-                    selected={isSel("preconditions")}
-                    editing={isEdit("preconditions")}
-                    onSelect={setSelected}
-                    onStartEdit={setEditing}
-                    onCancelEdit={() => setEditing(null)}
-                    onCommit={commitCell}
-                    onMove={moveCell}
-                    renderEditor={({ value, commit, cancel }) => (
-                      <SitV2ListEditor
-                        kind="bullets"
-                        initialValue={value}
-                        placeholders={placeholdersForRow(row)}
-                        onSave={commit}
-                        onCancel={cancel}
-                      />
-                    )}
-                    display={
-                      <span>
-                        <span className="mr-1 rounded bg-[#ede9fe] px-1.5 py-0.5 text-[10px] font-semibold text-[#5b21b6]">
-                          {row.cells.requirementId || "—"}
+                  {!hide("preconditions") && (
+                    <SitV2EditableCell
+                      rowId={row.id}
+                      field="preconditions"
+                      value={row.cells.preconditions || ""}
+                      canEdit={canEdit}
+                      selected={isSel("preconditions")}
+                      editing={isEdit("preconditions")}
+                      onSelect={setSelected}
+                      onStartEdit={setEditing}
+                      onCancelEdit={() => setEditing(null)}
+                      onCommit={commitCell}
+                      onMove={moveCell}
+                      renderEditor={({ value, commit, cancel }) => (
+                        <SitV2ListEditor
+                          kind="bullets"
+                          initialValue={value}
+                          placeholders={placeholdersForRow(row)}
+                          onSave={commit}
+                          onCancel={cancel}
+                        />
+                      )}
+                      display={
+                        <span>
+                          <span className="mr-1 rounded bg-[#ede9fe] px-1.5 py-0.5 text-[10px] font-semibold text-[#5b21b6]">
+                            {row.cells.requirementId || "—"}
+                          </span>
+                          <span className="line-clamp-2 whitespace-pre-wrap text-[#5b647a]" title={row.cells.preconditions}>
+                            {row.cells.preconditions}
+                          </span>
                         </span>
-                        <span className="line-clamp-2 whitespace-pre-wrap text-[#5b647a]" title={row.cells.preconditions}>
-                          {row.cells.preconditions}
-                        </span>
-                      </span>
-                    }
-                  />
-                  <SitV2EditableCell
-                    rowId={row.id}
-                    field="steps"
-                    value={row.cells.steps || ""}
-                    canEdit={canEdit}
-                    selected={isSel("steps")}
-                    editing={isEdit("steps")}
-                    onSelect={setSelected}
-                    onStartEdit={setEditing}
-                    onCancelEdit={() => setEditing(null)}
-                    onCommit={commitCell}
-                    onMove={moveCell}
-                    renderEditor={({ value, commit, cancel }) => (
-                      <SitV2ListEditor
-                        kind="steps"
-                        initialValue={value}
-                        placeholders={placeholdersForRow(row)}
-                        onSave={commit}
-                        onCancel={cancel}
-                      />
-                    )}
-                    display={
-                      <div>
-                        <div className={open ? "" : "max-h-[7.5rem] overflow-hidden"}>
-                          <StepsWithChips steps={row.cells.steps || ""} />
+                      }
+                    />
+                  )}
+                  {!hide("steps") && (
+                    <SitV2EditableCell
+                      rowId={row.id}
+                      field="steps"
+                      value={row.cells.steps || ""}
+                      canEdit={canEdit}
+                      selected={isSel("steps")}
+                      editing={isEdit("steps")}
+                      onSelect={setSelected}
+                      onStartEdit={setEditing}
+                      onCancelEdit={() => setEditing(null)}
+                      onCommit={commitCell}
+                      onMove={moveCell}
+                      renderEditor={({ value, commit, cancel }) => (
+                        <SitV2ListEditor
+                          kind="steps"
+                          initialValue={value}
+                          placeholders={placeholdersForRow(row)}
+                          onSave={commit}
+                          onCancel={cancel}
+                        />
+                      )}
+                      display={
+                        <div>
+                          <div className={open ? "" : "max-h-[7.5rem] overflow-hidden"}>
+                            <StepsWithChips steps={row.cells.steps || ""} />
+                          </div>
+                          {!open && (row.cells.steps || "").split("\n").length > 4 && (
+                            <button
+                              type="button"
+                              className="mt-1 text-[10px] font-medium text-[#8664F2]"
+                              onClick={() => setExpanded((e) => ({ ...e, [row.id]: true }))}
+                            >
+                              Expand
+                            </button>
+                          )}
+                          {open && <TestDataBlock row={row} />}
                         </div>
-                        {!open && (row.cells.steps || "").split("\n").length > 4 && (
-                          <button
-                            type="button"
-                            className="mt-1 text-[10px] font-medium text-[#8664F2]"
-                            onClick={() => setExpanded((e) => ({ ...e, [row.id]: true }))}
-                          >
-                            Expand
-                          </button>
-                        )}
-                        {open && <TestDataBlock row={row} />}
-                      </div>
-                    }
-                  />
-                  <SitV2EditableCell
-                    rowId={row.id}
-                    field="expected"
-                    value={row.cells.expected || ""}
-                    canEdit={canEdit}
-                    selected={isSel("expected")}
-                    editing={isEdit("expected")}
-                    onSelect={setSelected}
-                    onStartEdit={setEditing}
-                    onCancelEdit={() => setEditing(null)}
-                    onCommit={commitCell}
-                    onMove={moveCell}
-                    renderEditor={({ value, commit, cancel }) => (
-                      <SitV2ListEditor
-                        kind="bullets"
-                        initialValue={value}
-                        placeholders={placeholdersForRow(row)}
-                        onSave={commit}
-                        onCancel={cancel}
-                      />
-                    )}
-                  />
+                      }
+                    />
+                  )}
+                  {!hide("expected") && (
+                    <SitV2EditableCell
+                      rowId={row.id}
+                      field="expected"
+                      value={row.cells.expected || ""}
+                      canEdit={canEdit}
+                      selected={isSel("expected")}
+                      editing={isEdit("expected")}
+                      onSelect={setSelected}
+                      onStartEdit={setEditing}
+                      onCancelEdit={() => setEditing(null)}
+                      onCommit={commitCell}
+                      onMove={moveCell}
+                      renderEditor={({ value, commit, cancel }) => (
+                        <SitV2ListEditor
+                          kind="bullets"
+                          initialValue={value}
+                          placeholders={placeholdersForRow(row)}
+                          onSave={commit}
+                          onCancel={cancel}
+                        />
+                      )}
+                    />
+                  )}
                   <td className="px-2 py-2 align-top">
                     <div className="flex items-start gap-1">
                       <SitV2Select
@@ -602,63 +634,138 @@ export function SitV2Grid({
       </div>
 
       {drawerRow && (
-        <aside className="w-[320px] shrink-0 overflow-y-auto border-l border-[#eef0f5] bg-[#fafafa] p-3 dark:border-[#1a1a1a] dark:bg-[#0c0c0c]">
+        <aside
+          className="w-[340px] shrink-0 overflow-y-auto border-l border-[#eef0f5] bg-[#fafafa] p-3 dark:border-[#1a1a1a] dark:bg-[#0c0c0c]"
+          data-testid="sit-row-drawer"
+        >
           <div className="mb-2 flex items-center justify-between">
             <div className="font-semibold text-[#1F1F1F] dark:text-[#ededed]">{drawerRow.cells.caseId}</div>
             <button type="button" className="text-[12px] text-[#6b7280]" onClick={() => setDrawer(null)}>
               Close
             </button>
           </div>
-          <OriginBadge origin={drawerRow.cells.origin} edited={drawerRow.cells.edited === "1"} />
-          <p className="mt-2 text-[12px] text-[#6b7280]">
-            Status: <strong>{drawerRow.cells.executionStatus || "Not run"}</strong>
-            {drawerRow.cells.statusBy
-              ? ` · set by ${drawerRow.cells.statusBy}${
-                  drawerRow.cells.statusAt
-                    ? ` at ${new Date(Number(drawerRow.cells.statusAt)).toLocaleString()}`
-                    : ""
-                }`
-              : " · not set by a human yet"}
-          </p>
-          <p className="mt-2 text-[13px] font-medium">{drawerRow.cells.scenario}</p>
-          <p className="mt-1 text-[11px] text-[#6b7280]">
-            Ticket {drawerRow.cells.requirementId}
-            {drawerRow.cells.acIds || drawerRow.cells.ac
-              ? ` · AC: ${drawerRow.cells.acIds || drawerRow.cells.ac}`
-              : ""}
-          </p>
-          {drawerRow.cells.openQuestions ? (
-            <p className="mt-1 text-[11px] text-[#92400e]">
-              OPEN: <span className="font-mono">{drawerRow.cells.openQuestions}</span>
-            </p>
-          ) : null}
-          {drawerRow.cells.dataIntent ? (
-            <p className="mt-1 font-mono text-[10.5px] text-[#5b647a]">intent: {drawerRow.cells.dataIntent}</p>
-          ) : null}
-          <div className="mt-3 whitespace-pre-wrap text-[12px]">
-            <StepsWithChips steps={drawerRow.cells.steps || ""} />
+          <div className="mb-3 flex flex-wrap gap-1" role="tablist" aria-label="Drawer tabs">
+            {(
+              [
+                ["details", "Details"],
+                ["testdata", "Test data"],
+                ["coverage", "Coverage"],
+                ["history", "History"],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={drawerTab === id}
+                className={`rounded-[6px] px-2 py-0.5 text-[11px] font-medium ${
+                  drawerTab === id ? "bg-[#8664F2] text-white" : "border border-[#e2e6ef] bg-white text-[#5b647a]"
+                }`}
+                onClick={() => setDrawerTab(id)}
+              >
+                {label}
+              </button>
+            ))}
           </div>
-          <div className="mt-2 whitespace-pre-wrap text-[12px] text-[#374151]">{drawerRow.cells.expected}</div>
-          {canEdit && drawerRow.cells.origin === "ai" && drawerRow.cells.edited === "1" && (
-            <div className="mt-4 flex flex-col gap-2">
-              <button
-                type="button"
-                className="rounded-[8px] border border-[#e2e6ef] px-2 py-1 text-[11px] dark:border-[#2a2a2a]"
-                onClick={() => onPatch(drawerRow.id, { showOriginal: true })}
-              >
-                Show original AI version
-              </button>
-              <button
-                type="button"
-                className="rounded-[8px] border border-[#fecaca] px-2 py-1 text-[11px] text-[#991b1b]"
-                onClick={() => {
-                  if (window.confirm("Revert this case to the original AI version?")) {
-                    onPatch(drawerRow.id, { revertAi: true });
-                  }
-                }}
-              >
-                Revert to AI version
-              </button>
+          {drawerTab === "details" && (
+            <div>
+              <OriginBadge origin={drawerRow.cells.origin} edited={drawerRow.cells.edited === "1"} />
+              <p className="mt-2 text-[12px] text-[#6b7280]">
+                Status: <strong>{drawerRow.cells.executionStatus || "Not run"}</strong>
+                {drawerRow.cells.statusBy
+                  ? ` · set by ${drawerRow.cells.statusBy}${
+                      drawerRow.cells.statusAt
+                        ? ` at ${new Date(Number(drawerRow.cells.statusAt)).toLocaleString()}`
+                        : ""
+                    }`
+                  : " · not set by a human yet"}
+              </p>
+              <p className="mt-2 text-[13px] font-medium">{drawerRow.cells.scenario}</p>
+              <p className="mt-1 text-[11px] text-[#6b7280]">Ticket {drawerRow.cells.requirementId}</p>
+              <div className="mt-3 whitespace-pre-wrap text-[12px]">
+                <StepsWithChips steps={drawerRow.cells.steps || ""} />
+              </div>
+              <div className="mt-2 whitespace-pre-wrap text-[12px] text-[#374151]">{drawerRow.cells.expected}</div>
+              {canEdit && drawerRow.cells.origin === "ai" && drawerRow.cells.edited === "1" && (
+                <div className="mt-4 flex flex-col gap-2">
+                  <button
+                    type="button"
+                    className="rounded-[8px] border border-[#e2e6ef] px-2 py-1 text-[11px] dark:border-[#2a2a2a]"
+                    onClick={() => onPatch(drawerRow.id, { showOriginal: true })}
+                  >
+                    Show original AI version
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-[8px] border border-[#fecaca] px-2 py-1 text-[11px] text-[#991b1b]"
+                    onClick={() => {
+                      if (window.confirm("Revert this case to the original AI version?")) {
+                        onPatch(drawerRow.id, { revertAi: true });
+                      }
+                    }}
+                  >
+                    Revert to AI version
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+          {drawerTab === "testdata" && (
+            <div>
+              <TestDataBlock row={drawerRow} />
+              {!drawerRow.cells.steps?.includes("{{") && (
+                <p className="text-[11px] text-[#9ca3af]">No placeholders in steps for this case.</p>
+              )}
+              {drawerRow.cells.dataIntent ? (
+                <p className="mt-2 font-mono text-[10.5px] text-[#5b647a]">intent: {drawerRow.cells.dataIntent}</p>
+              ) : null}
+            </div>
+          )}
+          {drawerTab === "coverage" && (
+            <div className="space-y-2 text-[12px]">
+              <p>
+                ACs:{" "}
+                <span className="font-mono">{drawerRow.cells.acIds || drawerRow.cells.ac || "—"}</span>
+              </p>
+              {drawerRow.cells.openQuestions ? (
+                <p className="text-[#92400e]">
+                  OPEN: <span className="font-mono">{drawerRow.cells.openQuestions}</span>
+                </p>
+              ) : (
+                <p className="text-[#9ca3af]">No open questions.</p>
+              )}
+            </div>
+          )}
+          {drawerTab === "history" && (
+            <div className="space-y-2 text-[11.5px] text-[#374151]">
+              <p>
+                Origin: <strong>{drawerRow.cells.origin || "ai"}</strong>
+                {drawerRow.cells.edited === "1" ? " · Edited" : ""}
+              </p>
+              {drawerRow.cells.editedBy ? (
+                <p>
+                  Last edit: {drawerRow.cells.editedBy}
+                  {drawerRow.cells.editedAt
+                    ? ` · ${new Date(Number(drawerRow.cells.editedAt)).toLocaleString()}`
+                    : ""}
+                </p>
+              ) : (
+                <p className="text-[#9ca3af]">No human edits recorded.</p>
+              )}
+              <p>
+                Status: {drawerRow.cells.executionStatus || "Not run"}
+                {drawerRow.cells.statusBy
+                  ? ` · ${drawerRow.cells.statusBy}${
+                      drawerRow.cells.statusAt
+                        ? ` · ${new Date(Number(drawerRow.cells.statusAt)).toLocaleString()}`
+                        : ""
+                    }`
+                  : ""}
+                {drawerRow.cells.statusSource ? ` · source ${drawerRow.cells.statusSource}` : ""}
+              </p>
+              {drawerRow.cells.generationVersion || workbook.version != null ? (
+                <p>Generation version: {drawerRow.cells.generationVersion || String(workbook.version)}</p>
+              ) : null}
             </div>
           )}
         </aside>
