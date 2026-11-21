@@ -6,7 +6,16 @@ import type { SitSheetRow, SitWorkbook } from "@/app/interfaces/appatlas";
 
 export type ExportScope = "view" | "selected" | "all";
 
-const STATUS_OPTS = ["Not run", "Passed", "Failed", "Partial"] as const;
+const STATUS_OPTS = [
+  "Draft",
+  "Not run",
+  "Passed",
+  "Failed",
+  "Partial",
+  "Blocked",
+  "Skipped",
+  "Stale",
+] as const;
 
 /** Prefix formula-like cells so Excel won't execute them. */
 export function guardFormula(value: string): string {

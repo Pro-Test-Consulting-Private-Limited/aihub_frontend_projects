@@ -38,11 +38,27 @@ const TYPE_STYLE: Record<string, string> = {
 };
 
 const STATUS_STYLE: Record<string, string> = {
-  "Not run": "bg-[#f3f4f6] text-[#9ca3af]",
+  Draft: "bg-[#e0e7ff] text-[#3730a3]",
+  "Not run": "bg-[#f3f4f6] text-[#6b7280]",
   Passed: "bg-[#d1fae5] text-[#065f46]",
   Failed: "bg-[#fee2e2] text-[#991b1b]",
   Partial: "bg-[#ffedd5] text-[#9a3412]",
+  Blocked: "bg-[#fce7f3] text-[#9d174d]",
+  Skipped: "bg-[#e5e7eb] text-[#4b5563]",
+  Stale: "bg-[#fef3c7] text-[#92400e]",
 };
+
+const STATUS_OPTIONS = [
+  { value: "Draft", label: "Draft", group: "Authoring" },
+  { value: "Not run", label: "Not run", group: "Results" },
+  { value: "Passed", label: "Passed", group: "Results" },
+  { value: "Failed", label: "Failed", group: "Results" },
+  { value: "Partial", label: "Partial", group: "Results" },
+  { value: "Blocked", label: "Blocked", group: "Results" },
+  { value: "Skipped", label: "Skipped", group: "Results" },
+];
+
+const BULK_STATUSES = ["Draft", "Not run", "Passed", "Failed", "Partial", "Blocked", "Skipped"];
 
 const EDITABLE_FIELDS = ["scenario", "preconditions", "steps", "expected"] as const;
 
@@ -325,7 +341,7 @@ export function SitV2Grid({
           <div className="sticky top-0 z-[4] flex flex-wrap items-center gap-2 border-b border-[#e2e6ef] bg-[#f8fafc] px-3 py-1.5 text-[11px] dark:border-[#1a1a1a] dark:bg-[#141414]">
             <span className="font-medium text-[#5b647a]">{selectedRows.size} selected</span>
             <span className="text-[#9ca3af]">Set status:</span>
-            {["Not run", "Passed", "Failed", "Partial"].map((s) => (
+            {BULK_STATUSES.map((s) => (
               <button
                 key={s}
                 type="button"
@@ -602,12 +618,40 @@ export function SitV2Grid({
                         buttonClassName={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10.5px] font-semibold font-[inherit] disabled:opacity-80 ${
                           STATUS_STYLE[row.cells.executionStatus || "Not run"] || STATUS_STYLE["Not run"]
                         }`}
-                        options={["Not run", "Passed", "Failed", "Partial"].map((s) => ({
-                          value: s,
-                          label: s,
-                        }))}
-                        onChange={(v) => onPatch(row.id, { executionStatus: v })}
+                        options={
+                          row.cells.executionStatus === "Stale"
+                            ? [
+                                { value: "Stale", label: "Stale (system)", group: "System", disabled: true },
+                                ...STATUS_OPTIONS,
+                              ]
+                            : STATUS_OPTIONS
+                        }
+                        onChange={(v) => {
+                          if (v === "Stale") return;
+                          if ((v === "Failed" || v === "Blocked") && canEdit) {
+                            const reason = window.prompt("Optional reason or bug link (Enter to skip)") || undefined;
+                            onPatch(row.id, { executionStatus: v, statusReason: reason });
+                            return;
+                          }
+                          onPatch(row.id, { executionStatus: v });
+                        }}
                       />
+                      {row.cells.executionStatus === "Draft" && row.cells.draftMissing ? (
+                        <span
+                          className="mt-0.5 block text-[9px] text-[#3730a3]"
+                          title={`Draft — missing: ${row.cells.draftMissing}`}
+                        >
+                          Draft — missing: {row.cells.draftMissing}
+                        </span>
+                      ) : null}
+                      {row.cells.executionStatus === "Stale" ? (
+                        <span
+                          className="mt-0.5 block text-[9px] text-[#92400e]"
+                          title={row.cells.statusReason || "Case content or ticket changed after a result"}
+                        >
+                          Stale
+                        </span>
+                      ) : null}
                       <RowMenu
                         canEdit={canEdit}
                         onDuplicate={() => onDuplicate(row.id)}

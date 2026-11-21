@@ -430,22 +430,37 @@ export function SitTestingViewV2({
     let human = 0;
     let edited = 0;
     let template = 0;
-    let passed = 0;
-    let failed = 0;
-    let partial = 0;
-    let notRun = 0;
+    const byStatus: Record<string, number> = {
+      Draft: 0,
+      "Not run": 0,
+      Passed: 0,
+      Failed: 0,
+      Partial: 0,
+      Blocked: 0,
+      Skipped: 0,
+      Stale: 0,
+    };
     for (const r of rows) {
       if (r.cells.origin === "human") human++;
       else if (r.cells.origin === "template") template++;
       else ai++;
       if (r.cells.edited === "1") edited++;
       const st = r.cells.executionStatus || "Not run";
-      if (st === "Passed") passed++;
-      else if (st === "Failed") failed++;
-      else if (st === "Partial") partial++;
-      else notRun++;
+      if (st in byStatus) byStatus[st]!++;
+      else byStatus["Not run"]!++;
     }
-    return { total: rows.length, ai, human, edited, template, passed, failed, partial, notRun };
+    return {
+      total: rows.length,
+      ai,
+      human,
+      edited,
+      template,
+      ...byStatus,
+      passed: byStatus.Passed,
+      failed: byStatus.Failed,
+      partial: byStatus.Partial,
+      notRun: byStatus["Not run"],
+    };
   }, [workbook]);
 
   const metaProject = projectName || projectKey || "—";
@@ -764,7 +779,16 @@ export function SitTestingViewV2({
                 data-testid="sit-status-filter"
                 options={[
                   { value: "", label: "Status" },
-                  ...["Not run", "Passed", "Failed", "Partial"].map((t) => ({ value: t, label: t })),
+                  ...[
+                    "Draft",
+                    "Not run",
+                    "Passed",
+                    "Failed",
+                    "Partial",
+                    "Blocked",
+                    "Skipped",
+                    "Stale",
+                  ].map((t) => ({ value: t, label: t })),
                 ]}
                 onChange={(v) => setStatusFilter(v || null)}
               />
@@ -823,8 +847,16 @@ export function SitTestingViewV2({
                 {counts.human ? ` · ${counts.human} human` : ""}
                 {counts.template ? ` · ${counts.template} template` : ""}
                 {" · "}
+                {(counts as { Draft?: number }).Draft ? `${(counts as { Draft: number }).Draft} draft · ` : ""}
                 {counts.passed} passed · {counts.failed} failed · {counts.partial} partial · {counts.notRun} not
                 run
+                {(counts as { Blocked?: number }).Blocked
+                  ? ` · ${(counts as { Blocked: number }).Blocked} blocked`
+                  : ""}
+                {(counts as { Skipped?: number }).Skipped
+                  ? ` · ${(counts as { Skipped: number }).Skipped} skipped`
+                  : ""}
+                {(counts as { Stale?: number }).Stale ? ` · ${(counts as { Stale: number }).Stale} stale` : ""}
                 <button
                   type="button"
                   className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full border border-[#d1d5db] text-[10px] font-bold text-[#6b7280] hover:bg-[#f3f4f6]"
