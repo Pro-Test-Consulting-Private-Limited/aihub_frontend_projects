@@ -151,9 +151,38 @@ export function SitV2Grid({
 
   const drawerRow = rows.find((r) => r.id === drawer);
 
+  const bulkSetStatus = (status: string) => {
+    for (const id of selectedRows) {
+      onPatch(id, { executionStatus: status });
+    }
+  };
+
   return (
     <div className="flex h-full min-h-0 flex-1 overflow-hidden rounded-[10px] border border-[#e2e6ef] bg-white dark:border-[#1a1a1a] dark:bg-[#101010]">
       <div className="min-w-0 flex-1 overflow-auto">
+        {selectedRows.size > 0 && (
+          <div className="sticky top-0 z-[4] flex flex-wrap items-center gap-2 border-b border-[#e2e6ef] bg-[#f8fafc] px-3 py-1.5 text-[11px] dark:border-[#1a1a1a] dark:bg-[#141414]">
+            <span className="font-medium text-[#5b647a]">{selectedRows.size} selected</span>
+            <span className="text-[#9ca3af]">Set status:</span>
+            {["Not run", "Passed", "Failed", "Partial"].map((s) => (
+              <button
+                key={s}
+                type="button"
+                className="rounded-full border border-[#e2e6ef] bg-white px-2 py-0.5 font-medium hover:border-[#8664F2] dark:border-[#2a2a2a] dark:bg-[#101010]"
+                onClick={() => bulkSetStatus(s)}
+              >
+                {s}
+              </button>
+            ))}
+            <button
+              type="button"
+              className="ml-auto text-[#8664F2]"
+              onClick={() => setSelectedRows(new Set())}
+            >
+              Clear selection
+            </button>
+          </div>
+        )}
         <table className="min-w-[1100px] w-full border-collapse text-[12px]">
           <thead className="sticky top-0 z-[2] bg-[#1F4E78] text-white">
             <tr>
@@ -311,7 +340,15 @@ export function SitV2Grid({
                         STATUS_STYLE[row.cells.executionStatus || "Not run"] || STATUS_STYLE["Not run"]
                       }`}
                       value={row.cells.executionStatus || "Not run"}
-                      disabled={!editMode}
+                      title={
+                        row.cells.statusBy
+                          ? `Set by ${row.cells.statusBy}${
+                              row.cells.statusAt
+                                ? ` · ${new Date(Number(row.cells.statusAt)).toLocaleString()}`
+                                : ""
+                            }`
+                          : "Status is set by a human (does not mark the row Edited)"
+                      }
                       onChange={(e) => onPatch(row.id, { executionStatus: e.target.value })}
                     >
                       {["Not run", "Passed", "Failed", "Partial"].map((s) => (
@@ -362,6 +399,16 @@ export function SitV2Grid({
             </button>
           </div>
           <OriginBadge origin={drawerRow.cells.origin} edited={drawerRow.cells.edited === "1"} />
+          <p className="mt-2 text-[12px] text-[#6b7280]">
+            Status: <strong>{drawerRow.cells.executionStatus || "Not run"}</strong>
+            {drawerRow.cells.statusBy
+              ? ` · set by ${drawerRow.cells.statusBy}${
+                  drawerRow.cells.statusAt
+                    ? ` at ${new Date(Number(drawerRow.cells.statusAt)).toLocaleString()}`
+                    : ""
+                }`
+              : " · not set by a human yet"}
+          </p>
           <p className="mt-2 text-[13px] font-medium">{drawerRow.cells.scenario}</p>
           <p className="mt-1 text-[11px] text-[#6b7280]">
             Ticket {drawerRow.cells.requirementId}

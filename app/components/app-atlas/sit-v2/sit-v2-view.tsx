@@ -354,13 +354,22 @@ export function SitTestingViewV2({
     let human = 0;
     let edited = 0;
     let template = 0;
+    let passed = 0;
+    let failed = 0;
+    let partial = 0;
+    let notRun = 0;
     for (const r of rows) {
       if (r.cells.origin === "human") human++;
       else if (r.cells.origin === "template") template++;
       else ai++;
       if (r.cells.edited === "1") edited++;
+      const st = r.cells.executionStatus || "Not run";
+      if (st === "Passed") passed++;
+      else if (st === "Failed") failed++;
+      else if (st === "Partial") partial++;
+      else notRun++;
     }
-    return { total: rows.length, ai, human, edited, template };
+    return { total: rows.length, ai, human, edited, template, passed, failed, partial, notRun };
   }, [workbook]);
 
   const metaProject = projectName || projectKey || "—";
@@ -602,6 +611,10 @@ export function SitTestingViewV2({
               <span className="text-[11px] text-[#6b7280]">
                 {counts.total} · {counts.ai} AI · {counts.edited} edited
                 {counts.human ? ` · ${counts.human} human` : ""}
+                {counts.template ? ` · ${counts.template} template` : ""}
+                {" · "}
+                {counts.passed} passed · {counts.failed} failed · {counts.partial} partial · {counts.notRun} not
+                run
               </span>
               {editMode && (
                 <button
