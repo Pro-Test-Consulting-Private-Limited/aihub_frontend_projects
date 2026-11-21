@@ -21,6 +21,12 @@ type Props = {
   multiline?: boolean;
   className?: string;
   display?: ReactNode;
+  /** When set, used instead of the default input/textarea while editing. */
+  renderEditor?: (api: {
+    value: string;
+    commit: (next: string) => void;
+    cancel: () => void;
+  }) => ReactNode;
   onSelect: (coord: CellCoord) => void;
   onStartEdit: (coord: CellCoord) => void;
   onCancelEdit: () => void;
@@ -38,6 +44,7 @@ export function SitV2EditableCell({
   multiline,
   className,
   display,
+  renderEditor,
   onSelect,
   onStartEdit,
   onCancelEdit,
@@ -114,6 +121,17 @@ export function SitV2EditableCell({
   };
 
   if (editing && canEdit) {
+    if (renderEditor) {
+      return (
+        <td className={`px-1 py-1 align-top ${className || ""}`} data-sit-cell={`${rowId}:${field}`}>
+          {renderEditor({
+            value,
+            commit: (next) => onCommit(rowId, field, next),
+            cancel: onCancelEdit,
+          })}
+        </td>
+      );
+    }
     const shared =
       "w-full rounded border border-[#8664F2] bg-white p-1 text-[12px] font-[inherit] outline-none dark:bg-[#141414]";
     if (multiline) {

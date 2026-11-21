@@ -13,6 +13,18 @@ import type { SitEpic, SitSheetRow, SitWorkbook } from "@/app/interfaces/appatla
 import { displayModuleFeature } from "@/app/lib/sit-module-feature";
 import { CopyField, OriginBadge } from "./sit-v2-bits";
 import { SitV2EditableCell, type CellCoord } from "./sit-v2-editable-cell";
+import { SitV2ListEditor } from "./sit-v2-list-editor";
+
+function placeholdersForRow(row: SitSheetRow): string[] {
+  const set = new Set<string>();
+  for (const [k, v] of Object.entries(row.cells)) {
+    if (k.startsWith("td_") && k.length > 3) set.add(k.slice(3));
+    if (typeof v === "string") {
+      for (const m of v.matchAll(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g)) set.add(m[1]!);
+    }
+  }
+  return [...set].sort();
+}
 
 const TYPE_STYLE: Record<string, string> = {
   Positive: "bg-[#E2EFDA] text-[#375623]",
@@ -451,18 +463,26 @@ export function SitV2Grid({
                     canEdit={canEdit}
                     selected={isSel("preconditions")}
                     editing={isEdit("preconditions")}
-                    multiline
                     onSelect={setSelected}
                     onStartEdit={setEditing}
                     onCancelEdit={() => setEditing(null)}
                     onCommit={commitCell}
                     onMove={moveCell}
+                    renderEditor={({ value, commit, cancel }) => (
+                      <SitV2ListEditor
+                        kind="bullets"
+                        initialValue={value}
+                        placeholders={placeholdersForRow(row)}
+                        onSave={commit}
+                        onCancel={cancel}
+                      />
+                    )}
                     display={
                       <span>
                         <span className="mr-1 rounded bg-[#ede9fe] px-1.5 py-0.5 text-[10px] font-semibold text-[#5b21b6]">
                           {row.cells.requirementId || "—"}
                         </span>
-                        <span className="line-clamp-2 text-[#5b647a]" title={row.cells.preconditions}>
+                        <span className="line-clamp-2 whitespace-pre-wrap text-[#5b647a]" title={row.cells.preconditions}>
                           {row.cells.preconditions}
                         </span>
                       </span>
@@ -475,12 +495,20 @@ export function SitV2Grid({
                     canEdit={canEdit}
                     selected={isSel("steps")}
                     editing={isEdit("steps")}
-                    multiline
                     onSelect={setSelected}
                     onStartEdit={setEditing}
                     onCancelEdit={() => setEditing(null)}
                     onCommit={commitCell}
                     onMove={moveCell}
+                    renderEditor={({ value, commit, cancel }) => (
+                      <SitV2ListEditor
+                        kind="steps"
+                        initialValue={value}
+                        placeholders={placeholdersForRow(row)}
+                        onSave={commit}
+                        onCancel={cancel}
+                      />
+                    )}
                     display={
                       <div>
                         <div className={open ? "" : "max-h-[7.5rem] overflow-hidden"}>
@@ -506,12 +534,20 @@ export function SitV2Grid({
                     canEdit={canEdit}
                     selected={isSel("expected")}
                     editing={isEdit("expected")}
-                    multiline
                     onSelect={setSelected}
                     onStartEdit={setEditing}
                     onCancelEdit={() => setEditing(null)}
                     onCommit={commitCell}
                     onMove={moveCell}
+                    renderEditor={({ value, commit, cancel }) => (
+                      <SitV2ListEditor
+                        kind="bullets"
+                        initialValue={value}
+                        placeholders={placeholdersForRow(row)}
+                        onSave={commit}
+                        onCancel={cancel}
+                      />
+                    )}
                   />
                   <td className="px-2 py-2 align-top">
                     <select
