@@ -848,15 +848,24 @@ export function SitTestingViewV2({
               if (hit) {
                 return prev.map((c) => (c.issueKey === issueKey ? { ...c, notes: note } : c));
               }
-              return [
-                ...prev,
-                {
-                  issueKey,
-                  summary: "",
-                  questions: [],
-                  notes: note,
-                } as CanvasClarification,
-              ];
+              // Notes can exist before a clarification row; keep a minimal local stub for the picker.
+              const stub: CanvasClarification = {
+                issueKey,
+                summary: "",
+                nodeIds: [],
+                status: "ready",
+                note: null,
+                error: null,
+                questions: [],
+                confidence: null,
+                model: null,
+                attempts: 0,
+                generatedAt: null,
+                updatedAt: Date.now(),
+                notes: note,
+                notesOpen: true,
+              };
+              return [...prev, stub];
             });
             return note;
           }}
