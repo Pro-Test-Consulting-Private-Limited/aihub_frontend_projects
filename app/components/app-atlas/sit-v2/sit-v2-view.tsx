@@ -22,6 +22,14 @@ import { DeadTestFinderToolbar, filterRowsByDeadFlag } from "../sit-dead-finder"
 import { SitV2Picker } from "./sit-v2-picker";
 import { SitV2GenerateDialog, type TicketGenChoice } from "./sit-v2-generate-dialog";
 import { SitV2Grid } from "./sit-v2-grid";
+import { SitV2AcChip } from "./sit-v2-ac-chip";
+import {
+  buildXlsxBlob,
+  downloadBlob,
+  toCopyTable,
+  toCsv,
+  type ExportScope,
+} from "@/app/lib/sit-export";
 
 function modelLabel(model: SitModelStatus | null) {
   if (!model) return "Unknown";
@@ -72,6 +80,7 @@ export function SitTestingViewV2({
   const [deadAudit, setDeadAudit] = useState<SitDeadAudit | null>(null);
   const [deadLoading, setDeadLoading] = useState(false);
   const [legendOpen, setLegendOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const firstRowAt = useRef<number | null>(null);
 
@@ -242,6 +251,19 @@ export function SitTestingViewV2({
               ...p,
               [String(d.issueKey)]: { status: "done", count: Number(d.caseCount) || 0 },
             }));
+          } else if (event === "assessed") {
+            const rows = Array.isArray(d.rows) ? (d.rows as SitSheetRow[]) : [];
+            if (rows.length) {
+              const byId = new Map(rows.map((r) => [r.id, r]));
+              setWorkbook((prev) => {
+                if (!prev) return prev;
+                const sheets = prev.sheets.map((s) => {
+                  if (s.kind !== "test-cases") return s;
+                  return { ...s, rows: s.rows.map((r) => byId.get(r.id) || r) };
+                });
+                return { ...prev, sheets };
+              });
+            }
           } else if (event === "ticket_error") {
             setProgress((p) => ({
               ...p,
@@ -377,6 +399,63 @@ export function SitTestingViewV2({
   const metaModule = canvasName || "—";
   const activeTicketKey = ticketFilter !== "all" ? ticketFilter : workbook?.sourceIssueKeys?.[0] || null;
 
+  const activeAcs = useMemo(() => {
+    if (!activeTicketKey) return [] as string[];
+    const t = epics.flatMap((e) => e.tickets).find((x) => x.key === activeTicketKey);
+    return t?.acceptanceCriteria || [];
+  }, [activeTicketKey, epics]);
+
+  const activeRows = useMemo(() => {
+    const rows =
+      workbook?.sheets.find((s) => s.kind === "test-cases")?.rows.filter((r) => r.cells.deleted !== "1") || [];
+    if (!activeTicketKey) return rows;
+    return rows.filter((r) => r.cells.requirementId === activeTicketKey);
+  }, [workbook, activeTicketKey]);
+
+  const runExport = async (kind: "xlsx" | "csv" | "copy", scope: ExportScope) => {
+    if (!workbook || workbook.id === "pending") return;
+    setExportOpen(false);
+    const acByTicket: Record<string, string[]> = {};
+    for (const t of epics.flatMap((e) => e.tickets)) {
+      if (t.acceptanceCriteria?.length) acByTicket[t.key] = t.acceptanceCriteria;
+    }
+    const viewRows =
+      displayWorkbook?.sheets.find((s) => s.kind === "test-cases")?.rows.filter((r) => r.cells.deleted !== "1") ||
+      [];
+    try {
+      if (kind === "xlsx") {
+        const { blob, filename } = await buildXlsxBlob(workbook, {
+          scope,
+          viewRows,
+          selectedKeys: selected.map((s) => s.key),
+          projectName: metaProject,
+          canvasName: metaModule,
+          acByTicket,
+        });
+        downloadBlob(blob, filename);
+      } else if (kind === "csv") {
+        const { casesForExport } = await import("@/app/lib/sit-export");
+        const rows = casesForExport(workbook, {
+          scope,
+          viewRows,
+          selectedKeys: selected.map((s) => s.key),
+        });
+        const csv = toCsv(rows);
+        downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), `SIT_${metaProject}_${metaModule}.csv`);
+      } else {
+        const { casesForExport } = await import("@/app/lib/sit-export");
+        const rows = casesForExport(workbook, {
+          scope,
+          viewRows,
+          selectedKeys: selected.map((s) => s.key),
+        });
+        await navigator.clipboard.writeText(toCopyTable(rows));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Export failed");
+    }
+  };
+
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#f7f8fb] font-sans antialiased dark:bg-[#0a0a0a] [&_button]:font-[inherit] [&_input]:font-[inherit] [&_select]:font-[inherit] [&_textarea]:font-[inherit]">
       {/* Toolbar + meta only (matches designer mock) */}
@@ -420,6 +499,47 @@ export function SitTestingViewV2({
             >
               Clear All
             </button>
+            {workbook && workbook.id !== "pending" && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setExportOpen((v) => !v)}
+                  className="rounded-[8px] border border-[#e2e6ef] px-3 py-1.5 text-[12.5px] font-medium text-[#1F1F1F] dark:border-[#2a2a2a] dark:text-[#ededed]"
+                >
+                  Export
+                </button>
+                {exportOpen && (
+                  <div className="absolute left-0 z-30 mt-1 w-56 rounded-[8px] border border-[#e2e6ef] bg-white py-1 text-[12px] shadow-lg dark:border-[#2a2a2a] dark:bg-[#151515]">
+                    <div className="px-3 py-1 text-[10px] font-semibold uppercase text-[#8a93a8]">Excel</div>
+                    {(["view", "selected", "all"] as ExportScope[]).map((scope) => (
+                      <button
+                        key={`x-${scope}`}
+                        type="button"
+                        className="block w-full px-3 py-1.5 text-left hover:bg-[#f3f0ff]"
+                        onClick={() => void runExport("xlsx", scope)}
+                      >
+                        .xlsx ({scope})
+                      </button>
+                    ))}
+                    <div className="px-3 py-1 text-[10px] font-semibold uppercase text-[#8a93a8]">CSV</div>
+                    <button
+                      type="button"
+                      className="block w-full px-3 py-1.5 text-left hover:bg-[#f3f0ff]"
+                      onClick={() => void runExport("csv", "view")}
+                    >
+                      CSV (current view)
+                    </button>
+                    <button
+                      type="button"
+                      className="block w-full px-3 py-1.5 text-left hover:bg-[#f3f0ff]"
+                      onClick={() => void runExport("copy", "view")}
+                    >
+                      Copy as table
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
             {workbook && workbook.id !== "pending" && (
               <DeadTestFinderToolbar
                 audit={deadAudit}
@@ -613,6 +733,17 @@ export function SitTestingViewV2({
                 placeholder="Search…"
                 className="w-28 rounded-[6px] border border-[#e2e6ef] bg-white px-2 py-0.5 text-[11px] dark:border-[#2a2a2a] dark:bg-[#141414]"
               />
+              {activeTicketKey && activeAcs.length > 0 && (
+                <SitV2AcChip
+                  acs={activeAcs}
+                  rows={activeRows}
+                  onGenerateMissing={() => {
+                    const t = epics.flatMap((e) => e.tickets).find((x) => x.key === activeTicketKey);
+                    if (!t) return;
+                    void startGenerate([{ issueKey: t.key, mode: "append", workbookId: workbook?.id, hasExisting: true, caseCount: activeRows.length }], false);
+                  }}
+                />
+              )}
               <span className="relative inline-flex items-center gap-1 text-[11px] text-[#6b7280]">
                 {counts.total} · {counts.ai} AI · {counts.edited} edited
                 {counts.human ? ` · ${counts.human} human` : ""}
@@ -708,6 +839,26 @@ export function SitTestingViewV2({
           onActivateTicket={(key) => {
             activateTicket(key);
             setPickerOpen(false);
+          }}
+          onSaveNote={async (issueKey, text) => {
+            if (!canvasId) throw new Error("No canvas");
+            const note = await client.saveTicketNote(canvasId, issueKey, text);
+            setClarifications((prev) => {
+              const hit = prev.find((c) => c.issueKey === issueKey);
+              if (hit) {
+                return prev.map((c) => (c.issueKey === issueKey ? { ...c, notes: note } : c));
+              }
+              return [
+                ...prev,
+                {
+                  issueKey,
+                  summary: "",
+                  questions: [],
+                  notes: note,
+                } as CanvasClarification,
+              ];
+            });
+            return note;
           }}
         />
       )}

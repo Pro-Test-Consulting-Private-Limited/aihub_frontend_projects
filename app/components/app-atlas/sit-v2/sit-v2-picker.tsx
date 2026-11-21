@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { TbBolt, TbBookmarkFilled, TbX } from "react-icons/tb";
-import type { CanvasClarification, SitEpic, SitTicket } from "@/app/interfaces/appatlas";
+import type { CanvasClarification, SitEpic, SitTicket, TicketNote } from "@/app/interfaces/appatlas";
 
 function ago(ts: number) {
   const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
@@ -19,6 +19,7 @@ export function SitV2Picker({
   onChange,
   onClose,
   onActivateTicket,
+  onSaveNote,
 }: {
   epics: SitEpic[];
   selected: SitTicket[];
@@ -28,6 +29,7 @@ export function SitV2Picker({
   onChange: (tickets: SitTicket[]) => void;
   onClose: () => void;
   onActivateTicket?: (key: string) => void;
+  onSaveNote?: (issueKey: string, text: string) => Promise<TicketNote>;
 }) {
   const [q, setQ] = useState("");
   const [expanded, setExpanded] = useState<Record<string, boolean>>(() => {
@@ -88,7 +90,7 @@ export function SitV2Picker({
   };
 
   const focusClar = focusKey ? clarifications.find((c) => c.issueKey === focusKey) : null;
-  const showSide = focusClar && (focusClar.questions?.length || focusClar.notes?.text);
+  const showSide = Boolean(focusKey);
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
@@ -273,11 +275,13 @@ export function SitV2Picker({
           </div>
         </div>
 
-        {showSide && focusClar && (
+        {showSide && (
           <aside className="hidden w-[280px] shrink-0 overflow-y-auto border-l border-[#eef0f5] bg-[#fafafa] p-3 text-[12px] dark:border-[#1a1a1a] dark:bg-[#0c0c0c] sm:block">
-            <div className="mb-2 font-semibold text-[#1F1F1F] dark:text-[#ededed]">{focusClar.issueKey}</div>
-            <p className="mb-2 text-[#6b7280]">{focusClar.summary}</p>
-            {focusClar.questions?.length ? (
+            <div className="mb-2 font-semibold text-[#1F1F1F] dark:text-[#ededed]">
+              {focusClar?.issueKey || focusKey}
+            </div>
+            <p className="mb-2 text-[#6b7280]">{focusClar?.summary || ""}</p>
+            {focusClar?.questions?.length ? (
               <ol className="list-decimal space-y-2 pl-4 text-[#374151]">
                 {focusClar.questions.map((qq) => (
                   <li key={qq.id}>
@@ -289,17 +293,84 @@ export function SitV2Picker({
             ) : (
               <p className="text-[#16a34a]">No questions — ticket reads as complete.</p>
             )}
-            {focusClar.notes?.text ? (
-              <div className="mt-3 rounded-[8px] border border-[#e2e6ef] bg-white p-2 dark:border-[#2a2a2a] dark:bg-[#141414]">
-                <div className="mb-1 text-[10px] font-semibold uppercase text-[#8a93a8]">Notes</div>
-                <p className="whitespace-pre-wrap text-[#374151]">{focusClar.notes.text}</p>
-              </div>
-            ) : null}
+            <PickerNotes
+              issueKey={focusClar?.issueKey || focusKey || ""}
+              saved={focusClar?.notes?.text || ""}
+              editable={Boolean(onSaveNote)}
+              onSaveNote={onSaveNote}
+            />
           </aside>
         )}
       </div>
       {/* keep allTickets referenced for future select-all */}
       <span className="hidden">{allTickets.length}</span>
+    </div>
+  );
+}
+
+function PickerNotes({
+  issueKey,
+  saved,
+  editable,
+  onSaveNote,
+}: {
+  issueKey: string;
+  saved: string;
+  editable: boolean;
+  onSaveNote?: (issueKey: string, text: string) => Promise<TicketNote>;
+}) {
+  const [text, setText] = useState(saved);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const textRef = useRef(text);
+  const prevSaved = useRef(saved);
+  textRef.current = text;
+
+  useEffect(() => {
+    if (textRef.current === prevSaved.current) setText(saved);
+    prevSaved.current = saved;
+  }, [saved, issueKey]);
+
+  const save = async () => {
+    if (!editable || !onSaveNote || !issueKey) return;
+    const next = text.trim();
+    if (next === saved) {
+      if (next !== text) setText(next);
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      await onSaveNote(issueKey, next);
+      setText(next);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save the note.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mt-3 rounded-[8px] border border-[#e2e6ef] bg-white p-2 dark:border-[#2a2a2a] dark:bg-[#141414]">
+      <div className="mb-1 text-[10px] font-semibold uppercase text-[#8a93a8]">Notes</div>
+      {editable ? (
+        <textarea
+          value={text}
+          maxLength={4000}
+          rows={4}
+          placeholder="Answer RCQs here before Generate (canvas-only)"
+          onChange={(e) => setText(e.target.value)}
+          onBlur={() => void save()}
+          className="w-full resize-y rounded-[6px] border border-[#E5E7EB] bg-[#F9FAFB] px-2 py-1.5 text-[11.5px] text-[#1F1F1F] outline-none focus:border-[#8664F2] dark:border-[#2a2a2a] dark:bg-[#1a1a1a] dark:text-[#ededed]"
+        />
+      ) : (
+        <p className="whitespace-pre-wrap text-[#374151]">{saved || "No notes."}</p>
+      )}
+      {(busy || error) && (
+        <div className="mt-0.5 text-[10.5px] text-[#6b7280]">
+          {busy ? "Saving…" : <span className="text-[#B91C1C]">{error}</span>}
+        </div>
+      )}
     </div>
   );
 }

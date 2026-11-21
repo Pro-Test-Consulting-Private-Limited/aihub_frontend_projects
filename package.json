@@ -21,6 +21,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "dayjs": "^1.11.19",
+    "exceljs": "^4.4.0",
     "framer-motion": "^12.23.22",
     "jose": "^6.2.12",
     "lucide-react": "1.32.0",

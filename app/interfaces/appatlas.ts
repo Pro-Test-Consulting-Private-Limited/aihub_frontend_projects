@@ -602,6 +602,8 @@ export type SitTicket = {
   statusCategory: string;
   epicKey: string | null;
   url: string;
+  /** Acceptance criteria texts (AC coverage chip). */
+  acceptanceCriteria?: string[];
   /** v2 picker enrichment (optional for legacy responses) */
   rcqCount?: number;
   rcqComplete?: boolean;

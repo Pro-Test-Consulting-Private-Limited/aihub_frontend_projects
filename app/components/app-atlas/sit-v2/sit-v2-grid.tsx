@@ -412,8 +412,18 @@ export function SitV2Grid({
           <p className="mt-2 text-[13px] font-medium">{drawerRow.cells.scenario}</p>
           <p className="mt-1 text-[11px] text-[#6b7280]">
             Ticket {drawerRow.cells.requirementId}
-            {drawerRow.cells.ac ? ` · AC: ${drawerRow.cells.ac}` : ""}
+            {drawerRow.cells.acIds || drawerRow.cells.ac
+              ? ` · AC: ${drawerRow.cells.acIds || drawerRow.cells.ac}`
+              : ""}
           </p>
+          {drawerRow.cells.openQuestions ? (
+            <p className="mt-1 text-[11px] text-[#92400e]">
+              OPEN: <span className="font-mono">{drawerRow.cells.openQuestions}</span>
+            </p>
+          ) : null}
+          {drawerRow.cells.dataIntent ? (
+            <p className="mt-1 font-mono text-[10.5px] text-[#5b647a]">intent: {drawerRow.cells.dataIntent}</p>
+          ) : null}
           <div className="mt-3 whitespace-pre-wrap text-[12px]">
             <StepsWithChips steps={drawerRow.cells.steps || ""} />
           </div>
