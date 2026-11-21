@@ -71,6 +71,7 @@ export function SitTestingViewV2({
   const [deadFlag, setDeadFlag] = useState<DeadFlag | null>(null);
   const [deadAudit, setDeadAudit] = useState<SitDeadAudit | null>(null);
   const [deadLoading, setDeadLoading] = useState(false);
+  const [legendOpen, setLegendOpen] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const firstRowAt = useRef<number | null>(null);
 
@@ -377,7 +378,7 @@ export function SitTestingViewV2({
   const activeTicketKey = ticketFilter !== "all" ? ticketFilter : workbook?.sourceIssueKeys?.[0] || null;
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#f7f8fb] dark:bg-[#0a0a0a]">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#f7f8fb] font-sans antialiased dark:bg-[#0a0a0a] [&_button]:font-[inherit] [&_input]:font-[inherit] [&_select]:font-[inherit] [&_textarea]:font-[inherit]">
       {/* Toolbar + meta only (matches designer mock) */}
       <div className="shrink-0 border-b border-[#EEE] bg-white px-4 py-3 dark:border-[#1a1a1a] dark:bg-[#0a0a0a]">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -449,7 +450,7 @@ export function SitTestingViewV2({
                     ? "Select tickets first"
                     : !modelReady
                       ? `Model is ${modelLabel(model)} — use template from the menu`
-                      : undefined
+                      : selected.map((t) => t.key).join(", ")
                 }
                 onClick={() => onClickGenerate(false)}
                 className="rounded-l-[8px] bg-[#8664F2] px-4 py-2 text-[13px] font-medium text-white disabled:opacity-40"
@@ -458,8 +459,12 @@ export function SitTestingViewV2({
                   <span className="inline-flex items-center gap-1.5">
                     <TbLoader2 className="animate-spin" size={14} /> Generating…
                   </span>
+                ) : selected.length === 0 ? (
+                  "Generate"
+                ) : selected.length === 1 ? (
+                  "Generate for 1 ticket"
                 ) : (
-                  `Generate${selected.length ? ` (${selected.length})` : ""}`
+                  `Generate for ${selected.length} tickets`
                 )}
               </button>
               <button
@@ -608,13 +613,47 @@ export function SitTestingViewV2({
                 placeholder="Search…"
                 className="w-28 rounded-[6px] border border-[#e2e6ef] bg-white px-2 py-0.5 text-[11px] dark:border-[#2a2a2a] dark:bg-[#141414]"
               />
-              <span className="text-[11px] text-[#6b7280]">
+              <span className="relative inline-flex items-center gap-1 text-[11px] text-[#6b7280]">
                 {counts.total} · {counts.ai} AI · {counts.edited} edited
                 {counts.human ? ` · ${counts.human} human` : ""}
                 {counts.template ? ` · ${counts.template} template` : ""}
                 {" · "}
                 {counts.passed} passed · {counts.failed} failed · {counts.partial} partial · {counts.notRun} not
                 run
+                <button
+                  type="button"
+                  className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full border border-[#d1d5db] text-[10px] font-bold text-[#6b7280] hover:bg-[#f3f4f6]"
+                  aria-label="Origin legend"
+                  title="What AI / Human / Template / Edited mean"
+                  onClick={() => setLegendOpen((v) => !v)}
+                >
+                  ?
+                </button>
+                {legendOpen && (
+                  <div className="absolute left-0 top-full z-30 mt-1 w-[320px] rounded-[8px] border border-[#e2e6ef] bg-white p-3 text-left text-[11.5px] leading-snug text-[#374151] shadow-lg dark:border-[#2a2a2a] dark:bg-[#151515] dark:text-[#d1d5db]">
+                    <div className="mb-1 font-semibold text-[#1F1F1F] dark:text-[#ededed]">Origin legend</div>
+                    <p>
+                      <strong>AI</strong> — written by the model.
+                    </p>
+                    <p>
+                      <strong>Human</strong> — added by a person.
+                    </p>
+                    <p>
+                      <strong>Template</strong> — rule-based skeleton without the AI model (Use template, or model
+                      down).
+                    </p>
+                    <p>
+                      <strong>Edited</strong> — a person changed an AI or Template row.
+                    </p>
+                    <button
+                      type="button"
+                      className="mt-2 text-[#8664F2]"
+                      onClick={() => setLegendOpen(false)}
+                    >
+                      Close
+                    </button>
+                  </div>
+                )}
               </span>
               {editMode && (
                 <button

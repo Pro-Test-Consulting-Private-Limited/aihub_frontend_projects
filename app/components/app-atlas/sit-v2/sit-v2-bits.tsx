@@ -40,10 +40,12 @@ export function CopyField({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center gap-1 text-[11px]">
       <span className="w-20 shrink-0 text-[#6b7280]">{label}</span>
-      <code className="min-w-0 flex-1 truncate rounded bg-[#f3f4f6] px-1.5 py-0.5 dark:bg-[#1a1a1a]">{value || "—"}</code>
+      <code className="min-w-0 flex-1 truncate rounded bg-[#f3f4f6] px-1.5 py-0.5 font-mono dark:bg-[#1a1a1a]">
+        {value || "—"}
+      </code>
       <button
         type="button"
-        className="rounded border border-[#e2e6ef] p-0.5 text-[#5b647a] hover:bg-[#fafafa] dark:border-[#2a2a2a]"
+        className="inline-flex items-center gap-0.5 rounded border border-[#e2e6ef] px-1 py-0.5 text-[#5b647a] hover:bg-[#fafafa] dark:border-[#2a2a2a]"
         title="Copy"
         onClick={async () => {
           try {
@@ -55,7 +57,14 @@ export function CopyField({ label, value }: { label: string; value: string }) {
           }
         }}
       >
-        {copied ? <TbCheck size={12} className="text-[#16a34a]" /> : <TbCopy size={12} />}
+        {copied ? (
+          <>
+            <TbCheck size={12} className="text-[#16a34a]" />
+            <span className="text-[10px] text-[#16a34a]">Copied</span>
+          </>
+        ) : (
+          <TbCopy size={12} />
+        )}
       </button>
     </div>
   );

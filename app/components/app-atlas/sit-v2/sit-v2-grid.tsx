@@ -183,7 +183,7 @@ export function SitV2Grid({
             </button>
           </div>
         )}
-        <table className="min-w-[1100px] w-full border-collapse text-[12px]">
+        <table className="min-w-[1100px] w-full border-collapse font-sans text-[12px]">
           <thead className="sticky top-0 z-[2] bg-[#1F4E78] text-white">
             <tr>
               <th className="sticky left-0 z-[3] w-8 bg-[#1F4E78] px-2 py-2">
