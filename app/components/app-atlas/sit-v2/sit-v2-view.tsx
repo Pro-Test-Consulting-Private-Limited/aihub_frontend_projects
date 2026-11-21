@@ -455,7 +455,10 @@ export function SitTestingViewV2({
       human,
       edited,
       template,
-      ...byStatus,
+      Draft: byStatus.Draft,
+      Blocked: byStatus.Blocked,
+      Skipped: byStatus.Skipped,
+      Stale: byStatus.Stale,
       passed: byStatus.Passed,
       failed: byStatus.Failed,
       partial: byStatus.Partial,
@@ -858,16 +861,12 @@ export function SitTestingViewV2({
                 {counts.human ? ` · ${counts.human} human` : ""}
                 {counts.template ? ` · ${counts.template} template` : ""}
                 {" · "}
-                {(counts as { Draft?: number }).Draft ? `${(counts as { Draft: number }).Draft} draft · ` : ""}
+                {counts.Draft ? `${counts.Draft} draft · ` : ""}
                 {counts.passed} passed · {counts.failed} failed · {counts.partial} partial · {counts.notRun} not
                 run
-                {(counts as { Blocked?: number }).Blocked
-                  ? ` · ${(counts as { Blocked: number }).Blocked} blocked`
-                  : ""}
-                {(counts as { Skipped?: number }).Skipped
-                  ? ` · ${(counts as { Skipped: number }).Skipped} skipped`
-                  : ""}
-                {(counts as { Stale?: number }).Stale ? ` · ${(counts as { Stale: number }).Stale} stale` : ""}
+                {counts.Blocked ? ` · ${counts.Blocked} blocked` : ""}
+                {counts.Skipped ? ` · ${counts.Skipped} skipped` : ""}
+                {counts.Stale ? ` · ${counts.Stale} stale` : ""}
                 <button
                   type="button"
                   className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full border border-[#d1d5db] text-[10px] font-bold text-[#6b7280] hover:bg-[#f3f4f6]"
