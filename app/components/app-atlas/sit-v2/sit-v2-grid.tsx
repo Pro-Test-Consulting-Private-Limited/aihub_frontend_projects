@@ -14,6 +14,7 @@ import { displayModuleFeature } from "@/app/lib/sit-module-feature";
 import { CopyField, OriginBadge, OriginGlyph, originRowTint, provenanceTooltip } from "./sit-v2-bits";
 import { SitV2EditableCell, type CellCoord } from "./sit-v2-editable-cell";
 import { SitV2ListEditor } from "./sit-v2-list-editor";
+import { SitV2Select } from "./sit-v2-select";
 
 function placeholdersForRow(row: SitSheetRow): string[] {
   const set = new Set<string>();
@@ -414,21 +415,28 @@ export function SitV2Grid({
                   </td>
                   <td className="px-2 py-2 align-top">
                     <div className="flex flex-wrap gap-1">
-                      {(["priority", "severity"] as const).map((field) => (
-                        <select
-                          key={field}
-                          disabled={!canEdit}
-                          className="rounded-full border border-[#e2e6ef] bg-white px-1.5 py-0.5 text-[10px] font-semibold disabled:border-0 dark:border-[#2a2a2a] dark:bg-[#141414]"
-                          value={row.cells[field] || "Medium"}
-                          onChange={(e) => onPatch(row.id, { [field]: e.target.value })}
-                        >
-                          {["High", "Medium", "Low"].map((v) => (
-                            <option key={v} value={v}>
-                              {v}
-                            </option>
-                          ))}
-                        </select>
-                      ))}
+                      {(["priority", "severity"] as const).map((field) => {
+                        const val = row.cells[field] || "Medium";
+                        const style =
+                          val === "High"
+                            ? "bg-[#fee2e2] text-[#991b1b]"
+                            : val === "Low"
+                              ? "bg-[#e0e7ff] text-[#3730a3]"
+                              : "bg-[#fef3c7] text-[#92400e]";
+                        return (
+                          <SitV2Select
+                            key={field}
+                            pill
+                            disabled={!canEdit}
+                            value={val}
+                            aria-label={field}
+                            data-testid={`sit-${field}-select`}
+                            buttonClassName={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold font-[inherit] ${style}`}
+                            options={["High", "Medium", "Low"].map((v) => ({ value: v, label: v }))}
+                            onChange={(v) => onPatch(row.id, { [field]: v })}
+                          />
+                        );
+                      })}
                     </div>
                   </td>
                   <SitV2EditableCell
@@ -553,29 +561,21 @@ export function SitV2Grid({
                   />
                   <td className="px-2 py-2 align-top">
                     <div className="flex items-start gap-1">
-                      <select
+                      <SitV2Select
+                        pill
                         disabled={!canEdit}
-                        className={`rounded-full border-0 px-2 py-0.5 text-[10.5px] font-semibold disabled:opacity-80 ${
+                        value={row.cells.executionStatus || "Not run"}
+                        aria-label="Status"
+                        data-testid="sit-status-select"
+                        buttonClassName={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10.5px] font-semibold font-[inherit] disabled:opacity-80 ${
                           STATUS_STYLE[row.cells.executionStatus || "Not run"] || STATUS_STYLE["Not run"]
                         }`}
-                        value={row.cells.executionStatus || "Not run"}
-                        title={
-                          row.cells.statusBy
-                            ? `Set by ${row.cells.statusBy}${
-                                row.cells.statusAt
-                                  ? ` · ${new Date(Number(row.cells.statusAt)).toLocaleString()}`
-                                  : ""
-                              }`
-                            : "Status is set by a human (does not mark the row Edited)"
-                        }
-                        onChange={(e) => onPatch(row.id, { executionStatus: e.target.value })}
-                      >
-                        {["Not run", "Passed", "Failed", "Partial"].map((s) => (
-                          <option key={s} value={s}>
-                            {s}
-                          </option>
-                        ))}
-                      </select>
+                        options={["Not run", "Passed", "Failed", "Partial"].map((s) => ({
+                          value: s,
+                          label: s,
+                        }))}
+                        onChange={(v) => onPatch(row.id, { executionStatus: v })}
+                      />
                       <RowMenu
                         canEdit={canEdit}
                         onDuplicate={() => onDuplicate(row.id)}

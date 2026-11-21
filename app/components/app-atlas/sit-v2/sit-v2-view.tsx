@@ -23,6 +23,7 @@ import { SitV2Picker } from "./sit-v2-picker";
 import { SitV2GenerateDialog, type TicketGenChoice } from "./sit-v2-generate-dialog";
 import { SitV2Grid } from "./sit-v2-grid";
 import { SitV2AcChip } from "./sit-v2-ac-chip";
+import { SitV2Select } from "./sit-v2-select";
 import {
   buildXlsxBlob,
   downloadBlob,
@@ -725,30 +726,31 @@ export function SitTestingViewV2({
                   {k}
                 </button>
               ))}
-              <select
-                className="rounded-[6px] border border-[#e2e6ef] bg-white px-2 py-0.5 text-[11px] dark:border-[#2a2a2a] dark:bg-[#141414]"
+              <SitV2Select
                 value={typeFilter || ""}
-                onChange={(e) => setTypeFilter(e.target.value || null)}
-              >
-                <option value="">Type</option>
-                {["Positive", "Negative", "Boundary", "Business Rule", "Concurrency", "Security"].map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="rounded-[6px] border border-[#e2e6ef] bg-white px-2 py-0.5 text-[11px] dark:border-[#2a2a2a] dark:bg-[#141414]"
+                placeholder="Type"
+                aria-label="Filter by type"
+                data-testid="sit-type-filter"
+                options={[
+                  { value: "", label: "Type" },
+                  ...["Positive", "Negative", "Boundary", "Business Rule", "Concurrency", "Security"].map((t) => ({
+                    value: t,
+                    label: t,
+                  })),
+                ]}
+                onChange={(v) => setTypeFilter(v || null)}
+              />
+              <SitV2Select
                 value={statusFilter || ""}
-                onChange={(e) => setStatusFilter(e.target.value || null)}
-              >
-                <option value="">Status</option>
-                {["Not run", "Passed", "Failed", "Partial"].map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
+                placeholder="Status"
+                aria-label="Filter by status"
+                data-testid="sit-status-filter"
+                options={[
+                  { value: "", label: "Status" },
+                  ...["Not run", "Passed", "Failed", "Partial"].map((t) => ({ value: t, label: t })),
+                ]}
+                onChange={(v) => setStatusFilter(v || null)}
+              />
               <div
                 className="inline-flex items-center gap-0.5 rounded-[8px] border border-[#e2e6ef] bg-white p-0.5 dark:border-[#2a2a2a] dark:bg-[#141414]"
                 role="group"
