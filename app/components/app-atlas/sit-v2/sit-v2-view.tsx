@@ -47,11 +47,14 @@ export function SitTestingViewV2({
   canvasId,
   canvasName,
   projectName,
+  canEdit = true,
 }: {
   client: AtlasClient;
   canvasId: string | null;
   canvasName?: string;
   projectName?: string;
+  /** Owner (or admin) may edit; others get a View-only grid. */
+  canEdit?: boolean;
 }) {
   const [epics, setEpics] = useState<SitEpic[]>([]);
   const [projectKey, setProjectKey] = useState<string | null>(null);
@@ -59,7 +62,6 @@ export function SitTestingViewV2({
   const [model, setModel] = useState<SitModelStatus | null>(null);
   const [selected, setSelected] = useState<SitTicket[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [editMode, setEditMode] = useState(false);
   const [workbook, setWorkbook] = useState<SitWorkbook | null>(null);
   const [history, setHistory] = useState<SitWorkbook[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -358,6 +360,39 @@ export function SitTestingViewV2({
     setWorkbook(res.workbook);
   };
 
+  const duplicateRow = async (rowId: string) => {
+    if (!workbook || workbook.id === "pending") return;
+    const src = workbook.sheets
+      .find((s) => s.kind === "test-cases")
+      ?.rows.find((r) => r.id === rowId);
+    if (!src) return;
+    const ticketKey = src.cells.requirementId || src.cells.issueKey;
+    if (!ticketKey) {
+      setError("Cannot duplicate: row has no ticket key.");
+      return;
+    }
+    try {
+      const res = await client.addSitCase(workbook.id, ticketKey);
+      const newId = res.row?.id;
+      if (!newId) {
+        setWorkbook(res.workbook);
+        return;
+      }
+      const copyCells: Record<string, string> = {};
+      for (const [k, v] of Object.entries(src.cells)) {
+        if (["caseId", "tcId", "origin", "edited", "deleted", "executionStatus", "statusBy", "statusAt"].includes(k)) {
+          continue;
+        }
+        if (typeof v === "string") copyCells[k] = v;
+      }
+      copyCells.scenario = `${src.cells.scenario || "Scenario"} (copy)`;
+      const next = await client.patchSitCase(workbook.id, newId, { cells: copyCells });
+      setWorkbook(next);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Duplicate failed");
+    }
+  };
+
   const displayWorkbook = useMemo(() => {
     if (!workbook || !deadFlag || !deadAudit) return workbook;
     return {
@@ -474,17 +509,15 @@ export function SitTestingViewV2({
               Jira Tickets
               {selected.length ? ` (${selected.length})` : ""}
             </button>
-            <button
-              type="button"
-              onClick={() => setEditMode((v) => !v)}
-              className={`rounded-[8px] border px-3 py-1.5 text-[12.5px] font-medium transition ${
-                editMode
-                  ? "border-[#8664F2] bg-[#f3f0ff] text-[#5b21b6]"
-                  : "border-[#e2e6ef] text-[#5b647a] dark:border-[#2a2a2a]"
-              }`}
-            >
-              {editMode ? "Editing" : "Edit"}
-            </button>
+            {!canEdit && (
+              <span
+                className="inline-flex items-center rounded-full border border-[#e2e6ef] bg-[#f8fafc] px-2.5 py-1 text-[11px] font-semibold text-[#6b7280]"
+                title="You can view this canvas but only the owner can edit test cases."
+                data-testid="sit-toolbar-view-only"
+              >
+                View only
+              </span>
+            )}
             <button
               type="button"
               onClick={() => {
@@ -786,13 +819,13 @@ export function SitTestingViewV2({
                   </div>
                 )}
               </span>
-              {editMode && (
+              {canEdit && (
                 <button
                   type="button"
                   onClick={() => void addRow()}
                   className="ml-auto inline-flex items-center gap-1 rounded-[8px] border border-[#e2e6ef] px-2 py-0.5 text-[11px] dark:border-[#2a2a2a]"
                 >
-                  <TbPlus size={12} /> Add
+                  <TbPlus size={12} /> Add test case
                 </button>
               )}
             </div>
@@ -800,16 +833,29 @@ export function SitTestingViewV2({
             <SitV2Grid
               workbook={displayWorkbook}
               epics={epics}
-              editMode={editMode}
+              canEdit={canEdit}
               ticketFilter={ticketFilter}
               typeFilter={typeFilter}
               statusFilter={statusFilter}
               originFilter={originFilter}
               search={search}
               generating={generating}
-              onPatch={(rowId, body) => void patchRow(rowId, body)}
-              onDelete={(rowId) => void softDelete(rowId)}
-              onAdd={() => void addRow()}
+              onPatch={(rowId, body) => {
+                if (!canEdit) return;
+                void patchRow(rowId, body);
+              }}
+              onDelete={(rowId) => {
+                if (!canEdit) return;
+                void softDelete(rowId);
+              }}
+              onAdd={() => {
+                if (!canEdit) return;
+                void addRow();
+              }}
+              onDuplicate={(rowId) => {
+                if (!canEdit) return;
+                void duplicateRow(rowId);
+              }}
             />
           </div>
         ) : (

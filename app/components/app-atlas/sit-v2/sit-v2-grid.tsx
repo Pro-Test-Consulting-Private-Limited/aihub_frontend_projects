@@ -1,10 +1,18 @@
 "use client";
 
-import { useMemo, useState, useEffect, useRef } from "react";
-import { TbChevronDown, TbChevronRight, TbPlus } from "react-icons/tb";
+import { useMemo, useState, useEffect, useRef, useCallback } from "react";
+import {
+  TbChevronDown,
+  TbChevronRight,
+  TbDotsVertical,
+  TbPlus,
+  TbCopy,
+  TbTrash,
+} from "react-icons/tb";
 import type { SitEpic, SitSheetRow, SitWorkbook } from "@/app/interfaces/appatlas";
 import { displayModuleFeature } from "@/app/lib/sit-module-feature";
 import { CopyField, OriginBadge } from "./sit-v2-bits";
+import { SitV2EditableCell, type CellCoord } from "./sit-v2-editable-cell";
 
 const TYPE_STYLE: Record<string, string> = {
   Positive: "bg-[#E2EFDA] text-[#375623]",
@@ -22,6 +30,8 @@ const STATUS_STYLE: Record<string, string> = {
   Failed: "bg-[#fee2e2] text-[#991b1b]",
   Partial: "bg-[#ffedd5] text-[#9a3412]",
 };
+
+const EDITABLE_FIELDS = ["scenario", "preconditions", "steps", "expected"] as const;
 
 function StepsWithChips({ steps }: { steps: string }) {
   const parts = (steps || "").split(/(\{\{\s*[a-zA-Z0-9_]+\s*\}\})/g);
@@ -83,10 +93,85 @@ function TestDataBlock({ row }: { row: SitSheetRow }) {
   );
 }
 
+function RowMenu({
+  canEdit,
+  onDuplicate,
+  onDelete,
+  onOpenDrawer,
+}: {
+  canEdit: boolean;
+  onDuplicate: () => void;
+  onDelete: () => void;
+  onOpenDrawer: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const close = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, []);
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        className="rounded p-0.5 text-[#6b7280] hover:bg-[#f3f4f6]"
+        aria-label="Row menu"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+      >
+        <TbDotsVertical size={14} />
+      </button>
+      {open && (
+        <div className="absolute right-0 z-20 mt-1 w-36 rounded-[8px] border border-[#e2e6ef] bg-white py-1 text-[11px] shadow-lg dark:border-[#2a2a2a] dark:bg-[#151515]">
+          <button
+            type="button"
+            className="block w-full px-3 py-1.5 text-left hover:bg-[#f3f0ff]"
+            onClick={() => {
+              setOpen(false);
+              onOpenDrawer();
+            }}
+          >
+            Open drawer
+          </button>
+          {canEdit && (
+            <>
+              <button
+                type="button"
+                className="flex w-full items-center gap-1.5 px-3 py-1.5 text-left hover:bg-[#f3f0ff]"
+                onClick={() => {
+                  setOpen(false);
+                  onDuplicate();
+                }}
+              >
+                <TbCopy size={12} /> Duplicate
+              </button>
+              <button
+                type="button"
+                className="flex w-full items-center gap-1.5 px-3 py-1.5 text-left text-[#b91c1c] hover:bg-[#fef2f2]"
+                onClick={() => {
+                  setOpen(false);
+                  if (window.confirm("Delete this test case?")) onDelete();
+                }}
+              >
+                <TbTrash size={12} /> Delete
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function SitV2Grid({
   workbook,
   epics,
-  editMode,
+  canEdit,
   ticketFilter,
   typeFilter,
   statusFilter,
@@ -96,10 +181,11 @@ export function SitV2Grid({
   onPatch,
   onDelete,
   onAdd,
+  onDuplicate,
 }: {
   workbook: SitWorkbook;
   epics: SitEpic[];
-  editMode: boolean;
+  canEdit: boolean;
   ticketFilter: string | "all";
   typeFilter: string | null;
   statusFilter: string | null;
@@ -109,10 +195,13 @@ export function SitV2Grid({
   onPatch: (rowId: string, body: Record<string, unknown>) => void;
   onDelete: (rowId: string) => void;
   onAdd: () => void;
+  onDuplicate: (rowId: string) => void;
 }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [drawer, setDrawer] = useState<string | null>(null);
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<CellCoord | null>(null);
+  const [editing, setEditing] = useState<CellCoord | null>(null);
   const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const rows = useMemo(() => {
@@ -142,25 +231,76 @@ export function SitV2Grid({
     clearTimeout(debounceTimers.current[key]);
     debounceTimers.current[key] = setTimeout(() => {
       onPatch(rowId, { cells });
-    }, 800);
+    }, 400);
   };
 
-  useEffect(() => () => {
-    Object.values(debounceTimers.current).forEach(clearTimeout);
-  }, []);
+  useEffect(
+    () => () => {
+      Object.values(debounceTimers.current).forEach(clearTimeout);
+    },
+    [],
+  );
 
   const drawerRow = rows.find((r) => r.id === drawer);
 
   const bulkSetStatus = (status: string) => {
+    if (!canEdit) return;
     for (const id of selectedRows) {
       onPatch(id, { executionStatus: status });
     }
   };
 
+  const moveCell = useCallback(
+    (dir: "tab" | "shift-tab" | "up" | "down" | "left" | "right") => {
+      if (!selected) return;
+      const ri = rows.findIndex((r) => r.id === selected.rowId);
+      if (ri < 0) return;
+      let fi = EDITABLE_FIELDS.indexOf(selected.field as (typeof EDITABLE_FIELDS)[number]);
+      if (fi < 0) fi = 0;
+      let nri = ri;
+      let nfi = fi;
+      if (dir === "tab" || dir === "right") {
+        nfi++;
+        if (nfi >= EDITABLE_FIELDS.length) {
+          nfi = 0;
+          nri++;
+        }
+      } else if (dir === "shift-tab" || dir === "left") {
+        nfi--;
+        if (nfi < 0) {
+          nfi = EDITABLE_FIELDS.length - 1;
+          nri--;
+        }
+      } else if (dir === "up") nri--;
+      else if (dir === "down") nri++;
+      if (nri < 0 || nri >= rows.length) return;
+      const next = { rowId: rows[nri]!.id, field: EDITABLE_FIELDS[nfi]! };
+      setSelected(next);
+      setEditing(null);
+    },
+    [rows, selected],
+  );
+
+  const commitCell = (rowId: string, field: string, value: string) => {
+    schedulePatch(rowId, { [field]: value });
+    setEditing(null);
+  };
+
   return (
     <div className="flex h-full min-h-0 flex-1 overflow-hidden rounded-[10px] border border-[#e2e6ef] bg-white dark:border-[#1a1a1a] dark:bg-[#101010]">
       <div className="min-w-0 flex-1 overflow-auto">
-        {selectedRows.size > 0 && (
+        {!canEdit && (
+          <div className="sticky top-0 z-[5] flex items-center gap-2 border-b border-[#e2e6ef] bg-[#f8fafc] px-3 py-1.5 dark:border-[#1a1a1a] dark:bg-[#141414]">
+            <span
+              className="inline-flex items-center rounded-full border border-[#e2e6ef] bg-white px-2 py-0.5 text-[10px] font-semibold text-[#6b7280] dark:border-[#2a2a2a] dark:bg-[#101010]"
+              title="You can view this canvas but only the owner can edit test cases."
+              data-testid="sit-view-only-chip"
+            >
+              View only
+            </span>
+          </div>
+        )}
+        {selectedRows.size > 0 && canEdit && (
           <div className="sticky top-0 z-[4] flex flex-wrap items-center gap-2 border-b border-[#e2e6ef] bg-[#f8fafc] px-3 py-1.5 text-[11px] dark:border-[#1a1a1a] dark:bg-[#141414]">
             <span className="font-medium text-[#5b647a]">{selectedRows.size} selected</span>
             <span className="text-[#9ca3af]">Set status:</span>
@@ -201,13 +341,14 @@ export function SitV2Grid({
               <th className="min-w-[280px] px-2 py-2 text-left text-[10px] font-semibold">Test Steps</th>
               <th className="min-w-[160px] px-2 py-2 text-left text-[10px] font-semibold">Expected Result</th>
               <th className="min-w-[100px] px-2 py-2 text-left text-[10px] font-semibold">Status</th>
+              <th className="w-8 bg-[#1F4E78]" />
             </tr>
           </thead>
           <tbody>
             {generating && rows.length === 0 &&
               [0, 1, 2].map((i) => (
                 <tr key={`sk-${i}`} className="animate-pulse">
-                  <td colSpan={11} className="border-b border-[#f3f4f6] px-3 py-4">
+                  <td colSpan={12} className="border-b border-[#f3f4f6] px-3 py-4">
                     <div className="h-4 w-3/4 rounded bg-[#e5e7eb]" />
                   </td>
                 </tr>
@@ -216,6 +357,8 @@ export function SitV2Grid({
               const open = !!expanded[row.id];
               const edited = row.cells.edited === "1";
               const mf = displayModuleFeature(row.cells, epics);
+              const isSel = (f: string) => selected?.rowId === row.id && selected.field === f;
+              const isEdit = (f: string) => editing?.rowId === row.id && editing.field === f;
               return (
                 <tr
                   key={row.id}
@@ -240,7 +383,11 @@ export function SitV2Grid({
                     <OriginBadge origin={row.cells.origin} edited={edited} />
                   </td>
                   <td className="sticky left-8 z-[1] bg-white px-2 py-2 align-top font-mono text-[11px] font-semibold dark:bg-[#101010]">
-                    <button type="button" className="inline-flex items-center gap-0.5 text-left" onClick={() => setExpanded((e) => ({ ...e, [row.id]: !e[row.id] }))}>
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-0.5 text-left"
+                      onClick={() => setExpanded((e) => ({ ...e, [row.id]: !e[row.id] }))}
+                    >
                       {open ? <TbChevronDown size={12} /> : <TbChevronRight size={12} />}
                       {row.cells.caseId || row.cells.tcId}
                     </button>
@@ -256,7 +403,7 @@ export function SitV2Grid({
                       {(["priority", "severity"] as const).map((field) => (
                         <select
                           key={field}
-                          disabled={!editMode}
+                          disabled={!canEdit}
                           className="rounded-full border border-[#e2e6ef] bg-white px-1.5 py-0.5 text-[10px] font-semibold disabled:border-0 dark:border-[#2a2a2a] dark:bg-[#141414]"
                           value={row.cells[field] || "Medium"}
                           onChange={(e) => onPatch(row.id, { [field]: e.target.value })}
@@ -270,73 +417,106 @@ export function SitV2Grid({
                       ))}
                     </div>
                   </td>
-                  <td className="px-2 py-2 align-top">
-                    <div className="flex items-start gap-1.5">
-                      <span
-                        className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${
-                          TYPE_STYLE[row.cells.testType || ""] || "bg-[#eee] text-[#444]"
-                        }`}
-                      >
-                        {row.cells.testType || "—"}
+                  <SitV2EditableCell
+                    rowId={row.id}
+                    field="scenario"
+                    value={row.cells.scenario || ""}
+                    canEdit={canEdit}
+                    selected={isSel("scenario")}
+                    editing={isEdit("scenario")}
+                    onSelect={setSelected}
+                    onStartEdit={setEditing}
+                    onCancelEdit={() => setEditing(null)}
+                    onCommit={commitCell}
+                    onMove={moveCell}
+                    display={
+                      <div className="flex items-start gap-1.5">
+                        <span
+                          className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                            TYPE_STYLE[row.cells.testType || ""] || "bg-[#eee] text-[#444]"
+                          }`}
+                        >
+                          {row.cells.testType || "—"}
+                        </span>
+                        <span className="line-clamp-2" title={row.cells.scenario}>
+                          {row.cells.scenario}
+                        </span>
+                      </div>
+                    }
+                  />
+                  <SitV2EditableCell
+                    rowId={row.id}
+                    field="preconditions"
+                    value={row.cells.preconditions || ""}
+                    canEdit={canEdit}
+                    selected={isSel("preconditions")}
+                    editing={isEdit("preconditions")}
+                    multiline
+                    onSelect={setSelected}
+                    onStartEdit={setEditing}
+                    onCancelEdit={() => setEditing(null)}
+                    onCommit={commitCell}
+                    onMove={moveCell}
+                    display={
+                      <span>
+                        <span className="mr-1 rounded bg-[#ede9fe] px-1.5 py-0.5 text-[10px] font-semibold text-[#5b21b6]">
+                          {row.cells.requirementId || "—"}
+                        </span>
+                        <span className="line-clamp-2 text-[#5b647a]" title={row.cells.preconditions}>
+                          {row.cells.preconditions}
+                        </span>
                       </span>
-                      <span className="line-clamp-1" title={row.cells.scenario}>
-                        {editMode ? (
-                          <input
-                            className="w-full rounded border border-transparent px-1 hover:border-[#e2e6ef] focus:border-[#8664F2]"
-                            defaultValue={row.cells.scenario}
-                            onBlur={(e) => schedulePatch(row.id, { scenario: e.target.value })}
-                          />
-                        ) : (
-                          row.cells.scenario
+                    }
+                  />
+                  <SitV2EditableCell
+                    rowId={row.id}
+                    field="steps"
+                    value={row.cells.steps || ""}
+                    canEdit={canEdit}
+                    selected={isSel("steps")}
+                    editing={isEdit("steps")}
+                    multiline
+                    onSelect={setSelected}
+                    onStartEdit={setEditing}
+                    onCancelEdit={() => setEditing(null)}
+                    onCommit={commitCell}
+                    onMove={moveCell}
+                    display={
+                      <div>
+                        <div className={open ? "" : "max-h-[7.5rem] overflow-hidden"}>
+                          <StepsWithChips steps={row.cells.steps || ""} />
+                        </div>
+                        {!open && (row.cells.steps || "").split("\n").length > 4 && (
+                          <button
+                            type="button"
+                            className="mt-1 text-[10px] font-medium text-[#8664F2]"
+                            onClick={() => setExpanded((e) => ({ ...e, [row.id]: true }))}
+                          >
+                            Expand
+                          </button>
                         )}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-2 py-2 align-top">
-                    <span className="mr-1 rounded bg-[#ede9fe] px-1.5 py-0.5 text-[10px] font-semibold text-[#5b21b6]">
-                      {row.cells.requirementId || "—"}
-                    </span>
-                    <span className="line-clamp-1 text-[#5b647a]" title={row.cells.preconditions}>
-                      {row.cells.preconditions}
-                    </span>
-                  </td>
-                  <td className="px-2 py-2 align-top">
-                    <div className={open ? "" : "max-h-[7.5rem] overflow-hidden"}>
-                      {editMode ? (
-                        <textarea
-                          className="min-h-[72px] w-full rounded border border-[#e2e6ef] bg-white p-1 text-[11.5px] dark:border-[#2a2a2a] dark:bg-[#141414]"
-                          defaultValue={row.cells.steps}
-                          onBlur={(e) => schedulePatch(row.id, { steps: e.target.value })}
-                        />
-                      ) : (
-                        <StepsWithChips steps={row.cells.steps || ""} />
-                      )}
-                    </div>
-                    {!open && (row.cells.steps || "").split("\n").length > 4 && (
-                      <button
-                        type="button"
-                        className="mt-1 text-[10px] font-medium text-[#8664F2]"
-                        onClick={() => setExpanded((e) => ({ ...e, [row.id]: true }))}
-                      >
-                        Expand
-                      </button>
-                    )}
-                    {open && <TestDataBlock row={row} />}
-                  </td>
-                  <td className="px-2 py-2 align-top whitespace-pre-wrap">
-                    {editMode ? (
-                      <textarea
-                        className="min-h-[56px] w-full rounded border border-[#e2e6ef] p-1 text-[11.5px] dark:border-[#2a2a2a] dark:bg-[#141414]"
-                        defaultValue={row.cells.expected}
-                        onBlur={(e) => schedulePatch(row.id, { expected: e.target.value })}
-                      />
-                    ) : (
-                      row.cells.expected
-                    )}
-                  </td>
+                        {open && <TestDataBlock row={row} />}
+                      </div>
+                    }
+                  />
+                  <SitV2EditableCell
+                    rowId={row.id}
+                    field="expected"
+                    value={row.cells.expected || ""}
+                    canEdit={canEdit}
+                    selected={isSel("expected")}
+                    editing={isEdit("expected")}
+                    multiline
+                    onSelect={setSelected}
+                    onStartEdit={setEditing}
+                    onCancelEdit={() => setEditing(null)}
+                    onCommit={commitCell}
+                    onMove={moveCell}
+                  />
                   <td className="px-2 py-2 align-top">
                     <select
-                      className={`rounded-full border-0 px-2 py-0.5 text-[10.5px] font-semibold ${
+                      disabled={!canEdit}
+                      className={`rounded-full border-0 px-2 py-0.5 text-[10.5px] font-semibold disabled:opacity-80 ${
                         STATUS_STYLE[row.cells.executionStatus || "Not run"] || STATUS_STYLE["Not run"]
                       }`}
                       value={row.cells.executionStatus || "Not run"}
@@ -357,32 +537,25 @@ export function SitV2Grid({
                         </option>
                       ))}
                     </select>
-                    <div className="mt-1 flex gap-1 opacity-0 transition group-hover:opacity-100">
-                      <button type="button" className="text-[10px] text-[#8664F2]" onClick={() => setDrawer(row.id)}>
-                        Drawer
-                      </button>
-                      {editMode && (
-                        <button
-                          type="button"
-                          className="text-[10px] text-[#b91c1c]"
-                          onClick={() => {
-                            if (window.confirm("Delete this test case?")) onDelete(row.id);
-                          }}
-                        >
-                          Delete
-                        </button>
-                      )}
-                    </div>
+                  </td>
+                  <td className="px-1 py-2 align-top">
+                    <RowMenu
+                      canEdit={canEdit}
+                      onDuplicate={() => onDuplicate(row.id)}
+                      onDelete={() => onDelete(row.id)}
+                      onOpenDrawer={() => setDrawer(row.id)}
+                    />
                   </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
-        {editMode && (
+        {canEdit && (
           <button
             type="button"
             onClick={onAdd}
+            data-testid="sit-add-test-case"
             className="m-3 inline-flex items-center gap-1 rounded-[8px] border border-dashed border-[#c4b5fd] px-3 py-2 text-[12px] text-[#5b21b6] hover:bg-[#f5f3ff]"
           >
             <TbPlus size={14} /> Add test case
@@ -427,41 +600,28 @@ export function SitV2Grid({
           <div className="mt-3 whitespace-pre-wrap text-[12px]">
             <StepsWithChips steps={drawerRow.cells.steps || ""} />
           </div>
-          <TestDataBlock row={drawerRow} />
-          <div className="mt-3 text-[12px]">
-            <div className="text-[10px] font-semibold uppercase text-[#8a93a8]">Expected</div>
-            <p className="whitespace-pre-wrap">{drawerRow.cells.expected}</p>
-          </div>
-          {drawerRow.cells.aiOriginal && drawerRow.cells.edited === "1" && (
-            <div className="mt-4 rounded-[8px] border border-[#fde68a] bg-[#fffbeb] p-2 text-[11px]">
-              <div className="mb-1 font-semibold text-[#92400e]">Original AI version</div>
-              <pre className="max-h-40 overflow-auto whitespace-pre-wrap text-[10px] text-[#78350f]">
-                {(() => {
-                  try {
-                    return JSON.stringify(JSON.parse(drawerRow.cells.aiOriginal), null, 2);
-                  } catch {
-                    return drawerRow.cells.aiOriginal;
+          <div className="mt-2 whitespace-pre-wrap text-[12px] text-[#374151]">{drawerRow.cells.expected}</div>
+          {canEdit && drawerRow.cells.origin === "ai" && drawerRow.cells.edited === "1" && (
+            <div className="mt-4 flex flex-col gap-2">
+              <button
+                type="button"
+                className="rounded-[8px] border border-[#e2e6ef] px-2 py-1 text-[11px] dark:border-[#2a2a2a]"
+                onClick={() => onPatch(drawerRow.id, { showOriginal: true })}
+              >
+                Show original AI version
+              </button>
+              <button
+                type="button"
+                className="rounded-[8px] border border-[#fecaca] px-2 py-1 text-[11px] text-[#991b1b]"
+                onClick={() => {
+                  if (window.confirm("Revert this case to the original AI version?")) {
+                    onPatch(drawerRow.id, { revertAi: true });
                   }
-                })()}
-              </pre>
-              {editMode && (
-                <button
-                  type="button"
-                  className="mt-2 rounded bg-[#92400e] px-2 py-1 text-[11px] text-white"
-                  onClick={() => onPatch(drawerRow.id, { revertAi: true })}
-                >
-                  Revert to AI version
-                </button>
-              )}
+                }}
+              >
+                Revert to AI version
+              </button>
             </div>
-          )}
-          {drawerRow.cells.editedBy && (
-            <p className="mt-2 text-[10px] text-[#8a93a8]">
-              Edited by {drawerRow.cells.editedBy}
-              {drawerRow.cells.editedAt
-                ? ` · ${new Date(Number(drawerRow.cells.editedAt)).toLocaleString()}`
-                : ""}
-            </p>
           )}
         </aside>
       )}

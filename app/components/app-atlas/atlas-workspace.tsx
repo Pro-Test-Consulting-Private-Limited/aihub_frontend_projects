@@ -788,6 +788,7 @@ export default function AtlasWorkspace() {
                 canvasId={canvas?.id ?? null}
                 canvasName={canvas?.name}
                 projectName={project?.name}
+                canEdit={!!canvas?.isMine}
               />
             ) : (
               <SitTestingView
