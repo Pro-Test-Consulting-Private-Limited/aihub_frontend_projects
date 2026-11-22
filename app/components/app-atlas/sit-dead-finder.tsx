@@ -65,7 +65,19 @@ const QUALITY_FLAGS: DeadFlag[] = [
   "generic_expected",
 ];
 
+/** R7-01: headline N = unique flagged cases (not sum of issue groups). Draft never flagged. Needs review excluded. */
 function qualityCount(audit: SitDeadAudit | null): number {
+  if (!audit) return 0;
+  if (typeof audit.flaggedRows === "number") return audit.flaggedRows;
+  let n = 0;
+  for (const hits of Object.values(audit.flagsByRowId || {})) {
+    if ((hits || []).some((h) => QUALITY_FLAGS.includes(h.flag))) n++;
+  }
+  return n;
+}
+
+/** Sum of quality group hits (issues). A multi-flag case contributes once per group. */
+function qualityIssueCount(audit: SitDeadAudit | null): number {
   if (!audit) return 0;
   let n = 0;
   for (const f of QUALITY_GROUP_ORDER) n += audit.summary?.[f] ?? 0;
@@ -567,4 +579,4 @@ export function DeadFlagPills({ hits }: { hits: DeadFlagHit[] }) {
   );
 }
 
-export { qualityCount, filterLabel };
+export { qualityCount, qualityIssueCount, filterLabel };
