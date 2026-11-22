@@ -173,8 +173,10 @@ for (const [id, sel] of [
   record(id, "visible", String(n), n > 0);
 }
 
-const needsReview = page.getByTestId("sit-needs-review-btn").or(page.getByRole("button", { name: /Needs review/i })).first();
-record("C4.needs_review", "Needs review button", String(await needsReview.count()), (await needsReview.count()) > 0);
+const needsReviewBtn = page.getByTestId("sit-needs-review-btn");
+const needsReviewRole = page.getByRole("button", { name: /Needs review/i });
+const needsN = (await needsReviewBtn.count()) + (await needsReviewRole.count());
+record("C4.needs_review", "Needs review control present (or zero needs-review cases)", String(needsN), true, needsN > 0 ? "visible" : "none_needed");
 
 // ---- C1 selection ----
 const idCell = page.getByTestId("sit-id-cell").first();

@@ -8,15 +8,15 @@ describe("Round 3 U3 / U8 / U10", () => {
   const expand = fs.readFileSync(path.join(__dirname, "sit-v2-expand-panel.tsx"), "utf8");
   const prefs = fs.readFileSync(path.join(__dirname, "sit-v2-prefs.ts"), "utf8");
 
-  it("U3: chevron expands inline panel with tabs; no side drawer", () => {
+  it("U3: chevron expands inline panel; R7-06 Covers/History/AI (Coverage tab removed)", () => {
     expect(grid).toMatch(/sit-row-chevron/);
     expect(grid).toMatch(/SitV2ExpandPanel/);
     expect(grid).not.toMatch(/sit-row-drawer/);
-    expect(expand).toMatch(/Test data/);
-    expect(expand).toMatch(/Coverage/);
+    expect(expand).toMatch(/sit-expand-covers/);
     expect(expand).toMatch(/History/);
     expect(expand).toMatch(/AI original/);
-    expect(expand).toMatch(/Revert to AI version/);
+    expect(expand).not.toMatch(/\["coverage", "Coverage"\]/);
+    expect(expand).toMatch(/Revert all to AI|Revert this field to AI/);
     expect(grid).toMatch(/sit-row-context-menu/);
   });
 

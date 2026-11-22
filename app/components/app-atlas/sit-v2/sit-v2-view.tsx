@@ -31,7 +31,6 @@ import {
   moveColumnInOrder,
   SIT_OPTIONAL_COLUMNS,
   SIT_DEFAULT_ORDER,
-  type SitColumnId,
   type SitColumnLayout,
   type SitOrderableColumnId,
 } from "./sit-v2-prefs";
