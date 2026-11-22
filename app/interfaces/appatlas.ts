@@ -669,9 +669,12 @@ export type DeadFlag =
   | "orphan_ticket"
   | "empty_oracle"
   | "generic_expected"
-  | "duplicate_case";
+  | "duplicate_case"
+  | "thin_case"
+  | "contradiction"
+  | "needs_review";
 
-export type DeadFlagHit = { flag: DeadFlag; reason: string };
+export type DeadFlagHit = { flag: DeadFlag; reason: string; caseId?: string; scenario?: string };
 
 export type SitDeadAudit = {
   workbookId: string;
@@ -679,6 +682,7 @@ export type SitDeadAudit = {
   flagsByRowId: Record<string, DeadFlagHit[]>;
   summary: Record<DeadFlag, number>;
   flaggedRows: number;
+  needsReviewRows?: number;
   /** Nested copy for newer clients; older callers read top-level fields. */
   dead?: SitDeadAudit;
   m4?: unknown;
