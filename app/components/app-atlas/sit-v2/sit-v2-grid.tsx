@@ -322,6 +322,7 @@ export function SitV2Grid({
   onClearQualityFilter,
   totalCaseCount,
   deadAudit = null,
+  acTexts,
 }: {
   workbook: SitWorkbook;
   epics: SitEpic[];
@@ -343,6 +344,7 @@ export function SitV2Grid({
   /** Unfiltered live case count (before quality filter). */
   totalCaseCount?: number;
   deadAudit?: SitDeadAudit | null;
+  acTexts?: Record<string, string>;
 }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [ctxMenuRow, setCtxMenuRow] = useState<string | null>(null);
@@ -1083,6 +1085,7 @@ export function SitV2Grid({
                           canEdit={canEdit}
                           onPatch={onPatch}
                           qualityHits={deadAudit?.flagsByRowId?.[row.id]}
+                          acTexts={acTexts}
                         />
                       </td>
                     </tr>

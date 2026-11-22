@@ -69,10 +69,20 @@ export function SitV2ExpandPanel({
     }
   }
   const fieldEdits = listFieldEdits(row);
+  // Normalize OPEN ids: "OPEN:Q1" / "OPEN:OPEN:Q1" / "Q1" → display "OPEN Q1"
   const openQs = (row.cells.openQuestions || "")
-    .split(/[,\s]+/)
+    .split(/[,\n]+/)
     .map((s) => s.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .map((s) => s.replace(/^(OPEN:\s*)+/i, "").replace(/^OPEN\s+/i, "").trim())
+    .filter(Boolean)
+    .map((s) => (/^Q\d+/i.test(s) ? s.toUpperCase().replace(/^q/i, "Q") : s));
+  const openChipLabel =
+    openQs.length === 0
+      ? ""
+      : openQs.length === 1
+        ? `OPEN ${openQs[0]!.replace(/^OPEN\s+/i, "")}`
+        : `OPEN ${openQs.length}`;
   const version = row.cells.generationVersion || row.cells.version || "1";
   const status = row.cells.executionStatus || "Not run";
   const statusHuman = Boolean(row.cells.statusBy);
@@ -106,8 +116,12 @@ export function SitV2ExpandPanel({
           </span>
         ) : null}
         {openQs.length > 0 ? (
-          <span className="rounded-full border border-[#fcd34d] bg-[#fffbeb] px-2 py-0.5 text-[12px] text-[#92400e]">
-            OPEN {openQs.length}
+          <span
+            className="rounded-full border border-[#fcd34d] bg-[#fffbeb] px-2 py-0.5 text-[12px] text-[#92400e]"
+            data-testid="sit-expand-open-chip"
+            title={openQs.map((q) => `OPEN ${q.replace(/^OPEN\s+/i, "")}`).join(", ")}
+          >
+            {openChipLabel}
           </span>
         ) : null}
         <SitQualityFlagChip hits={qualityHits} />
@@ -122,9 +136,9 @@ export function SitV2ExpandPanel({
                 <li key={id}>
                   <span className="font-mono font-bold">{id}</span>
                   {acTexts?.[id] ? (
-                    <span className="text-[#374151]"> - {acTexts[id]}</span>
+                    <span className="text-[#374151]">: {acTexts[id]}</span>
                   ) : (
-                    <span className="text-[#9ca3af]"> - (AC text not available)</span>
+                    <span className="text-[#9ca3af]">: (AC text not available)</span>
                   )}
                 </li>
               ))}

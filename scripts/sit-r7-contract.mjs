@@ -314,9 +314,35 @@ if (await flagChip.count()) {
 const minFs = await minFontIn(page, '[data-testid="sit-quality-btn"]');
 record("I4.min_font_quality_btn", ">=12px", String(minFs), minFs == null || minFs >= 12);
 
-// ---- I5 console / requests ----
-record("I5.console_errors", "no console errors during contract", String(consoleErrors.length), consoleErrors.length === 0, consoleErrors.slice(0, 3).join(" | "));
-record("I5.failed_requests", "no failed API requests", String(failedReqs.length), failedReqs.length === 0, failedReqs.slice(0, 3).join(" | "));
+// ---- I5 console / requests (owner: compare to BEFORE baseline) ----
+const i5BaselinePath =
+  process.env.I5_BASELINE ||
+  path.resolve(__dirname, "../../appatlas-backend-github-sync/docs/sit-quality/regression/i5-baseline.json");
+let i5Baseline = { allowedConsoleErrorSubstrings: [], allowedFailedRequestSubstrings: [] };
+try {
+  i5Baseline = JSON.parse(fs.readFileSync(i5BaselinePath, "utf8"));
+} catch {
+  /* use empty */
+}
+function isAllowed(msg, allowed) {
+  return (allowed || []).some((a) => msg.includes(a));
+}
+const newConsole = consoleErrors.filter((m) => !isAllowed(m, i5Baseline.allowedConsoleErrorSubstrings));
+const newFailed = failedReqs.filter((m) => !isAllowed(m, i5Baseline.allowedFailedRequestSubstrings));
+record(
+  "I5.console_errors",
+  "no NEW console errors vs i5-baseline.json",
+  `total=${consoleErrors.length} new=${newConsole.length}`,
+  newConsole.length === 0,
+  newConsole.slice(0, 3).join(" | ") || consoleErrors.slice(0, 1).join(" | "),
+);
+record(
+  "I5.failed_requests",
+  "no NEW failed requests vs i5-baseline.json",
+  `total=${failedReqs.length} new=${newFailed.length}`,
+  newFailed.length === 0,
+  newFailed.slice(0, 3).join(" | "),
+);
 
 // ---- I6 clamp (best-effort on long steps cell) ----
 const clampCheck = await page.evaluate(() => {

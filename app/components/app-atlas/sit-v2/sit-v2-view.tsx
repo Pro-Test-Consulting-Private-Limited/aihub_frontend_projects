@@ -540,6 +540,24 @@ export function SitTestingViewV2({
     return t?.acceptanceCriteria || [];
   }, [activeTicketKey, epics]);
 
+  /** AC id → text from ticket.acceptanceCriteria (same AC1..n indexing as TicketBrief extractAcList). */
+  const acTextsById = useMemo(() => {
+    const out: Record<string, string> = {};
+    for (const t of epics.flatMap((e) => e.tickets)) {
+      const list = t.acceptanceCriteria || [];
+      list.forEach((text, i) => {
+        const id = `AC${i + 1}`;
+        const trimmed = String(text || "").trim();
+        if (!trimmed) return;
+        // Prefer ticket-scoped text when ids collide across tickets: last write wins for global map;
+        // also store ticket-prefixed keys.
+        out[id] = trimmed;
+        out[`${t.key}:${id}`] = trimmed;
+      });
+    }
+    return out;
+  }, [epics]);
+
   const activeRows = useMemo(() => {
     const rows =
       workbook?.sheets.find((s) => s.kind === "test-cases")?.rows.filter((r) => r.cells.deleted !== "1") || [];
@@ -1150,6 +1168,7 @@ export function SitTestingViewV2({
               qualityFilterActive={deadFlag != null}
               onClearQualityFilter={() => setDeadFlag(null)}
               deadAudit={deadAudit}
+              acTexts={acTextsById}
               totalCaseCount={
                 workbook?.sheets.find((s) => s.kind === "test-cases")?.rows.filter((r) => r.cells.deleted !== "1")
                   .length
