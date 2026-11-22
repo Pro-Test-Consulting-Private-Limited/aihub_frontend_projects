@@ -22,6 +22,7 @@ import {
   type SitColumnLayout,
   type SitOrderableColumnId,
 } from "./sit-v2-prefs";
+import { sanitizeUserText } from "@/app/lib/sit-sanitize-text";
 import { bulletLines, normalizeBulletText, renderBulletLines } from "./sit-v2-bullets";
 import { SitV2EditDot } from "./sit-v2-edit-dot";
 
@@ -71,7 +72,9 @@ const BULK_STATUSES = ["Draft", "Not run", "Passed", "Failed", "Partial", "Block
 const EDITABLE_FIELDS = ["scenario", "preconditions", "steps", "expected"] as const;
 
 function StepsWithChips({ steps }: { steps: string }) {
-  const parts = (steps || "").split(/(\{\{\s*[a-zA-Z0-9_]+\s*\}\})/g);
+  // Round 6 A6: display scrub (no DB rewrite) — arrows / dangling "to" cleaned here.
+  const scrubbed = sanitizeUserText(steps || "");
+  const parts = scrubbed.split(/(\{\{\s*[a-zA-Z0-9_]+\s*\}\})/g);
   return (
     <span className="whitespace-pre-wrap text-[12px]">
       {parts.map((p, i) => {
