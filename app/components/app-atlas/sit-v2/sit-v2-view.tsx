@@ -6,7 +6,6 @@ import type {
   CanvasClarification,
   SitDeadAudit,
   SitEpic,
-  SitModelStatus,
   SitSheetRow,
   SitTicket,
   SitWorkbook,
@@ -41,15 +40,7 @@ import {
   toCsv,
   type ExportScope,
 } from "@/app/lib/sit-export";
-
-function modelLabel(model: SitModelStatus | null) {
-  if (!model) return "Unknown";
-  if (model.state === "up") return "Ready";
-  if (model.state === "idle") return "Warming up";
-  if (model.state === "unconfigured") return "Not configured";
-  if (model.state === "down") return "Down";
-  return model.label || "Unknown";
-}
+import { useModelStatus } from "@/app/hooks/use-model-status";
 
 type Progress = Record<string, { status: string; count: number; message?: string }>;
 
@@ -70,7 +61,8 @@ export function SitTestingViewV2({
   const [epics, setEpics] = useState<SitEpic[]>([]);
   const [projectKey, setProjectKey] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
-  const [model, setModel] = useState<SitModelStatus | null>(null);
+  const [sitNotConfigured, setSitNotConfigured] = useState(false);
+  const { mapped: modelMapped } = useModelStatus({ notConfigured: sitNotConfigured });
   const [selected, setSelected] = useState<SitTicket[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [workbook, setWorkbook] = useState<SitWorkbook | null>(null);
@@ -108,7 +100,7 @@ export function SitTestingViewV2({
       setEpics(tickets.epics);
       setProjectKey(tickets.projectKey);
       setNote(tickets.note ?? null);
-      if (tickets.model) setModel(tickets.model);
+      if (tickets.model?.state === "unconfigured") setSitNotConfigured(true);
       setHistory(saved.items || []);
       if (saved.items?.[0] && !workbook) setWorkbook(saved.items[0]);
       if (canvasId) {
@@ -139,10 +131,16 @@ export function SitTestingViewV2({
   );
 
   useEffect(() => {
-    const id = setInterval(() => {
-      client.getSitModelStatus().then(setModel).catch(() => undefined);
-    }, 30_000);
-    return () => clearInterval(id);
+    let cancelled = false;
+    void client
+      .getSitModelStatus()
+      .then((m) => {
+        if (!cancelled && m.state === "unconfigured") setSitNotConfigured(true);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
   }, [client]);
 
   useEffect(() => {
@@ -184,14 +182,14 @@ export function SitTestingViewV2({
     if (t && !selected.some((s) => s.key === key)) setSelected((s) => [...s, t]);
   };
 
-  const modelReady = model?.state === "up";
+  const modelReady = modelMapped.ui === "ready";
   const startGenerate = async (choices: TicketGenChoice[]) => {
     if (!canvasId) {
       setError("Select a Jira-connected canvas first.");
       return;
     }
     if (!modelReady) {
-      setError("Model is warming up. Generate is disabled until the model is Ready.");
+      setError(modelMapped.tooltip);
       return;
     }
     setGenDialog(null);
@@ -317,7 +315,7 @@ export function SitTestingViewV2({
   const onClickGenerate = () => {
     if (!selected.length) return;
     if (!modelReady) {
-      setError("Model is warming up. Generate is disabled until the model is Ready.");
+      setError(modelMapped.tooltip);
       return;
     }
     const choices: TicketGenChoice[] = selected.map((t) => {
@@ -702,23 +700,20 @@ export function SitTestingViewV2({
 
           <div className="flex items-center gap-2">
             <span
-              title={model?.detail}
-              className={`rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${
-                modelReady
-                  ? "border-[#bbf7d0] bg-[#f0fdf4] text-[#166534]"
-                  : "border-[#fecaca] bg-[#fff5f5] text-[#b91c1c]"
-              }`}
+              title={modelMapped.tooltip}
+              data-testid="sit-model-status-pill"
+              className={`rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${modelMapped.sitPillClass}`}
             >
-              Model · {modelLabel(model)}
+              Model · {modelMapped.sitLabel}
             </span>
             <button
               type="button"
-              disabled={!selected.length || generating || !modelReady}
+              disabled={!selected.length || generating || modelMapped.generateDisabled}
               title={
                 !selected.length
                   ? "Select tickets first"
-                  : !modelReady
-                    ? "Model is warming up"
+                  : modelMapped.generateDisabled
+                    ? modelMapped.tooltip
                     : selected.map((t) => t.key).join(", ")
               }
               onClick={() => onClickGenerate()}

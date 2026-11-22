@@ -9,7 +9,9 @@ describe("U1 Remove Template from SIT v2", () => {
   it("has a single Generate button with no Use template menu", () => {
     expect(view).toMatch(/sit-generate-btn/);
     expect(view).not.toMatch(/Use template/);
-    expect(view).toMatch(/Model is warming up/);
+    // Generate disabled reason comes from shared mapModelStatus tooltip (not a hard-coded warming string).
+    expect(view).toMatch(/modelMapped\.tooltip/);
+    expect(view).toMatch(/modelMapped\.generateDisabled/);
   });
 
   it("labels old template origin as Legacy", () => {

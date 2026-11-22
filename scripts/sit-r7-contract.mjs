@@ -46,6 +46,15 @@ async function openSit(page) {
       /* ignore */
     }
   });
+  // Mock Home/SIT shared clarify model-status so local throwaway runs do not hit a missing
+  // clarify agent (which would log net::ERR_CONNECTION_REFUSED and fail I5).
+  await page.route("**/api/v1/clarify/model-status**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ state: "paused", message: "mocked for contract" }),
+    });
+  });
   await page.goto(`${BASE}/app-atlas`, { waitUntil: "domcontentloaded", timeout: 120000 });
   await page.waitForTimeout(2000);
   if (/microsoftonline|signin/i.test(page.url())) {

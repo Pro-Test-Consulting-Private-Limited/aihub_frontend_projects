@@ -31,6 +31,7 @@ export const getModelStatus = async (): Promise<{ state: string }> => {
   const res = await fetch(`${CLARIFY_API_BASE}/api/v1/clarify/model-status`, {
     cache: "no-store",
   });
+  if (!res.ok) throw new Error(`model-status ${res.status}`);
   return res.json();
 };
 

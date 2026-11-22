@@ -30,7 +30,6 @@ import {
   getModelUsage,
   type ModelUsage,
 } from "../services/analytics";
-import { MODEL_STARTING_STATES } from "../constants/model-status";
 import { useModelStatus } from "../hooks/use-model-status";
 import { useMsal } from "@azure/msal-react";
 
@@ -77,7 +76,7 @@ export default function Home() {
     database: boolean;
   } | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
-  const modelState = useModelStatus();
+  const { mapped: modelMapped } = useModelStatus();
   const router = useRouter();
   const { accounts } = useMsal();
   const { projects } = useProjects();
@@ -148,12 +147,17 @@ export default function Home() {
 
   const backendDown =
     server !== null && (!server.Backend || !server.database);
-  const aiStatus =
-    !backendDown && modelState === "running"
-      ? { label: "Active", badge: "bg-[rgba(40,167,69,0.1)] text-[#28A745]", dot: "bg-[#28A745]" }
-      : !backendDown && modelState && MODEL_STARTING_STATES.includes(modelState)
-        ? { label: "Initializing", badge: "bg-[rgba(255,193,7,0.15)] text-[#B7791F]", dot: "bg-[#B7791F]" }
-        : { label: "Inactive", badge: "bg-[rgba(220,53,69,0.1)] text-[#DC3545]", dot: "bg-[#DC3545]" };
+  const aiStatus = backendDown
+    ? {
+        label: "Inactive" as const,
+        badge: "bg-[rgba(220,53,69,0.1)] text-[#DC3545]",
+        dot: "bg-[#DC3545]",
+      }
+    : {
+        label: modelMapped.homeLabel,
+        badge: modelMapped.homeBadgeClass,
+        dot: modelMapped.homeDotClass,
+      };
 
   const totalRequests = sumPoints(stats?.total_invocations?.data);
   const inputTokens = sumPoints(stats?.tokens?.input);
@@ -199,9 +203,14 @@ export default function Home() {
 
           <div
             className={`h-[26px] ml-[15px] flex justify-center items-center px-[15px] rounded-[26px] text-[12px] font-[500] ${aiStatus.badge}`}
-            title={`Backend: ${server?.Backend ? "up" : "down"} · Database: ${
-              server?.database ? "up" : "down"
-            } · Model: ${modelState ?? "unknown"}`}
+            title={
+              backendDown
+                ? `Backend: ${server?.Backend ? "up" : "down"} · Database: ${
+                    server?.database ? "up" : "down"
+                  }`
+                : modelMapped.tooltip
+            }
+            data-testid="home-ai-model-pill"
           >
             <div
               className={`w-[5px] h-[5px] rounded-full mr-[8px] animate-pulse-blocking ${aiStatus.dot}`}
