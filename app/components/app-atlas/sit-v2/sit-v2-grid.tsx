@@ -9,13 +9,14 @@ import {
   TbCopy,
   TbTrash,
 } from "react-icons/tb";
-import type { SitEpic, SitSheetRow, SitWorkbook } from "@/app/interfaces/appatlas";
+import type { SitDeadAudit, SitEpic, SitSheetRow, SitWorkbook } from "@/app/interfaces/appatlas";
 import { displayModuleFeature } from "@/app/lib/sit-module-feature";
 import { OriginGlyph, provenanceTooltip } from "./sit-v2-bits";
 import { SitV2EditableCell, type CellCoord } from "./sit-v2-editable-cell";
 import { SitV2ListEditor } from "./sit-v2-list-editor";
 import { SitV2Select } from "./sit-v2-select";
 import { SitV2ExpandPanel } from "./sit-v2-expand-panel";
+import { SitQualityFlagChip } from "./sit-quality-flag-chip";
 import {
   SIT_MIN_WIDTHS,
   colWidth,
@@ -121,7 +122,7 @@ function TestDataBlockInline({ row }: { row: SitSheetRow }) {
   );
 }
 
-/** Round 5 A5: max 3 bullets / 4 steps visible; Show more only when something is hidden. */
+/** R7-07: clamp by whole items (children already sliced); never mid-line cut via maxHeight. */
 function StepsClamp({
   open,
   onShowMore,
@@ -142,10 +143,8 @@ function StepsClamp({
   const needsMore = (itemCount ?? lines + 1) > lines;
   if (!needsMore) return <>{children}</>;
   return (
-    <div className="relative">
-      <div className="overflow-hidden" style={{ maxHeight: `${lines * 1.35}em` }}>
-        {children}
-      </div>
+    <div className="relative" data-testid="sit-steps-clamp">
+      <div data-testid="sit-steps-clamp-body">{children}</div>
       <button
         type="button"
         className="mt-1 text-[12px] font-medium text-[#8664F2]"
@@ -322,6 +321,7 @@ export function SitV2Grid({
   qualityFilterActive = false,
   onClearQualityFilter,
   totalCaseCount,
+  deadAudit = null,
 }: {
   workbook: SitWorkbook;
   epics: SitEpic[];
@@ -342,6 +342,7 @@ export function SitV2Grid({
   onClearQualityFilter?: () => void;
   /** Unfiltered live case count (before quality filter). */
   totalCaseCount?: number;
+  deadAudit?: SitDeadAudit | null;
 }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [ctxMenuRow, setCtxMenuRow] = useState<string | null>(null);
@@ -674,15 +675,7 @@ export function SitV2Grid({
                 onChange={patchType}
                 buttonClassName={typeBtn}
               />
-              {(row.cells.thin === "1" || row.cells.thin === "true") && (
-                <span
-                  className="shrink-0 rounded-full border border-[#fde68a] bg-[#fffbeb] px-1.5 py-0.5 text-[12px] font-semibold text-[#92400e]"
-                  title="Thin ,  below detail thresholds (fewer than 4 steps, 3 preconditions, or 2 expected bullets)"
-                  data-testid="sit-thin-chip"
-                >
-                  Thin
-                </span>
-              )}
+              <SitQualityFlagChip hits={deadAudit?.flagsByRowId?.[row.id]} />
               <span className="min-w-0 flex-1 whitespace-pre-wrap text-[12px]">
                 {row.cells.scenario}
                 <SitV2EditDot row={row} field="scenario" />
@@ -1085,7 +1078,12 @@ export function SitV2Grid({
                   {open && (
                     <tr className="border-b border-[#eef0f5] dark:border-[#1a1a1a]">
                       <td colSpan={colCount} className="p-0">
-                        <SitV2ExpandPanel row={row} canEdit={canEdit} onPatch={onPatch} />
+                        <SitV2ExpandPanel
+                          row={row}
+                          canEdit={canEdit}
+                          onPatch={onPatch}
+                          qualityHits={deadAudit?.flagsByRowId?.[row.id]}
+                        />
                       </td>
                     </tr>
                   )}

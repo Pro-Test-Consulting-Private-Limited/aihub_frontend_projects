@@ -1149,6 +1149,7 @@ export function SitTestingViewV2({
               onLayoutChange={persistLayout}
               qualityFilterActive={deadFlag != null}
               onClearQualityFilter={() => setDeadFlag(null)}
+              deadAudit={deadAudit}
               totalCaseCount={
                 workbook?.sheets.find((s) => s.kind === "test-cases")?.rows.filter((r) => r.cells.deleted !== "1")
                   .length
