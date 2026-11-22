@@ -22,7 +22,7 @@ import {
   type SitColumnLayout,
   type SitOrderableColumnId,
 } from "./sit-v2-prefs";
-import { normalizeBulletText, renderBulletLines } from "./sit-v2-bullets";
+import { bulletLines, normalizeBulletText, renderBulletLines } from "./sit-v2-bullets";
 import { SitV2EditDot } from "./sit-v2-edit-dot";
 
 function placeholdersForRow(row: SitSheetRow): string[] {
@@ -73,14 +73,16 @@ const EDITABLE_FIELDS = ["scenario", "preconditions", "steps", "expected"] as co
 function StepsWithChips({ steps }: { steps: string }) {
   const parts = (steps || "").split(/(\{\{\s*[a-zA-Z0-9_]+\s*\}\})/g);
   return (
-    <span className="whitespace-pre-wrap">
+    <span className="whitespace-pre-wrap text-[12px]">
       {parts.map((p, i) => {
         const m = p.match(/^\{\{\s*([a-zA-Z0-9_]+)\s*\}\}$/);
         if (m) {
           return (
             <span
               key={i}
-              className="mx-0.5 inline-flex rounded bg-[#ede9fe] px-1.5 py-0.5 font-mono text-[10.5px] font-semibold text-[#5b21b6]"
+              className="mx-0.5 inline-flex rounded bg-[#ede9fe] px-1.5 py-0.5 font-mono text-[12px] font-semibold text-[#5b21b6]"
+              title="Filled from Test data"
+              data-testid="sit-testdata-token"
             >
               {m[1]}
             </span>
@@ -108,7 +110,7 @@ function TestDataBlockInline({ row }: { row: SitSheetRow }) {
       <div className="mt-1 space-y-0.5 font-mono text-[10.5px]">
         {entries.map(([k, v]) => (
           <div key={k}>
-            {k}={v || "—"}
+            {k}={v || "(empty)"}
           </div>
         ))}
       </div>
@@ -116,22 +118,26 @@ function TestDataBlockInline({ row }: { row: SitSheetRow }) {
   );
 }
 
-/** Clamp at ~12 lines with Show more — never mid-line CSS cut. Skip when empty. */
+/** Round 5 A5: max 3 bullets / 4 steps visible; Show more only when something is hidden. */
 function StepsClamp({
   open,
   onShowMore,
   children,
-  lines = 12,
+  lines = 4,
   empty,
+  itemCount,
 }: {
   open: boolean;
   onShowMore: () => void;
   children: ReactNode;
   lines?: number;
   empty?: boolean;
+  itemCount?: number;
 }) {
   if (empty) return <>{children}</>;
   if (open) return <>{children}</>;
+  const needsMore = (itemCount ?? lines + 1) > lines;
+  if (!needsMore) return <>{children}</>;
   return (
     <div className="relative">
       <div className="overflow-hidden" style={{ maxHeight: `${lines * 1.35}em` }}>
@@ -510,7 +516,7 @@ export function SitV2Grid({
     const fields: ("priority" | "severity")[] =
       field === "both" ? ["priority", "severity"] : [field];
     return (
-      <div className="flex flex-col gap-1">
+      <div className={`flex ${field === "both" ? "flex-row flex-wrap items-center" : "flex-col"} gap-1`}>
         {fields.map((f) => {
           const val = row.cells[f] || "Medium";
           const style =
@@ -529,13 +535,13 @@ export function SitV2Grid({
               value={val}
               aria-label={f === "priority" ? "Priority" : "Severity"}
               data-testid={`sit-${f}-select`}
-              buttonClassName={`inline-flex max-w-full items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold font-[inherit] ${style}`}
+              buttonClassName={`inline-flex shrink-0 whitespace-nowrap items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold font-[inherit] ${style}`}
               options={["High", "Medium", "Low"].map((v) => ({
                 value: v,
                 label: f === "priority" ? `Priority ${v}` : `Severity ${v}`,
               }))}
               triggerLabel={
-                <span className="inline-flex items-center gap-1">
+                <span className="inline-flex whitespace-nowrap items-center gap-1">
                   <span className="hidden min-[1440px]:inline">{full}</span>
                   <span className="min-[1440px]:hidden">{short}</span>
                   {row.cells[`${f}Override`] === "1" ? (
@@ -656,7 +662,7 @@ export function SitV2Grid({
               {(row.cells.thin === "1" || row.cells.thin === "true") && (
                 <span
                   className="shrink-0 rounded-full border border-[#fde68a] bg-[#fffbeb] px-1.5 py-0.5 text-[12px] font-semibold text-[#92400e]"
-                  title="Thin — below detail thresholds (fewer than 4 steps, 3 preconditions, or 2 expected bullets)"
+                  title="Thin ,  below detail thresholds (fewer than 4 steps, 3 preconditions, or 2 expected bullets)"
                   data-testid="sit-thin-chip"
                 >
                   Thin
@@ -699,7 +705,7 @@ export function SitV2Grid({
                       display={
                         <span>
                           <span className="mr-1 rounded bg-[#ede9fe] px-1.5 py-0.5 text-[12px] font-semibold text-[#5b21b6]">
-                            {row.cells.requirementId || "—"}
+                            {row.cells.requirementId || ", "}
                           </span>
                           <SitV2EditDot row={row} field="preconditions" />
                           {!normalizeBulletText(row.cells.preconditions || "") ? (
@@ -708,9 +714,11 @@ export function SitV2Grid({
                             <StepsClamp
                               open={open}
                               empty={false}
+                              lines={3}
+                              itemCount={bulletLines(row.cells.preconditions || "").length}
                               onShowMore={() => setExpanded((e) => ({ ...e, [row.id]: true }))}
                             >
-                              {renderBulletLines(row.cells.preconditions || "")}
+                              {renderBulletLines(row.cells.preconditions || "", { max: open ? undefined : 3 })}
                             </StepsClamp>
                           )}
                         </span>
@@ -750,9 +758,21 @@ export function SitV2Grid({
                           ) : (
                             <StepsClamp
                               open={open}
+                              lines={4}
+                              itemCount={(row.cells.steps || "").split(/\n/).filter((l) => l.trim()).length}
                               onShowMore={() => setExpanded((e) => ({ ...e, [row.id]: true }))}
                             >
-                              <StepsWithChips steps={row.cells.steps || ""} />
+                              <StepsWithChips
+                                steps={
+                                  open
+                                    ? row.cells.steps || ""
+                                    : (row.cells.steps || "")
+                                        .split(/\n/)
+                                        .filter((l) => l.trim())
+                                        .slice(0, 4)
+                                        .join("\n")
+                                }
+                              />
                             </StepsClamp>
                           )}
                           {open && <TestDataBlockInline row={row} />}
@@ -791,8 +811,13 @@ export function SitV2Grid({
               {!normalizeBulletText(row.cells.expected || "") ? (
                 <EmptyPlaceholder text="Add expected result" />
               ) : (
-                <StepsClamp open={open} onShowMore={() => setExpanded((e) => ({ ...e, [row.id]: true }))}>
-                  {renderBulletLines(row.cells.expected || "")}
+                <StepsClamp
+                  open={open}
+                  lines={3}
+                  itemCount={bulletLines(row.cells.expected || "").length}
+                  onShowMore={() => setExpanded((e) => ({ ...e, [row.id]: true }))}
+                >
+                  {renderBulletLines(row.cells.expected || "", { max: open ? undefined : 3 })}
                 </StepsClamp>
               )}
             </div>
@@ -1035,8 +1060,8 @@ export function SitV2Grid({
                           }}
                         />
                         {row.cells.executionStatus === "Draft" && row.cells.draftMissing ? (
-                          <span className="mt-0.5 block text-[12px] leading-snug text-[#3730a3]" title={`Draft — unfinished. Missing: ${row.cells.draftMissing}`}>
-                            Draft — missing: {row.cells.draftMissing}
+                          <span className="mt-0.5 block text-[12px] leading-snug text-[#3730a3]" title={`Draft ,  unfinished. Missing: ${row.cells.draftMissing}`}>
+                            Draft ,  missing: {row.cells.draftMissing}
                           </span>
                         ) : null}
                       </div>
