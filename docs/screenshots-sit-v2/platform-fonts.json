@@ -107,13 +107,37 @@
       "ok": true,
       "expectFamily": "DM Sans"
     },
-    "drawerText": {
+    "expandPanel": {
       "primary": "DM Sans 9pt",
       "fonts": [
         {
           "family": "DM Sans 9pt",
           "isCustom": true,
-          "glyphCount": 60
+          "glyphCount": 55
+        }
+      ],
+      "ok": true,
+      "expectFamily": "DM Sans"
+    },
+    "prioChip": {
+      "primary": "DM Sans 9pt",
+      "fonts": [
+        {
+          "family": "DM Sans 9pt",
+          "isCustom": true,
+          "glyphCount": 13
+        }
+      ],
+      "ok": true,
+      "expectFamily": "DM Sans"
+    },
+    "countsChip": {
+      "primary": "DM Sans 9pt",
+      "fonts": [
+        {
+          "family": "DM Sans 9pt",
+          "isCustom": true,
+          "glyphCount": 5
         }
       ],
       "ok": true,
