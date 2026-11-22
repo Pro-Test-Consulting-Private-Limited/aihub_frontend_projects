@@ -19,7 +19,18 @@ import { SitV2GenerateDialog, type TicketGenChoice } from "./sit-v2-generate-dia
 import { SitV2Grid } from "./sit-v2-grid";
 import { SitV2AcChip } from "./sit-v2-ac-chip";
 import { SitV2Select } from "./sit-v2-select";
-import { loadHiddenColumns, saveHiddenColumns, SIT_OPTIONAL_COLUMNS, type SitColumnId } from "./sit-v2-prefs";
+import {
+  defaultLayout,
+  loadColumnLayout,
+  saveColumnLayout,
+  resetColumnLayout,
+  moveColumnInOrder,
+  SIT_OPTIONAL_COLUMNS,
+  SIT_DEFAULT_ORDER,
+  type SitColumnId,
+  type SitColumnLayout,
+  type SitOrderableColumnId,
+} from "./sit-v2-prefs";
 import {
   buildXlsxBlob,
   downloadBlob,
@@ -78,7 +89,7 @@ export function SitTestingViewV2({
   const [deadAudit, setDeadAudit] = useState<SitDeadAudit | null>(null);
   const [deadLoading, setDeadLoading] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
-  const [hiddenColumns, setHiddenColumns] = useState<SitColumnId[]>([]);
+  const [columnLayout, setColumnLayout] = useState<SitColumnLayout>(() => defaultLayout());
   const [columnsOpen, setColumnsOpen] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const firstRowAt = useRef<number | null>(null);
@@ -113,8 +124,16 @@ export function SitTestingViewV2({
   }, [client, canvasId]);
 
   useEffect(() => {
-    setHiddenColumns(loadHiddenColumns());
-  }, []);
+    setColumnLayout(loadColumnLayout(canvasId));
+  }, [canvasId]);
+
+  const persistLayout = useCallback(
+    (next: SitColumnLayout) => {
+      setColumnLayout(next);
+      saveColumnLayout(canvasId, next);
+    },
+    [canvasId],
+  );
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -871,39 +890,149 @@ export function SitTestingViewV2({
                   </span>
                 )}
               </span>
+              {(() => {
+                const runStatuses = [
+                  { id: "Draft", n: counts.Draft || 0, color: "#6366f1" },
+                  { id: "Not run", n: counts.notRun || 0, color: "#9ca3af" },
+                  { id: "Passed", n: counts.passed || 0, color: "#059669" },
+                  { id: "Failed", n: counts.failed || 0, color: "#dc2626" },
+                  { id: "Partial", n: counts.partial || 0, color: "#ea580c" },
+                  { id: "Blocked", n: counts.Blocked || 0, color: "#db2777" },
+                  { id: "Skipped", n: counts.Skipped || 0, color: "#6b7280" },
+                  { id: "Stale", n: counts.Stale || 0, color: "#ca8a04" },
+                ];
+                const runDone =
+                  (counts.passed || 0) +
+                  (counts.failed || 0) +
+                  (counts.partial || 0) +
+                  (counts.Blocked || 0) +
+                  (counts.Skipped || 0);
+                const total = counts.total || 0;
+                return (
+                  <div
+                    className="inline-flex flex-wrap items-center gap-2 text-[11px]"
+                    data-testid="sit-status-bar"
+                    title="Draft = unfinished row. Edited = an AI row changed by a person."
+                  >
+                    <span className="font-medium text-[#374151]">
+                      {runDone} of {total} run
+                    </span>
+                    <div className="flex h-2 w-28 overflow-hidden rounded-full bg-[#e5e7eb]" aria-hidden>
+                      {runStatuses
+                        .filter((s) => s.n > 0 && s.id !== "Draft" && s.id !== "Not run")
+                        .map((s) => (
+                          <div
+                            key={s.id}
+                            style={{ width: `${total ? (s.n / total) * 100 : 0}%`, background: s.color }}
+                            title={`${s.id}: ${s.n}`}
+                          />
+                        ))}
+                    </div>
+                    {runStatuses
+                      .filter((s) => s.n > 0)
+                      .map((s) => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          className={`rounded-full border px-2 py-0.5 ${
+                            statusFilter === s.id
+                              ? "border-[#8664F2] bg-[#f3f0ff] text-[#5b21b6]"
+                              : "border-[#e2e6ef] bg-white text-[#5b647a]"
+                          }`}
+                          title={
+                            s.id === "Draft"
+                              ? "Draft = unfinished row"
+                              : s.id === "Not run"
+                                ? "Not run yet"
+                                : undefined
+                          }
+                          onClick={() => setStatusFilter(statusFilter === s.id ? null : s.id)}
+                        >
+                          {s.id} {s.n}
+                        </button>
+                      ))}
+                  </div>
+                );
+              })()}
               <div className="relative">
                 <button
                   type="button"
                   className="rounded-[6px] border border-[#e2e6ef] bg-white px-2 py-0.5 text-[11px] dark:border-[#2a2a2a]"
                   onClick={() => setColumnsOpen((v) => !v)}
+                  data-testid="sit-columns-menu"
                 >
                   Columns
                 </button>
                 {columnsOpen && (
-                  <div className="absolute right-0 z-30 mt-1 w-48 rounded-[8px] border border-[#e2e6ef] bg-white py-1 text-[11px] shadow-lg dark:border-[#2a2a2a] dark:bg-[#151515]">
+                  <div className="absolute right-0 z-30 mt-1 w-56 rounded-[8px] border border-[#e2e6ef] bg-white py-1 text-[11px] shadow-lg dark:border-[#2a2a2a] dark:bg-[#151515]">
                     <p className="px-3 py-1 text-[10px] text-[#9ca3af]">ID, Scenario, Status always visible</p>
                     {SIT_OPTIONAL_COLUMNS.map((c) => {
-                      const hidden = hiddenColumns.includes(c.id);
+                      const hidden = columnLayout.hidden.includes(c.id);
                       return (
-                        <label
-                          key={c.id}
-                          className="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-[#f3f0ff]"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={!hidden}
-                            onChange={() => {
-                              const next = hidden
-                                ? hiddenColumns.filter((x) => x !== c.id)
-                                : [...hiddenColumns, c.id];
-                              setHiddenColumns(next);
-                              saveHiddenColumns(next);
-                            }}
-                          />
-                          {c.label}
-                        </label>
+                        <div key={c.id} className="flex items-center gap-1 px-2 py-1 hover:bg-[#f3f0ff]">
+                          <label className="flex flex-1 cursor-pointer items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={!hidden}
+                              onChange={() => {
+                                const nextHidden = hidden
+                                  ? columnLayout.hidden.filter((x) => x !== c.id)
+                                  : [...columnLayout.hidden, c.id];
+                                persistLayout({ ...columnLayout, hidden: nextHidden });
+                              }}
+                            />
+                            {c.label}
+                          </label>
+                          {c.id !== "prioSev" && SIT_DEFAULT_ORDER.includes(c.id as SitOrderableColumnId) ? (
+                            <span className="flex shrink-0 gap-0.5">
+                              <button
+                                type="button"
+                                className="rounded px-1 text-[10px] text-[#8664F2]"
+                                aria-label={`Move ${c.label} up`}
+                                onClick={() =>
+                                  persistLayout({
+                                    ...columnLayout,
+                                    order: moveColumnInOrder(columnLayout.order, c.id as SitOrderableColumnId, "up"),
+                                  })
+                                }
+                              >
+                                ↑
+                              </button>
+                              <button
+                                type="button"
+                                className="rounded px-1 text-[10px] text-[#8664F2]"
+                                aria-label={`Move ${c.label} down`}
+                                onClick={() =>
+                                  persistLayout({
+                                    ...columnLayout,
+                                    order: moveColumnInOrder(columnLayout.order, c.id as SitOrderableColumnId, "down"),
+                                  })
+                                }
+                              >
+                                ↓
+                              </button>
+                            </span>
+                          ) : null}
+                        </div>
                       );
                     })}
+                    <label className="flex cursor-pointer items-center gap-2 border-t border-[#eef0f5] px-3 py-1.5 hover:bg-[#f3f0ff]">
+                      <input
+                        type="checkbox"
+                        checked={columnLayout.splitPrioSev}
+                        onChange={(e) => persistLayout({ ...columnLayout, splitPrioSev: e.target.checked })}
+                        data-testid="sit-split-prio-sev"
+                      />
+                      Split Priority / Severity
+                    </label>
+                    <button
+                      type="button"
+                      className="w-full border-t border-[#eef0f5] px-3 py-1.5 text-left font-medium text-[#8664F2] hover:bg-[#f3f0ff]"
+                      data-testid="sit-reset-layout"
+                      onClick={() => persistLayout(resetColumnLayout(canvasId))}
+                    >
+                      Reset layout
+                    </button>
                   </div>
                 )}
               </div>
@@ -929,8 +1058,8 @@ export function SitTestingViewV2({
               originFilter={originFilter}
               search={search}
               generating={generating}
-              density="comfortable"
-              hiddenColumns={hiddenColumns}
+              layout={columnLayout}
+              onLayoutChange={persistLayout}
               onPatch={(rowId, body) => {
                 if (!canEdit) return;
                 void patchRow(rowId, body);

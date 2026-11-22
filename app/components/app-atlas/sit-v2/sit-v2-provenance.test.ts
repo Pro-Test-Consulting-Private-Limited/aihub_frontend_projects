@@ -8,7 +8,7 @@ describe("A3 provenance without Origin column", () => {
     const grid = fs.readFileSync(path.join(__dirname, "sit-v2-grid.tsx"), "utf8");
     expect(grid).not.toMatch(/>Origin</);
     expect(grid).toMatch(/OriginGlyph/);
-    expect(grid).toMatch(/originRowTint/);
+    expect(grid).not.toMatch(/originRowTint\(/); // U10: coloured left borders removed
     expect(grid).toMatch(/provenanceTooltip/);
   });
 

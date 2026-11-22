@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect, useRef, useCallback, type ReactNode } from "react";
+import { Fragment, useMemo, useState, useEffect, useRef, useCallback, type ReactNode } from "react";
 import {
   TbChevronDown,
   TbChevronRight,
@@ -11,10 +11,16 @@ import {
 } from "react-icons/tb";
 import type { SitEpic, SitSheetRow, SitWorkbook } from "@/app/interfaces/appatlas";
 import { displayModuleFeature } from "@/app/lib/sit-module-feature";
-import { CopyField, OriginBadge, OriginGlyph, provenanceTooltip } from "./sit-v2-bits";
+import { OriginGlyph, provenanceTooltip } from "./sit-v2-bits";
 import { SitV2EditableCell, type CellCoord } from "./sit-v2-editable-cell";
 import { SitV2ListEditor } from "./sit-v2-list-editor";
 import { SitV2Select } from "./sit-v2-select";
+import { SitV2ExpandPanel } from "./sit-v2-expand-panel";
+import {
+  SIT_MIN_WIDTHS,
+  type SitColumnLayout,
+  type SitOrderableColumnId,
+} from "./sit-v2-prefs";
 
 function placeholdersForRow(row: SitSheetRow): string[] {
   const set = new Set<string>();
@@ -59,7 +65,6 @@ const STATUS_OPTIONS = [
 ];
 
 const BULK_STATUSES = ["Draft", "Not run", "Passed", "Failed", "Partial", "Blocked", "Skipped"];
-
 const EDITABLE_FIELDS = ["scenario", "preconditions", "steps", "expected"] as const;
 
 function StepsWithChips({ steps }: { steps: string }) {
@@ -84,7 +89,7 @@ function StepsWithChips({ steps }: { steps: string }) {
   );
 }
 
-function TestDataBlock({ row }: { row: SitSheetRow }) {
+function TestDataBlockInline({ row }: { row: SitSheetRow }) {
   const entries: [string, string][] = [];
   for (const [k, v] of Object.entries(row.cells)) {
     if (k.startsWith("td_") && v) entries.push([k.slice(3), v]);
@@ -95,34 +100,20 @@ function TestDataBlock({ row }: { row: SitSheetRow }) {
   }
   if (!entries.length) return null;
   return (
-    <div className="mt-2 rounded-[6px] border border-dashed border-[#c4b5fd]/60 bg-[#faf5ff]/50 p-2 dark:bg-[#1c1530]/40">
-      <div className="mb-1 flex items-center justify-between">
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-[#7c3aed]">Test data</span>
-        <button
-          type="button"
-          className="text-[10px] font-medium text-[#8664F2]"
-          onClick={async () => {
-            const text = entries.map(([k, v]) => `${k}=${v}`).join("\n");
-            try {
-              await navigator.clipboard.writeText(text);
-            } catch {
-              /* ignore */
-            }
-          }}
-        >
-          Copy all
-        </button>
-      </div>
-      <div className="space-y-1">
+    <div className="mt-2 rounded-[6px] border border-dashed border-[#c4b5fd]/60 bg-[#faf5ff]/50 p-2">
+      <span className="text-[10px] font-semibold uppercase tracking-wide text-[#7c3aed]">Test data</span>
+      <div className="mt-1 space-y-0.5 font-mono text-[10.5px]">
         {entries.map(([k, v]) => (
-          <CopyField key={k} label={k} value={v} />
+          <div key={k}>
+            {k}={v || "—"}
+          </div>
         ))}
       </div>
     </div>
   );
 }
 
-/** Clamp long cell text at a line boundary (~12 lines) with explicit Show more — never mid-line CSS cut. */
+/** Clamp at ~12 lines with Show more — never mid-line CSS cut. */
 function StepsClamp({
   open,
   onShowMore,
@@ -137,10 +128,7 @@ function StepsClamp({
   if (open) return <>{children}</>;
   return (
     <div className="relative">
-      <div
-        className="overflow-hidden"
-        style={{ maxHeight: `${lines * 1.35}em`, WebkitMaskImage: "linear-gradient(180deg,#000 85%,transparent)" }}
-      >
+      <div className="overflow-hidden" style={{ maxHeight: `${lines * 1.35}em` }}>
         {children}
       </div>
       <button
@@ -160,13 +148,19 @@ function RowMenu({
   onDuplicate,
   onDelete,
   onInsertBelow,
+  open: controlledOpen,
+  onOpenChange,
 }: {
   canEdit: boolean;
   onDuplicate: () => void;
   onDelete: () => void;
   onInsertBelow?: () => void;
+  open?: boolean;
+  onOpenChange?: (v: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [openLocal, setOpenLocal] = useState(false);
+  const open = controlledOpen ?? openLocal;
+  const setOpen = onOpenChange ?? setOpenLocal;
   const ref = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const close = (e: MouseEvent) => {
@@ -174,10 +168,10 @@ function RowMenu({
     };
     document.addEventListener("click", close);
     return () => document.removeEventListener("click", close);
-  }, []);
+  }, [setOpen]);
   if (!canEdit) return null;
   return (
-    <div className="relative opacity-0 group-hover:opacity-100 focus-within:opacity-100" ref={ref}>
+    <div className="relative opacity-0 group-hover:opacity-100 focus-within:opacity-100" ref={ref} data-testid="sit-row-menu-wrap">
       <button
         type="button"
         className="rounded p-0.5 text-[#6b7280] hover:bg-[#f3f4f6]"
@@ -185,13 +179,16 @@ function RowMenu({
         data-testid="sit-row-menu"
         onClick={(e) => {
           e.stopPropagation();
-          setOpen((v) => !v);
+          setOpen(!open);
         }}
       >
         <TbDotsVertical size={14} />
       </button>
       {open && (
-        <div className="absolute left-0 z-20 mt-1 w-36 rounded-[8px] border border-[#e2e6ef] bg-white py-1 text-[11px] shadow-lg dark:border-[#2a2a2a] dark:bg-[#151515]">
+        <div
+          className="absolute left-0 z-20 mt-1 w-36 rounded-[8px] border border-[#e2e6ef] bg-white py-1 text-[11px] shadow-lg dark:border-[#2a2a2a] dark:bg-[#151515]"
+          data-testid="sit-row-context-menu"
+        >
           <button
             type="button"
             className="flex w-full items-center gap-1.5 px-3 py-1.5 text-left hover:bg-[#f3f0ff]"
@@ -230,6 +227,63 @@ function RowMenu({
   );
 }
 
+function ColResizeHandle({
+  colId,
+  onResize,
+}: {
+  colId: string;
+  onResize: (colId: string, width: number) => void;
+}) {
+  const start = useRef<{ x: number; w: number } | null>(null);
+  return (
+    <span
+      role="separator"
+      aria-orientation="vertical"
+      data-testid={`sit-col-resize-${colId}`}
+      className="absolute right-0 top-0 z-10 h-full w-1.5 cursor-col-resize hover:bg-white/40"
+      onMouseDown={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const th = (e.target as HTMLElement).closest("th");
+        const w = th?.getBoundingClientRect().width ?? SIT_MIN_WIDTHS[colId] ?? 100;
+        start.current = { x: e.clientX, w };
+        const onMove = (ev: MouseEvent) => {
+          if (!start.current) return;
+          const next = Math.max(SIT_MIN_WIDTHS[colId] ?? 72, start.current.w + (ev.clientX - start.current.x));
+          onResize(colId, next);
+        };
+        const onUp = () => {
+          start.current = null;
+          document.removeEventListener("mousemove", onMove);
+          document.removeEventListener("mouseup", onUp);
+        };
+        document.addEventListener("mousemove", onMove);
+        document.addEventListener("mouseup", onUp);
+      }}
+      onDoubleClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onResize(colId, SIT_MIN_WIDTHS[colId] ?? 100);
+      }}
+    />
+  );
+}
+
+function resolveOrder(layout: SitColumnLayout): SitOrderableColumnId[] {
+  let order = [...layout.order];
+  if (layout.splitPrioSev) {
+    order = order.flatMap((id) => (id === "prioSev" ? (["priority", "severity"] as SitOrderableColumnId[]) : [id]));
+    order = order.filter((id) => id !== "prioSev");
+  } else {
+    order = order.filter((id) => id !== "priority" && id !== "severity");
+    if (!order.includes("prioSev")) {
+      const i = order.indexOf("feature");
+      order.splice(i >= 0 ? i + 1 : 0, 0, "prioSev");
+    }
+  }
+  return order;
+}
+
 export function SitV2Grid({
   workbook,
   epics,
@@ -240,8 +294,8 @@ export function SitV2Grid({
   originFilter,
   search,
   generating,
-  density = "comfortable",
-  hiddenColumns = [],
+  layout,
+  onLayoutChange,
   onPatch,
   onDelete,
   onAdd,
@@ -256,23 +310,35 @@ export function SitV2Grid({
   originFilter: string | null;
   search: string;
   generating?: boolean;
-  density?: "comfortable" | "compact";
-  hiddenColumns?: string[];
+  layout: SitColumnLayout;
+  onLayoutChange: (next: SitColumnLayout) => void;
   onPatch: (rowId: string, body: Record<string, unknown>) => void;
   onDelete: (rowId: string) => void;
   onAdd: () => void;
   onDuplicate: (rowId: string) => void;
 }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [drawer, setDrawer] = useState<string | null>(null);
-  const [drawerTab, setDrawerTab] = useState<"details" | "testdata" | "coverage" | "history">("details");
+  const [ctxMenuRow, setCtxMenuRow] = useState<string | null>(null);
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<CellCoord | null>(null);
   const [editing, setEditing] = useState<CellCoord | null>(null);
+  const [dragCol, setDragCol] = useState<SitOrderableColumnId | null>(null);
   const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-  const hide = (id: string) => hiddenColumns.includes(id);
-  const cellPad = density === "compact" ? "px-1.5 py-1" : "px-2 py-2";
-  const tableText = density === "compact" ? "text-[11px]" : "text-[12px]";
+  const hide = (id: string) => layout.hidden.includes(id as never);
+  const cellPad = "px-2 py-2";
+  const tableText = "text-[12px]";
+  const order = useMemo(() => resolveOrder(layout), [layout]);
+  const visibleCols = useMemo(
+    () =>
+      order.filter((id) => {
+        if (id === "scenario") return true;
+        if (id === "priority" || id === "severity") return layout.splitPrioSev;
+        if (id === "prioSev") return !layout.splitPrioSev && !hide("prioSev");
+        return !hide(id);
+      }),
+    [order, layout, hide],
+  );
+  const colCount = 2 + visibleCols.length + 1; // checkbox+ID + cols + status
 
   const rows = useMemo(() => {
     const tc = workbook.sheets.find((s) => s.kind === "test-cases");
@@ -282,7 +348,7 @@ export function SitV2Grid({
     }
     if (typeFilter) list = list.filter((r) => (r.cells.testType || "") === typeFilter);
     if (statusFilter) list = list.filter((r) => (r.cells.executionStatus || "Not run") === statusFilter);
-    if (originFilter === "edited") list = list.filter((r) => r.cells.edited === "1");
+    if (originFilter === "edited") list = list.filter((r) => r.cells.edited === "1" && r.cells.origin !== "human");
     else if (originFilter) list = list.filter((r) => (r.cells.origin || "ai") === originFilter);
     if (search.trim()) {
       const n = search.toLowerCase();
@@ -311,13 +377,9 @@ export function SitV2Grid({
     [],
   );
 
-  const drawerRow = rows.find((r) => r.id === drawer);
-
   const bulkSetStatus = (status: string) => {
     if (!canEdit) return;
-    for (const id of selectedRows) {
-      onPatch(id, { executionStatus: status });
-    }
+    for (const id of selectedRows) onPatch(id, { executionStatus: status });
   };
 
   const moveCell = useCallback(
@@ -344,8 +406,7 @@ export function SitV2Grid({
       } else if (dir === "up") nri--;
       else if (dir === "down") nri++;
       if (nri < 0 || nri >= rows.length) return;
-      const next = { rowId: rows[nri]!.id, field: EDITABLE_FIELDS[nfi]! };
-      setSelected(next);
+      setSelected({ rowId: rows[nri]!.id, field: EDITABLE_FIELDS[nfi]! });
       setEditing(null);
     },
     [rows, selected],
@@ -356,14 +417,315 @@ export function SitV2Grid({
     setEditing(null);
   };
 
+  const toggleExpand = (rowId: string) => {
+    setExpanded((e) => ({ ...e, [rowId]: !e[rowId] }));
+  };
+
+  const setWidth = (colId: string, width: number) => {
+    onLayoutChange({
+      ...layout,
+      widths: { ...layout.widths, [colId]: width },
+    });
+  };
+
+  const reorderCols = (from: SitOrderableColumnId, to: SitOrderableColumnId) => {
+    if (from === to) return;
+    const next = [...layout.order];
+    const fi = next.indexOf(from === "priority" || from === "severity" ? "prioSev" : from);
+    const ti = next.indexOf(to === "priority" || to === "severity" ? "prioSev" : to);
+    if (fi < 0 || ti < 0) return;
+    const [item] = next.splice(fi, 1);
+    next.splice(ti, 0, item!);
+    onLayoutChange({ ...layout, order: next });
+  };
+
+  const headerLabel = (id: SitOrderableColumnId): string => {
+    switch (id) {
+      case "module":
+        return "Module";
+      case "feature":
+        return "Feature";
+      case "prioSev":
+        return "Priority / Severity";
+      case "priority":
+        return "Priority";
+      case "severity":
+        return "Severity";
+      case "scenario":
+        return "Scenario";
+      case "preconditions":
+        return "Preconditions";
+      case "steps":
+        return "Test Steps";
+      case "expected":
+        return "Expected Result";
+      default:
+        return id;
+    }
+  };
+
+  const renderPrioSev = (row: SitSheetRow, field: "priority" | "severity" | "both") => {
+    const fields: ("priority" | "severity")[] =
+      field === "both" ? ["priority", "severity"] : [field];
+    return (
+      <div className="flex flex-col gap-1">
+        {fields.map((f) => {
+          const val = row.cells[f] || "Medium";
+          const style =
+            val === "High"
+              ? "bg-[#fee2e2] text-[#991b1b]"
+              : val === "Low"
+                ? "bg-[#dcfce7] text-[#166534]"
+                : "bg-[#fef3c7] text-[#92400e]";
+          const short = `${f === "priority" ? "P" : "S"} ${val === "Medium" ? "Med" : val}`;
+          const full = f === "priority" ? `Priority ${val}` : `Severity ${val}`;
+          return (
+            <SitV2Select
+              key={f}
+              pill
+              disabled={!canEdit}
+              value={val}
+              aria-label={f === "priority" ? "Priority" : "Severity"}
+              data-testid={`sit-${f}-select`}
+              buttonClassName={`inline-flex max-w-full items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold font-[inherit] ${style}`}
+              options={["High", "Medium", "Low"].map((v) => ({
+                value: v,
+                label: f === "priority" ? `Priority ${v}` : `Severity ${v}`,
+              }))}
+              triggerLabel={
+                <span className="inline-flex items-center gap-1">
+                  <span className="hidden min-[1440px]:inline">{full}</span>
+                  <span className="min-[1440px]:hidden">{short}</span>
+                  {row.cells[`${f}Override`] === "1" ? (
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#8664F2]" title="Manual override" />
+                  ) : null}
+                </span>
+              }
+              onChange={(v) => onPatch(row.id, { [f]: v })}
+            />
+          );
+        })}
+      </div>
+    );
+  };
+
+  const renderBodyCell = (row: SitSheetRow, colId: SitOrderableColumnId, open: boolean) => {
+    const mf = displayModuleFeature(row.cells, epics);
+    const isSel = (f: string) => selected?.rowId === row.id && selected.field === f;
+    const isEdit = (f: string) => editing?.rowId === row.id && editing.field === f;
+    const w = layout.widths[colId];
+    const style = w ? { width: w, minWidth: w } : undefined;
+
+    if (colId === "module") {
+      return (
+        <td key={colId} className={`${cellPad} align-top`} style={style} title="Derived from Jira epic">
+          {mf.module}
+        </td>
+      );
+    }
+    if (colId === "feature") {
+      return (
+        <td key={colId} className={`${cellPad} align-top`} style={style} title="Derived from ticket summary">
+          {mf.feature}
+        </td>
+      );
+    }
+    if (colId === "prioSev") {
+      return (
+        <td key={colId} className={`${cellPad} align-top`} style={style}>
+          {renderPrioSev(row, "both")}
+        </td>
+      );
+    }
+    if (colId === "priority" || colId === "severity") {
+      return (
+        <td key={colId} className={`${cellPad} align-top`} style={style}>
+          {renderPrioSev(row, colId)}
+        </td>
+      );
+    }
+    if (colId === "scenario") {
+      return (
+        <SitV2EditableCell
+          key={colId}
+          rowId={row.id}
+          field="scenario"
+          value={row.cells.scenario || ""}
+          canEdit={canEdit}
+          selected={isSel("scenario")}
+          editing={isEdit("scenario")}
+          onSelect={setSelected}
+          onStartEdit={setEditing}
+          onCancelEdit={() => setEditing(null)}
+          onCommit={commitCell}
+          onMove={moveCell}
+          className={w ? undefined : undefined}
+          renderEditor={({ value, commit, cancel }) => (
+            <div className="flex items-center gap-1" data-testid="sit-scenario-type-editor">
+              <SitV2Select
+                value={row.cells.testType || "Positive"}
+                aria-label="Scenario type"
+                options={Object.keys(TYPE_STYLE).map((t) => ({ value: t, label: t }))}
+                onChange={(t) => onPatch(row.id, { testType: t })}
+                buttonClassName={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold font-[inherit] ${
+                  TYPE_STYLE[row.cells.testType || ""] || "bg-[#eee] text-[#444]"
+                }`}
+              />
+              <input
+                autoFocus
+                className="min-w-0 flex-1 rounded border border-[#8664F2] bg-white px-1 py-0.5 text-[12px] font-[inherit] outline-none dark:bg-[#141414]"
+                defaultValue={value}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    cancel();
+                  } else if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    commit((e.target as HTMLInputElement).value);
+                  }
+                }}
+                onBlur={(e) => commit(e.target.value)}
+              />
+            </div>
+          )}
+          display={
+            <div className="flex items-start gap-1.5">
+              <span
+                className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                  TYPE_STYLE[row.cells.testType || ""] || "bg-[#eee] text-[#444]"
+                }`}
+              >
+                {row.cells.testType || "—"}
+              </span>
+              {(row.cells.thin === "1" || row.cells.thin === "true") && (
+                <span
+                  className="shrink-0 rounded-full border border-[#fde68a] bg-[#fffbeb] px-1.5 py-0.5 text-[9px] font-semibold text-[#92400e]"
+                  title="Thin — below detail thresholds"
+                  data-testid="sit-thin-chip"
+                >
+                  Thin
+                </span>
+              )}
+              <span className="whitespace-pre-wrap">{row.cells.scenario}</span>
+            </div>
+          }
+        />
+      );
+    }
+    if (colId === "preconditions") {
+      return (
+        <SitV2EditableCell
+          key={colId}
+          rowId={row.id}
+          field="preconditions"
+          value={row.cells.preconditions || ""}
+          canEdit={canEdit}
+          selected={isSel("preconditions")}
+          editing={isEdit("preconditions")}
+          onSelect={setSelected}
+          onStartEdit={setEditing}
+          onCancelEdit={() => setEditing(null)}
+          onCommit={commitCell}
+          onMove={moveCell}
+          renderEditor={({ value, commit, cancel }) => (
+            <SitV2ListEditor
+              kind="bullets"
+              initialValue={value}
+              placeholders={placeholdersForRow(row)}
+              onSave={commit}
+              onCancel={cancel}
+            />
+          )}
+          display={
+            <span>
+              <span className="mr-1 rounded bg-[#ede9fe] px-1.5 py-0.5 text-[10px] font-semibold text-[#5b21b6]">
+                {row.cells.requirementId || "—"}
+              </span>
+              <StepsClamp open={open} onShowMore={() => setExpanded((e) => ({ ...e, [row.id]: true }))}>
+                <span className="whitespace-pre-wrap text-[#5b647a]">{row.cells.preconditions}</span>
+              </StepsClamp>
+            </span>
+          }
+        />
+      );
+    }
+    if (colId === "steps") {
+      return (
+        <SitV2EditableCell
+          key={colId}
+          rowId={row.id}
+          field="steps"
+          value={row.cells.steps || ""}
+          canEdit={canEdit}
+          selected={isSel("steps")}
+          editing={isEdit("steps")}
+          onSelect={setSelected}
+          onStartEdit={setEditing}
+          onCancelEdit={() => setEditing(null)}
+          onCommit={commitCell}
+          onMove={moveCell}
+          renderEditor={({ value, commit, cancel }) => (
+            <SitV2ListEditor
+              kind="steps"
+              initialValue={value}
+              placeholders={placeholdersForRow(row)}
+              onSave={commit}
+              onCancel={cancel}
+            />
+          )}
+          display={
+            <div>
+              <StepsClamp open={open} onShowMore={() => setExpanded((e) => ({ ...e, [row.id]: true }))}>
+                <StepsWithChips steps={row.cells.steps || ""} />
+              </StepsClamp>
+              {open && <TestDataBlockInline row={row} />}
+            </div>
+          }
+        />
+      );
+    }
+    if (colId === "expected") {
+      return (
+        <SitV2EditableCell
+          key={colId}
+          rowId={row.id}
+          field="expected"
+          value={row.cells.expected || ""}
+          canEdit={canEdit}
+          selected={isSel("expected")}
+          editing={isEdit("expected")}
+          onSelect={setSelected}
+          onStartEdit={setEditing}
+          onCancelEdit={() => setEditing(null)}
+          onCommit={commitCell}
+          onMove={moveCell}
+          renderEditor={({ value, commit, cancel }) => (
+            <SitV2ListEditor
+              kind="bullets"
+              initialValue={value}
+              placeholders={placeholdersForRow(row)}
+              onSave={commit}
+              onCancel={cancel}
+            />
+          )}
+          display={
+            <StepsClamp open={open} onShowMore={() => setExpanded((e) => ({ ...e, [row.id]: true }))}>
+              <span className="whitespace-pre-wrap">{row.cells.expected}</span>
+            </StepsClamp>
+          }
+        />
+      );
+    }
+    return null;
+  };
+
   return (
     <div className="flex h-full min-h-0 flex-1 overflow-hidden rounded-[10px] border border-[#e2e6ef] bg-white dark:border-[#1a1a1a] dark:bg-[#101010]">
       <div className="min-w-0 flex-1 overflow-auto">
         {!canEdit && (
-          <div className="sticky top-0 z-[5] flex items-center gap-2 border-b border-[#e2e6ef] bg-[#f8fafc] px-3 py-1.5 dark:border-[#1a1a1a] dark:bg-[#141414]">
+          <div className="sticky top-0 z-[5] flex items-center gap-2 border-b border-[#e2e6ef] bg-[#f8fafc] px-3 py-1.5">
             <span
-              className="inline-flex items-center rounded-full border border-[#e2e6ef] bg-white px-2 py-0.5 text-[10px] font-semibold text-[#6b7280] dark:border-[#2a2a2a] dark:bg-[#101010]"
-              title="You can view this canvas but only the owner can edit test cases."
+              className="inline-flex items-center rounded-full border border-[#e2e6ef] bg-white px-2 py-0.5 text-[10px] font-semibold text-[#6b7280]"
               data-testid="sit-view-only-chip"
             >
               View only
@@ -371,24 +733,33 @@ export function SitV2Grid({
           </div>
         )}
         {selectedRows.size > 0 && canEdit && (
-          <div className="sticky top-0 z-[4] flex flex-wrap items-center gap-2 border-b border-[#e2e6ef] bg-[#f8fafc] px-3 py-1.5 text-[11px] dark:border-[#1a1a1a] dark:bg-[#141414]">
+          <div className="sticky top-0 z-[4] flex flex-wrap items-center gap-2 border-b border-[#e2e6ef] bg-[#f8fafc] px-3 py-1.5 text-[11px]">
             <span className="font-medium text-[#5b647a]">{selectedRows.size} selected</span>
             <span className="text-[#9ca3af]">Set status:</span>
             {BULK_STATUSES.map((s) => (
               <button
                 key={s}
                 type="button"
-                className="rounded-full border border-[#e2e6ef] bg-white px-2 py-0.5 font-medium hover:border-[#8664F2] dark:border-[#2a2a2a] dark:bg-[#101010]"
+                className="rounded-full border border-[#e2e6ef] bg-white px-2 py-0.5 font-medium hover:border-[#8664F2]"
                 onClick={() => bulkSetStatus(s)}
               >
                 {s}
               </button>
             ))}
-            <button
-              type="button"
-              className="ml-auto text-[#8664F2]"
-              onClick={() => setSelectedRows(new Set())}
-            >
+            {selectedRows.size >= 3 && (
+              <button
+                type="button"
+                className="rounded-full border border-[#fecaca] bg-[#fef2f2] px-2 py-0.5 font-medium text-[#b91c1c]"
+                data-testid="sit-bulk-delete"
+                onClick={() => {
+                  for (const id of selectedRows) onDelete(id);
+                  setSelectedRows(new Set());
+                }}
+              >
+                Delete {selectedRows.size}
+              </button>
+            )}
+            <button type="button" className="ml-auto text-[#8664F2]" onClick={() => setSelectedRows(new Set())}>
               Clear selection
             </button>
           </div>
@@ -409,42 +780,53 @@ export function SitV2Grid({
                 />
               </th>
               <th
-                className={`sticky left-8 z-[3] w-[7.5rem] bg-[#1F4E78] ${cellPad} pl-2 text-left text-[10px] font-semibold`}
+                className={`sticky left-8 z-[3] relative bg-[#1F4E78] ${cellPad} pl-2 text-left text-[10px] font-semibold`}
+                style={{ width: layout.widths.id || 120, minWidth: 120 }}
               >
                 ID
+                <ColResizeHandle colId="id" onResize={setWidth} />
               </th>
-              {!hide("module") && (
-                <th className={`min-w-[72px] ${cellPad} text-left text-[10px] font-semibold`}>Module</th>
-              )}
-              {!hide("feature") && (
-                <th className={`min-w-[72px] ${cellPad} text-left text-[10px] font-semibold`}>Feature</th>
-              )}
-              {!hide("prioSev") && (
+              {visibleCols.map((colId) => (
                 <th
-                  className={`min-w-[120px] ${cellPad} text-left text-[10px] font-semibold`}
-                  title="Priority = how soon to test this. Severity = how bad it is if it fails."
+                  key={colId}
+                  draggable
+                  onDragStart={() => setDragCol(colId)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => {
+                    if (dragCol) reorderCols(dragCol, colId);
+                    setDragCol(null);
+                  }}
+                  className={`relative ${cellPad} text-left text-[10px] font-semibold`}
+                  style={
+                    layout.widths[colId]
+                      ? { width: layout.widths[colId], minWidth: layout.widths[colId] }
+                      : { minWidth: SIT_MIN_WIDTHS[colId] }
+                  }
+                  title={
+                    colId === "prioSev"
+                      ? "Priority = how soon to test this. Severity = how bad it is if it fails."
+                      : undefined
+                  }
+                  data-testid={`sit-col-header-${colId}`}
                 >
-                  Priority / Severity
+                  {headerLabel(colId)}
+                  <ColResizeHandle colId={colId} onResize={setWidth} />
                 </th>
-              )}
-              <th className={`min-w-[180px] ${cellPad} text-left text-[10px] font-semibold`}>Scenario</th>
-              {!hide("preconditions") && (
-                <th className={`min-w-[140px] ${cellPad} text-left text-[10px] font-semibold`}>Preconditions</th>
-              )}
-              {!hide("steps") && (
-                <th className={`min-w-[280px] ${cellPad} text-left text-[10px] font-semibold`}>Test Steps</th>
-              )}
-              {!hide("expected") && (
-                <th className={`min-w-[160px] ${cellPad} text-left text-[10px] font-semibold`}>Expected Result</th>
-              )}
-              <th className={`min-w-[120px] ${cellPad} text-left text-[10px] font-semibold`}>Status</th>
+              ))}
+              <th
+                className={`relative ${cellPad} text-left text-[10px] font-semibold`}
+                style={{ minWidth: SIT_MIN_WIDTHS.status, width: layout.widths.status }}
+              >
+                Status
+                <ColResizeHandle colId="status" onResize={setWidth} />
+              </th>
             </tr>
           </thead>
           <tbody>
             {generating && rows.length === 0 &&
               [0, 1, 2].map((i) => (
                 <tr key={`sk-${i}`} className="animate-pulse">
-                  <td colSpan={10} className="border-b border-[#f3f4f6] px-3 py-4">
+                  <td colSpan={colCount} className="border-b border-[#f3f4f6] px-3 py-4">
                     <div className="h-4 w-3/4 rounded bg-[#e5e7eb]" />
                   </td>
                 </tr>
@@ -452,450 +834,116 @@ export function SitV2Grid({
             {rows.map((row) => {
               const open = !!expanded[row.id];
               const edited = row.cells.edited === "1" && row.cells.origin !== "human";
-              const mf = displayModuleFeature(row.cells, epics);
-              const isSel = (f: string) => selected?.rowId === row.id && selected.field === f;
-              const isEdit = (f: string) => editing?.rowId === row.id && editing.field === f;
               const tip = provenanceTooltip(row.cells);
               return (
-                <tr
-                  key={row.id}
-                  className="group border-b border-[#f3f4f6] hover:bg-[#fafafa] dark:border-[#1a1a1a] dark:hover:bg-[#141414]"
-                  data-origin={row.cells.origin || "ai"}
-                >
-                  <td className="sticky left-0 z-[1] bg-white px-2 py-2 dark:bg-[#101010]">
-                    <input
-                      type="checkbox"
-                      checked={selectedRows.has(row.id)}
-                      onChange={() => {
-                        setSelectedRows((prev) => {
-                          const n = new Set(prev);
-                          if (n.has(row.id)) n.delete(row.id);
-                          else n.add(row.id);
-                          return n;
-                        });
-                      }}
-                      className="accent-[#8664F2]"
-                    />
-                  </td>
-                  <td
-                    className="sticky left-8 z-[1] whitespace-nowrap bg-white px-2 py-2 align-top font-mono text-[11px] font-semibold dark:bg-[#101010]"
-                    title={tip}
-                    data-testid="sit-id-cell"
+                <Fragment key={row.id}>
+                  <tr
+                    className="group border-b border-[#f3f4f6] hover:bg-[#fafafa] dark:border-[#1a1a1a] dark:hover:bg-[#141414]"
+                    data-origin={row.cells.origin || "ai"}
+                    onContextMenu={(e) => {
+                      if (!canEdit) return;
+                      e.preventDefault();
+                      setCtxMenuRow(row.id);
+                    }}
                   >
-                    <div className="inline-flex max-w-full items-center gap-0.5">
-                      <button
-                        type="button"
-                        className="inline-flex items-center gap-1 text-left"
-                        aria-expanded={open}
-                        aria-label={open ? "Collapse row detail" : "Expand row detail"}
-                        onClick={() => {
-                          setExpanded((e) => ({ ...e, [row.id]: !e[row.id] }));
-                          setDrawer((d) => (d === row.id ? null : row.id));
+                    <td className="sticky left-0 z-[1] bg-white px-2 py-2 dark:bg-[#101010]">
+                      <input
+                        type="checkbox"
+                        checked={selectedRows.has(row.id)}
+                        onChange={() => {
+                          setSelectedRows((prev) => {
+                            const n = new Set(prev);
+                            if (n.has(row.id)) n.delete(row.id);
+                            else n.add(row.id);
+                            return n;
+                          });
                         }}
-                        onDoubleClick={() => {
-                          setExpanded((e) => ({ ...e, [row.id]: !e[row.id] }));
-                          setDrawer((d) => (d === row.id ? null : row.id));
-                        }}
-                      >
-                        {open ? <TbChevronDown size={12} /> : <TbChevronRight size={12} />}
-                        <OriginGlyph origin={row.cells.origin} edited={edited} title={tip} />
-                        <span className="whitespace-nowrap">{row.cells.caseId || row.cells.tcId}</span>
-                      </button>
-                      <RowMenu
-                        canEdit={canEdit}
-                        onDuplicate={() => onDuplicate(row.id)}
-                        onDelete={() => onDelete(row.id)}
-                        onInsertBelow={onAdd}
+                        className="accent-[#8664F2]"
                       />
-                    </div>
-                  </td>
-                  {!hide("module") && (
-                    <td className={`${cellPad} align-top`} title="Derived from Jira epic (not editable)">
-                      {mf.module}
                     </td>
-                  )}
-                  {!hide("feature") && (
-                    <td className={`${cellPad} align-top`} title="Derived from ticket summary (not editable)">
-                      {mf.feature}
-                    </td>
-                  )}
-                  {!hide("prioSev") && (
-                    <td className={`${cellPad} align-top`}>
-                      <div className="flex flex-col gap-1">
-                        {(["priority", "severity"] as const).map((field) => {
-                          const val = row.cells[field] || "Medium";
-                          const style =
-                            val === "High"
-                              ? "bg-[#fee2e2] text-[#991b1b]"
-                              : val === "Low"
-                                ? "bg-[#dcfce7] text-[#166534]"
-                                : "bg-[#fef3c7] text-[#92400e]";
-                          const short =
-                            field === "priority"
-                              ? `P ${val === "Medium" ? "Med" : val}`
-                              : `S ${val === "Medium" ? "Med" : val}`;
-                          const full = field === "priority" ? `Priority ${val}` : `Severity ${val}`;
-                          return (
-                            <SitV2Select
-                              key={field}
-                              pill
-                              disabled={!canEdit}
-                              value={val}
-                              aria-label={field === "priority" ? "Priority" : "Severity"}
-                              data-testid={`sit-${field}-select`}
-                              buttonClassName={`inline-flex max-w-full items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold font-[inherit] ${style}`}
-                              options={["High", "Medium", "Low"].map((v) => ({
-                                value: v,
-                                label: field === "priority" ? `Priority ${v}` : `Severity ${v}`,
-                              }))}
-                              triggerLabel={
-                                <span className="inline-flex items-center gap-1">
-                                  <span className="hidden min-[1440px]:inline">{full}</span>
-                                  <span className="min-[1440px]:hidden">{short}</span>
-                                </span>
-                              }
-                              onChange={(v) => onPatch(row.id, { [field]: v })}
-                            />
-                          );
-                        })}
-                      </div>
-                    </td>
-                  )}
-                  <SitV2EditableCell
-                    rowId={row.id}
-                    field="scenario"
-                    value={row.cells.scenario || ""}
-                    canEdit={canEdit}
-                    selected={isSel("scenario")}
-                    editing={isEdit("scenario")}
-                    onSelect={setSelected}
-                    onStartEdit={setEditing}
-                    onCancelEdit={() => setEditing(null)}
-                    onCommit={commitCell}
-                    onMove={moveCell}
-                    renderEditor={({ value, commit, cancel }) => (
-                      <div className="flex items-center gap-1" data-testid="sit-scenario-type-editor">
-                        <SitV2Select
-                          value={row.cells.testType || "Positive"}
-                          aria-label="Scenario type"
-                          options={Object.keys(TYPE_STYLE).map((t) => ({ value: t, label: t }))}
-                          onChange={(t) => onPatch(row.id, { testType: t })}
-                          buttonClassName={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold font-[inherit] ${
-                            TYPE_STYLE[row.cells.testType || ""] || "bg-[#eee] text-[#444]"
-                          }`}
-                        />
-                        <input
-                          autoFocus
-                          className="min-w-0 flex-1 rounded border border-[#8664F2] bg-white px-1 py-0.5 text-[12px] font-[inherit] outline-none dark:bg-[#141414]"
-                          defaultValue={value}
+                    <td
+                      className="sticky left-8 z-[1] whitespace-nowrap bg-white px-2 py-2 align-top font-mono text-[11px] font-semibold dark:bg-[#101010]"
+                      title={tip}
+                      data-testid="sit-id-cell"
+                      style={{ width: layout.widths.id || 120, minWidth: 120 }}
+                    >
+                      <div className="inline-flex max-w-full items-center gap-0.5">
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 text-left"
+                          aria-expanded={open}
+                          aria-label={open ? "Collapse row detail" : "Expand row detail"}
+                          data-testid="sit-row-chevron"
+                          onClick={() => toggleExpand(row.id)}
+                          onDoubleClick={() => toggleExpand(row.id)}
                           onKeyDown={(e) => {
-                            if (e.key === "Escape") {
+                            if (e.key === "Enter") {
                               e.preventDefault();
-                              cancel();
-                            } else if (e.key === "Enter" && !e.shiftKey) {
-                              e.preventDefault();
-                              commit((e.target as HTMLInputElement).value);
+                              toggleExpand(row.id);
                             }
                           }}
-                          onBlur={(e) => commit(e.target.value)}
+                        >
+                          {open ? <TbChevronDown size={12} /> : <TbChevronRight size={12} />}
+                          <OriginGlyph origin={row.cells.origin} edited={edited} title={tip} />
+                          <span className="whitespace-nowrap">{row.cells.caseId || row.cells.tcId}</span>
+                        </button>
+                        <RowMenu
+                          canEdit={canEdit}
+                          open={ctxMenuRow === row.id}
+                          onOpenChange={(v) => setCtxMenuRow(v ? row.id : null)}
+                          onDuplicate={() => onDuplicate(row.id)}
+                          onDelete={() => onDelete(row.id)}
+                          onInsertBelow={onAdd}
                         />
                       </div>
-                    )}
-                    display={
-                      <div className="flex items-start gap-1.5">
-                        <span
-                          className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${
-                            TYPE_STYLE[row.cells.testType || ""] || "bg-[#eee] text-[#444]"
+                    </td>
+                    {visibleCols.map((colId) => renderBodyCell(row, colId, open))}
+                    <td className="px-2 py-2 align-top">
+                      <div className="flex flex-col items-start gap-0.5">
+                        <SitV2Select
+                          pill
+                          disabled={!canEdit}
+                          value={row.cells.executionStatus || "Not run"}
+                          aria-label="Status"
+                          data-testid="sit-status-select"
+                          listClassName="max-h-none overflow-visible"
+                          buttonClassName={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10.5px] font-semibold font-[inherit] disabled:opacity-80 ${
+                            STATUS_STYLE[row.cells.executionStatus || "Not run"] || STATUS_STYLE["Not run"]
                           }`}
-                        >
-                          {row.cells.testType || "—"}
-                        </span>
-                        <span className="whitespace-pre-wrap" title={row.cells.scenario}>
-                          {row.cells.scenario}
-                        </span>
+                          options={
+                            row.cells.executionStatus === "Stale"
+                              ? [
+                                  { value: "Stale", label: "Stale (system)", group: "System", disabled: true },
+                                  ...STATUS_OPTIONS,
+                                ]
+                              : STATUS_OPTIONS
+                          }
+                          onChange={(v) => {
+                            if (v === "Stale") return;
+                            onPatch(row.id, { executionStatus: v });
+                          }}
+                        />
+                        {row.cells.executionStatus === "Draft" && row.cells.draftMissing ? (
+                          <span className="mt-0.5 block text-[9px] text-[#3730a3]" title={`Draft — unfinished. Missing: ${row.cells.draftMissing}`}>
+                            Draft — missing: {row.cells.draftMissing}
+                          </span>
+                        ) : null}
                       </div>
-                    }
-                  />
-                  {!hide("preconditions") && (
-                    <SitV2EditableCell
-                      rowId={row.id}
-                      field="preconditions"
-                      value={row.cells.preconditions || ""}
-                      canEdit={canEdit}
-                      selected={isSel("preconditions")}
-                      editing={isEdit("preconditions")}
-                      onSelect={setSelected}
-                      onStartEdit={setEditing}
-                      onCancelEdit={() => setEditing(null)}
-                      onCommit={commitCell}
-                      onMove={moveCell}
-                      renderEditor={({ value, commit, cancel }) => (
-                        <SitV2ListEditor
-                          kind="bullets"
-                          initialValue={value}
-                          placeholders={placeholdersForRow(row)}
-                          onSave={commit}
-                          onCancel={cancel}
-                        />
-                      )}
-                      display={
-                        <span>
-                          <span className="mr-1 rounded bg-[#ede9fe] px-1.5 py-0.5 text-[10px] font-semibold text-[#5b21b6]">
-                            {row.cells.requirementId || "—"}
-                          </span>
-                          <span className="whitespace-pre-wrap text-[#5b647a]" title={row.cells.preconditions}>
-                            {row.cells.preconditions}
-                          </span>
-                        </span>
-                      }
-                    />
+                    </td>
+                  </tr>
+                  {open && (
+                    <tr className="border-b border-[#eef0f5] dark:border-[#1a1a1a]">
+                      <td colSpan={colCount} className="p-0">
+                        <SitV2ExpandPanel row={row} canEdit={canEdit} onPatch={onPatch} />
+                      </td>
+                    </tr>
                   )}
-                  {!hide("steps") && (
-                    <SitV2EditableCell
-                      rowId={row.id}
-                      field="steps"
-                      value={row.cells.steps || ""}
-                      canEdit={canEdit}
-                      selected={isSel("steps")}
-                      editing={isEdit("steps")}
-                      onSelect={setSelected}
-                      onStartEdit={setEditing}
-                      onCancelEdit={() => setEditing(null)}
-                      onCommit={commitCell}
-                      onMove={moveCell}
-                      renderEditor={({ value, commit, cancel }) => (
-                        <SitV2ListEditor
-                          kind="steps"
-                          initialValue={value}
-                          placeholders={placeholdersForRow(row)}
-                          onSave={commit}
-                          onCancel={cancel}
-                        />
-                      )}
-                      display={
-                        <div>
-                          <StepsClamp
-                            open={open}
-                            onShowMore={() => setExpanded((e) => ({ ...e, [row.id]: true }))}
-                          >
-                            <StepsWithChips steps={row.cells.steps || ""} />
-                          </StepsClamp>
-                          {open && <TestDataBlock row={row} />}
-                        </div>
-                      }
-                    />
-                  )}
-                  {!hide("expected") && (
-                    <SitV2EditableCell
-                      rowId={row.id}
-                      field="expected"
-                      value={row.cells.expected || ""}
-                      canEdit={canEdit}
-                      selected={isSel("expected")}
-                      editing={isEdit("expected")}
-                      onSelect={setSelected}
-                      onStartEdit={setEditing}
-                      onCancelEdit={() => setEditing(null)}
-                      onCommit={commitCell}
-                      onMove={moveCell}
-                      renderEditor={({ value, commit, cancel }) => (
-                        <SitV2ListEditor
-                          kind="bullets"
-                          initialValue={value}
-                          placeholders={placeholdersForRow(row)}
-                          onSave={commit}
-                          onCancel={cancel}
-                        />
-                      )}
-                    />
-                  )}
-                  <td className="px-2 py-2 align-top">
-                    <div className="flex flex-col items-start gap-0.5">
-                      <SitV2Select
-                        pill
-                        disabled={!canEdit}
-                        value={row.cells.executionStatus || "Not run"}
-                        aria-label="Status"
-                        data-testid="sit-status-select"
-                        listClassName="max-h-none overflow-visible"
-                        buttonClassName={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10.5px] font-semibold font-[inherit] disabled:opacity-80 ${
-                          STATUS_STYLE[row.cells.executionStatus || "Not run"] || STATUS_STYLE["Not run"]
-                        }`}
-                        options={
-                          row.cells.executionStatus === "Stale"
-                            ? [
-                                { value: "Stale", label: "Stale (system)", group: "System", disabled: true },
-                                ...STATUS_OPTIONS,
-                              ]
-                            : STATUS_OPTIONS
-                        }
-                        onChange={(v) => {
-                          if (v === "Stale") return;
-                          onPatch(row.id, { executionStatus: v });
-                        }}
-                      />
-                      {row.cells.executionStatus === "Draft" && row.cells.draftMissing ? (
-                        <span
-                          className="mt-0.5 block text-[9px] text-[#3730a3]"
-                          title={`Draft — unfinished row. Missing: ${row.cells.draftMissing}`}
-                        >
-                          Draft — missing: {row.cells.draftMissing}
-                        </span>
-                      ) : null}
-                      {row.cells.executionStatus === "Stale" ? (
-                        <span
-                          className="mt-0.5 block text-[9px] text-[#92400e]"
-                          title={row.cells.statusReason || "Case content or ticket changed after a result"}
-                        >
-                          Stale
-                        </span>
-                      ) : null}
-                    </div>
-                  </td>
-                </tr>
+                </Fragment>
               );
             })}
           </tbody>
         </table>
       </div>
-
-      {drawerRow && (
-        <aside
-          className="w-[340px] shrink-0 overflow-y-auto border-l border-[#eef0f5] bg-[#fafafa] p-3 dark:border-[#1a1a1a] dark:bg-[#0c0c0c]"
-          data-testid="sit-row-drawer"
-        >
-          <div className="mb-2 flex items-center justify-between">
-            <div className="font-semibold text-[#1F1F1F] dark:text-[#ededed]">{drawerRow.cells.caseId}</div>
-            <button type="button" className="text-[12px] text-[#6b7280]" onClick={() => setDrawer(null)}>
-              Close
-            </button>
-          </div>
-          <div className="mb-3 flex flex-wrap gap-1" role="tablist" aria-label="Drawer tabs">
-            {(
-              [
-                ["details", "Details"],
-                ["testdata", "Test data"],
-                ["coverage", "Coverage"],
-                ["history", "History"],
-              ] as const
-            ).map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                aria-selected={drawerTab === id}
-                className={`rounded-[6px] px-2 py-0.5 text-[11px] font-medium ${
-                  drawerTab === id ? "bg-[#8664F2] text-white" : "border border-[#e2e6ef] bg-white text-[#5b647a]"
-                }`}
-                onClick={() => setDrawerTab(id)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          {drawerTab === "details" && (
-            <div>
-              <OriginBadge origin={drawerRow.cells.origin} edited={drawerRow.cells.edited === "1"} />
-              <p className="mt-2 text-[12px] text-[#6b7280]">
-                Status: <strong>{drawerRow.cells.executionStatus || "Not run"}</strong>
-                {drawerRow.cells.statusBy
-                  ? ` · set by ${drawerRow.cells.statusBy}${
-                      drawerRow.cells.statusAt
-                        ? ` at ${new Date(Number(drawerRow.cells.statusAt)).toLocaleString()}`
-                        : ""
-                    }`
-                  : " · not set by a human yet"}
-              </p>
-              <p className="mt-2 text-[13px] font-medium">{drawerRow.cells.scenario}</p>
-              <p className="mt-1 text-[11px] text-[#6b7280]">Ticket {drawerRow.cells.requirementId}</p>
-              <div className="mt-3 whitespace-pre-wrap text-[12px]">
-                <StepsWithChips steps={drawerRow.cells.steps || ""} />
-              </div>
-              <div className="mt-2 whitespace-pre-wrap text-[12px] text-[#374151]">{drawerRow.cells.expected}</div>
-              {canEdit && drawerRow.cells.origin === "ai" && drawerRow.cells.edited === "1" && (
-                <div className="mt-4 flex flex-col gap-2">
-                  <button
-                    type="button"
-                    className="rounded-[8px] border border-[#e2e6ef] px-2 py-1 text-[11px] dark:border-[#2a2a2a]"
-                    onClick={() => onPatch(drawerRow.id, { showOriginal: true })}
-                  >
-                    Show original AI version
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded-[8px] border border-[#fecaca] px-2 py-1 text-[11px] text-[#991b1b]"
-                    onClick={() => {
-                      if (true) { // soft revert — no native confirm (U12)
-                        onPatch(drawerRow.id, { revertAi: true });
-                      }
-                    }}
-                  >
-                    Revert to AI version
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-          {drawerTab === "testdata" && (
-            <div>
-              <TestDataBlock row={drawerRow} />
-              {!drawerRow.cells.steps?.includes("{{") && (
-                <p className="text-[11px] text-[#9ca3af]">No placeholders in steps for this case.</p>
-              )}
-              {drawerRow.cells.dataIntent ? (
-                <p className="mt-2 font-mono text-[10.5px] text-[#5b647a]">intent: {drawerRow.cells.dataIntent}</p>
-              ) : null}
-            </div>
-          )}
-          {drawerTab === "coverage" && (
-            <div className="space-y-2 text-[12px]">
-              <p>
-                ACs:{" "}
-                <span className="font-mono">{drawerRow.cells.acIds || drawerRow.cells.ac || "—"}</span>
-              </p>
-              {drawerRow.cells.openQuestions ? (
-                <p className="text-[#92400e]">
-                  OPEN: <span className="font-mono">{drawerRow.cells.openQuestions}</span>
-                </p>
-              ) : (
-                <p className="text-[#9ca3af]">No open questions.</p>
-              )}
-            </div>
-          )}
-          {drawerTab === "history" && (
-            <div className="space-y-2 text-[11.5px] text-[#374151]">
-              <p>
-                Origin: <strong>{drawerRow.cells.origin || "ai"}</strong>
-                {drawerRow.cells.edited === "1" ? " · Edited" : ""}
-              </p>
-              {drawerRow.cells.editedBy ? (
-                <p>
-                  Last edit: {drawerRow.cells.editedBy}
-                  {drawerRow.cells.editedAt
-                    ? ` · ${new Date(Number(drawerRow.cells.editedAt)).toLocaleString()}`
-                    : ""}
-                </p>
-              ) : (
-                <p className="text-[#9ca3af]">No human edits recorded.</p>
-              )}
-              <p>
-                Status: {drawerRow.cells.executionStatus || "Not run"}
-                {drawerRow.cells.statusBy
-                  ? ` · ${drawerRow.cells.statusBy}${
-                      drawerRow.cells.statusAt
-                        ? ` · ${new Date(Number(drawerRow.cells.statusAt)).toLocaleString()}`
-                        : ""
-                    }`
-                  : ""}
-                {drawerRow.cells.statusSource ? ` · source ${drawerRow.cells.statusSource}` : ""}
-              </p>
-              {drawerRow.cells.generationVersion || drawerRow.cells.version ? (
-                <p>Generation version: {drawerRow.cells.generationVersion || drawerRow.cells.version}</p>
-              ) : null}
-            </div>
-          )}
-        </aside>
-      )}
     </div>
   );
 }
