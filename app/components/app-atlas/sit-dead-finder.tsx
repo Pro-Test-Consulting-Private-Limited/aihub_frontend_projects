@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { DeadFlag, DeadFlagHit, SitDeadAudit } from "@/app/interfaces/appatlas";
 
 export const DEAD_FLAG_LABEL: Record<DeadFlag, string> = {
-  stub_workbook: "Stub workbook",
+  stub_workbook: "Placeholder suite",
   template_case: "Template case",
   not_assessed: "Not assessed",
   orphan_ticket: "Orphan ticket",
@@ -83,8 +83,8 @@ export function DeadTestFinderStrip({
           })}
         </>
       )}
-      <span className="ml-auto text-[10.5px] text-[#92400e]/70 dark:text-[#FCD34D]/70">
-        Stub, empty oracle, orphan, duplicate  -  no run history needed
+      <span className="ml-auto text-[12px] text-[#92400e]/70 dark:text-[#FCD34D]/70">
+        Empty oracle, orphan, duplicate — Draft rows are never flagged
       </span>
     </div>
   );
@@ -171,9 +171,39 @@ export function DeadTestFinderToolbar({
               );
             })}
           </div>
-          <p className="mt-2 text-[10.5px] text-[#92400e]/70 dark:text-[#FCD34D]/70">
-            Stub, empty oracle, orphan, duplicate — no run history needed
+          <p className="mt-2 text-[12px] text-[#92400e]/70 dark:text-[#FCD34D]/70">
+            Empty oracle, orphan, duplicate — Draft rows are never flagged. Not assessed = AI only.
           </p>
+          {audit && flagged > 0 && (
+            <ul className="mt-2 max-h-40 space-y-1 overflow-auto text-[12px]" data-testid="sit-quality-case-list">
+              {Object.entries(audit.flagsByRowId || {})
+                .flatMap(([rowId, hits]) =>
+                  (hits || []).map((h) => ({
+                    rowId,
+                    flag: h.flag,
+                    reason: h.reason,
+                    caseId: (h as { caseId?: string }).caseId,
+                  })),
+                )
+                .slice(0, 40)
+                .map((item, i) => (
+                  <li key={`${item.rowId}-${item.flag}-${i}`}>
+                    <button
+                      type="button"
+                      className="text-left text-[#92400e] underline-offset-2 hover:underline"
+                      onClick={() => {
+                        document
+                          .querySelector(`[data-row-id="${item.rowId}"]`)
+                          ?.scrollIntoView({ behavior: "smooth", block: "center" });
+                      }}
+                    >
+                      <span className="font-semibold">{DEAD_FLAG_LABEL[item.flag]}</span>
+                      {item.reason ? ` — ${item.reason}` : ""}
+                    </button>
+                  </li>
+                ))}
+            </ul>
+          )}
         </div>
       )}
     </div>

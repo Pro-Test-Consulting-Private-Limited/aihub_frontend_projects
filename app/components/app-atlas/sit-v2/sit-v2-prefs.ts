@@ -41,18 +41,33 @@ export const SIT_DEFAULT_ORDER: SitOrderableColumnId[] = [
   "expected",
 ];
 
+/** Round 4 B1 — weighted defaults at 1440px reference width. */
+export const SIT_DEFAULT_WIDTHS: Record<string, number> = {
+  id: 150,
+  module: 120,
+  feature: 120,
+  prioSev: 150,
+  priority: 100,
+  severity: 100,
+  scenario: 240,
+  preconditions: 320,
+  steps: 380,
+  expected: 320,
+  status: 130,
+};
+
 export const SIT_MIN_WIDTHS: Record<string, number> = {
-  module: 72,
-  feature: 72,
-  prioSev: 100,
-  priority: 72,
-  severity: 72,
-  scenario: 160,
-  preconditions: 120,
-  steps: 220,
-  expected: 140,
+  module: 96,
+  feature: 96,
+  prioSev: 120,
+  priority: 80,
+  severity: 80,
+  scenario: 220,
+  preconditions: 160,
+  steps: 200,
+  expected: 160,
   status: 110,
-  id: 120,
+  id: 140,
 };
 
 const DENSITY_KEY = "sit_v2_density";
@@ -72,7 +87,7 @@ function layoutKey(canvasId: string | null | undefined, userKey?: string | null)
 export function defaultLayout(hidden: SitColumnId[] = []): SitColumnLayout {
   return {
     order: [...SIT_DEFAULT_ORDER],
-    widths: {},
+    widths: { ...SIT_DEFAULT_WIDTHS },
     splitPrioSev: false,
     hidden,
   };
@@ -131,10 +146,14 @@ export function loadColumnLayout(
       allowed.has(id),
     );
     const base = defaultLayout(parsed.hidden || loadHiddenColumns());
+    const widths =
+      parsed.widths && typeof parsed.widths === "object" && Object.keys(parsed.widths).length
+        ? { ...SIT_DEFAULT_WIDTHS, ...parsed.widths }
+        : { ...SIT_DEFAULT_WIDTHS };
     return {
       ...base,
       order: order.length ? order : base.order,
-      widths: parsed.widths && typeof parsed.widths === "object" ? parsed.widths : {},
+      widths,
       splitPrioSev: !!parsed.splitPrioSev,
       hidden: Array.isArray(parsed.hidden) ? (parsed.hidden as SitColumnId[]) : base.hidden,
     };
@@ -180,4 +199,8 @@ export function moveColumnInOrder(
   next[i] = next[j]!;
   next[j] = tmp;
   return next;
+}
+
+export function colWidth(layout: SitColumnLayout, colId: string): number {
+  return layout.widths[colId] ?? SIT_DEFAULT_WIDTHS[colId] ?? SIT_MIN_WIDTHS[colId] ?? 100;
 }

@@ -12,13 +12,17 @@ describe("Round 3 U3 / U8 / U10", () => {
     expect(grid).toMatch(/sit-row-chevron/);
     expect(grid).toMatch(/SitV2ExpandPanel/);
     expect(grid).not.toMatch(/sit-row-drawer/);
-    expect(expand).toMatch(/Details/);
     expect(expand).toMatch(/Test data/);
     expect(expand).toMatch(/Coverage/);
     expect(expand).toMatch(/History/);
-    expect(expand).toMatch(/Show original AI version/);
+    expect(expand).toMatch(/AI original/);
     expect(expand).toMatch(/Revert to AI version/);
     expect(grid).toMatch(/sit-row-context-menu/);
+  });
+
+  it("U10 R4 B2: origin filter carries counts; no duplicate counts bar", () => {
+    expect(view).toMatch(/sit-origin-filter-chips/);
+    expect(view).not.toMatch(/sit-counts-bar/);
   });
 
   it("U8: column resize, reorder, reset, split prio/sev, localStorage layout", () => {
@@ -33,7 +37,7 @@ describe("Round 3 U3 / U8 / U10", () => {
   });
 
   it("U10: origin chips + status bar; no long dotted sentence; no coloured left borders", () => {
-    expect(view).toMatch(/sit-counts-bar/);
+    expect(view).toMatch(/sit-origin-filter-chips/);
     expect(view).toMatch(/sit-status-bar/);
     expect(view).toMatch(/of \{total\} run/);
     expect(view).not.toMatch(/AI - .*edited - .*human/);

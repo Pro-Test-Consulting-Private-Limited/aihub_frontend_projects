@@ -18,9 +18,11 @@ import { SitV2Select } from "./sit-v2-select";
 import { SitV2ExpandPanel } from "./sit-v2-expand-panel";
 import {
   SIT_MIN_WIDTHS,
+  colWidth,
   type SitColumnLayout,
   type SitOrderableColumnId,
 } from "./sit-v2-prefs";
+import { normalizeBulletText, renderBulletLines } from "./sit-v2-bullets";
 
 function placeholdersForRow(row: SitSheetRow): string[] {
   const set = new Set<string>();
@@ -113,18 +115,21 @@ function TestDataBlockInline({ row }: { row: SitSheetRow }) {
   );
 }
 
-/** Clamp at ~12 lines with Show more — never mid-line CSS cut. */
+/** Clamp at ~12 lines with Show more — never mid-line CSS cut. Skip when empty. */
 function StepsClamp({
   open,
   onShowMore,
   children,
   lines = 12,
+  empty,
 }: {
   open: boolean;
   onShowMore: () => void;
   children: ReactNode;
   lines?: number;
+  empty?: boolean;
 }) {
+  if (empty) return <>{children}</>;
   if (open) return <>{children}</>;
   return (
     <div className="relative">
@@ -133,7 +138,7 @@ function StepsClamp({
       </div>
       <button
         type="button"
-        className="mt-1 text-[10px] font-medium text-[#8664F2]"
+        className="mt-1 text-[12px] font-medium text-[#8664F2]"
         onClick={onShowMore}
         data-testid="sit-show-more"
       >
@@ -141,6 +146,10 @@ function StepsClamp({
       </button>
     </div>
   );
+}
+
+function EmptyPlaceholder({ text }: { text: string }) {
+  return <span className="text-[12px] italic text-[#9ca3af]">{text}</span>;
 }
 
 function RowMenu({
@@ -513,8 +522,8 @@ export function SitV2Grid({
     const mf = displayModuleFeature(row.cells, epics);
     const isSel = (f: string) => selected?.rowId === row.id && selected.field === f;
     const isEdit = (f: string) => editing?.rowId === row.id && editing.field === f;
-    const w = layout.widths[colId];
-    const style = w ? { width: w, minWidth: w } : undefined;
+    const w = Math.max(SIT_MIN_WIDTHS[colId] ?? 72, colWidth(layout, colId));
+    const style = { width: w, minWidth: SIT_MIN_WIDTHS[colId] ?? 72 };
 
     if (colId === "module") {
       return (
@@ -649,16 +658,24 @@ export function SitV2Grid({
               onCancel={cancel}
             />
           )}
-          display={
-            <span>
-              <span className="mr-1 rounded bg-[#ede9fe] px-1.5 py-0.5 text-[10px] font-semibold text-[#5b21b6]">
-                {row.cells.requirementId || "—"}
-              </span>
-              <StepsClamp open={open} onShowMore={() => setExpanded((e) => ({ ...e, [row.id]: true }))}>
-                <span className="whitespace-pre-wrap text-[#5b647a]">{row.cells.preconditions}</span>
-              </StepsClamp>
-            </span>
-          }
+                      display={
+                        <span>
+                          <span className="mr-1 rounded bg-[#ede9fe] px-1.5 py-0.5 text-[12px] font-semibold text-[#5b21b6]">
+                            {row.cells.requirementId || "—"}
+                          </span>
+                          {!normalizeBulletText(row.cells.preconditions || "") ? (
+                            <EmptyPlaceholder text="Add preconditions" />
+                          ) : (
+                            <StepsClamp
+                              open={open}
+                              empty={false}
+                              onShowMore={() => setExpanded((e) => ({ ...e, [row.id]: true }))}
+                            >
+                              {renderBulletLines(row.cells.preconditions || "")}
+                            </StepsClamp>
+                          )}
+                        </span>
+                      }
         />
       );
     }
@@ -686,14 +703,21 @@ export function SitV2Grid({
               onCancel={cancel}
             />
           )}
-          display={
-            <div>
-              <StepsClamp open={open} onShowMore={() => setExpanded((e) => ({ ...e, [row.id]: true }))}>
-                <StepsWithChips steps={row.cells.steps || ""} />
-              </StepsClamp>
-              {open && <TestDataBlockInline row={row} />}
-            </div>
-          }
+                      display={
+                        <div>
+                          {!((row.cells.steps || "").trim()) ? (
+                            <EmptyPlaceholder text="Add steps" />
+                          ) : (
+                            <StepsClamp
+                              open={open}
+                              onShowMore={() => setExpanded((e) => ({ ...e, [row.id]: true }))}
+                            >
+                              <StepsWithChips steps={row.cells.steps || ""} />
+                            </StepsClamp>
+                          )}
+                          {open && <TestDataBlockInline row={row} />}
+                        </div>
+                      }
         />
       );
     }
@@ -722,9 +746,13 @@ export function SitV2Grid({
             />
           )}
           display={
-            <StepsClamp open={open} onShowMore={() => setExpanded((e) => ({ ...e, [row.id]: true }))}>
-              <span className="whitespace-pre-wrap">{row.cells.expected}</span>
-            </StepsClamp>
+            !normalizeBulletText(row.cells.expected || "") ? (
+              <EmptyPlaceholder text="Add expected result" />
+            ) : (
+              <StepsClamp open={open} onShowMore={() => setExpanded((e) => ({ ...e, [row.id]: true }))}>
+                {renderBulletLines(row.cells.expected || "")}
+              </StepsClamp>
+            )
           }
         />
       );
@@ -793,8 +821,11 @@ export function SitV2Grid({
                 />
               </th>
               <th
-                className={`sticky left-8 z-[3] relative bg-[#1F4E78] ${cellPad} pl-2 text-left text-[10px] font-semibold`}
-                style={{ width: layout.widths.id || 120, minWidth: 120 }}
+                className={`sticky left-8 z-[3] relative bg-[#1F4E78] ${cellPad} pl-2 text-left text-[12px] font-semibold`}
+                style={{
+                  width: Math.max(SIT_MIN_WIDTHS.id ?? 140, colWidth(layout, "id")),
+                  minWidth: SIT_MIN_WIDTHS.id,
+                }}
               >
                 ID
                 <ColResizeHandle colId="id" onResize={setWidth} />
@@ -809,12 +840,11 @@ export function SitV2Grid({
                     if (dragCol) reorderCols(dragCol, colId);
                     setDragCol(null);
                   }}
-                  className={`relative ${cellPad} text-left text-[10px] font-semibold`}
-                  style={
-                    layout.widths[colId]
-                      ? { width: layout.widths[colId], minWidth: layout.widths[colId] }
-                      : { minWidth: SIT_MIN_WIDTHS[colId] }
-                  }
+                  className={`relative ${cellPad} text-left text-[12px] font-semibold`}
+                  style={{
+                    width: Math.max(SIT_MIN_WIDTHS[colId] ?? 72, colWidth(layout, colId)),
+                    minWidth: SIT_MIN_WIDTHS[colId],
+                  }}
                   title={
                     colId === "prioSev"
                       ? "Priority = how soon to test this. Severity = how bad it is if it fails."
@@ -827,8 +857,11 @@ export function SitV2Grid({
                 </th>
               ))}
               <th
-                className={`relative ${cellPad} text-left text-[10px] font-semibold`}
-                style={{ minWidth: SIT_MIN_WIDTHS.status, width: layout.widths.status }}
+                className={`relative ${cellPad} text-left text-[12px] font-semibold`}
+                style={{
+                  minWidth: SIT_MIN_WIDTHS.status,
+                  width: Math.max(SIT_MIN_WIDTHS.status ?? 110, colWidth(layout, "status")),
+                }}
               >
                 Status
                 <ColResizeHandle colId="status" onResize={setWidth} />
@@ -853,6 +886,8 @@ export function SitV2Grid({
                   <tr
                     className="group border-b border-[#f3f4f6] hover:bg-[#fafafa] dark:border-[#1a1a1a] dark:hover:bg-[#141414]"
                     data-origin={row.cells.origin || "ai"}
+                    data-row-id={row.id}
+                    data-case-id={row.cells.caseId || ""}
                     onContextMenu={(e) => {
                       if (!canEdit) return;
                       e.preventDefault();
@@ -878,7 +913,10 @@ export function SitV2Grid({
                       className="sticky left-8 z-[1] whitespace-nowrap bg-white px-2 py-2 align-top font-mono text-[11px] font-semibold dark:bg-[#101010]"
                       title={tip}
                       data-testid="sit-id-cell"
-                      style={{ width: layout.widths.id || 120, minWidth: 120 }}
+                      style={{
+                        width: Math.max(SIT_MIN_WIDTHS.id ?? 140, colWidth(layout, "id")),
+                        minWidth: SIT_MIN_WIDTHS.id,
+                      }}
                     >
                       <div className="inline-flex max-w-full items-center gap-0.5">
                         <button
@@ -937,7 +975,7 @@ export function SitV2Grid({
                           }}
                         />
                         {row.cells.executionStatus === "Draft" && row.cells.draftMissing ? (
-                          <span className="mt-0.5 block text-[9px] text-[#3730a3]" title={`Draft — unfinished. Missing: ${row.cells.draftMissing}`}>
+                          <span className="mt-0.5 block text-[12px] leading-snug text-[#3730a3]" title={`Draft — unfinished. Missing: ${row.cells.draftMissing}`}>
                             Draft — missing: {row.cells.draftMissing}
                           </span>
                         ) : null}
