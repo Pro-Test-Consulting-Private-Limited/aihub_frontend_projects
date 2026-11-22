@@ -543,7 +543,7 @@ export function SitTestingViewV2({
               type="button"
               onClick={() => {
                 if (!selected.length && !workbook) return;
-                if (window.confirm("Clear the current selection and hide results? Saved data is kept.")) {
+                if (true) { // soft clear — no native confirm (U12)
                   setSelected([]);
                   setWorkbook(null);
                   setTicketFilter("all");
@@ -911,6 +911,7 @@ export function SitTestingViewV2({
                 <button
                   type="button"
                   onClick={() => void addRow()}
+                  data-testid="sit-add-test-case"
                   className="ml-auto inline-flex items-center gap-1 rounded-[8px] border border-[#e2e6ef] px-2 py-0.5 text-[11px] dark:border-[#2a2a2a]"
                 >
                   <TbPlus size={12} /> Add test case

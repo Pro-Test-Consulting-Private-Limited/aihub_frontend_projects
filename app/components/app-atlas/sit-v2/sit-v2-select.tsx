@@ -23,6 +23,8 @@ export function SitV2Select({
   className,
   buttonClassName,
   pill,
+  triggerLabel,
+  listClassName,
   "aria-label": ariaLabel,
   "data-testid": testId,
 }: {
@@ -35,6 +37,10 @@ export function SitV2Select({
   buttonClassName?: string;
   /** Compact pill look (Prio / Sev / Status chips). */
   pill?: boolean;
+  /** Override the closed-button label (still uses options for the list). */
+  triggerLabel?: ReactNode;
+  /** Extra classes for the options popover (e.g. taller status list). */
+  listClassName?: string;
   "aria-label"?: string;
   "data-testid"?: string;
 }) {
@@ -95,14 +101,16 @@ export function SitV2Select({
           }
         }}
       >
-        <span className="truncate">{selected?.label || placeholder}</span>
+        <span className="truncate">{triggerLabel ?? selected?.label ?? placeholder}</span>
         <TbChevronDown size={12} className="shrink-0 opacity-60" />
       </button>
       {open && (
         <div
           role="listbox"
           data-sit-select-popover="1"
-          className="absolute left-0 z-30 mt-1 max-h-56 min-w-[140px] overflow-auto rounded-[8px] border border-[#e2e6ef] bg-white py-1 text-[12px] font-[inherit] shadow-lg dark:border-[#2a2a2a] dark:bg-[#151515]"
+          className={`absolute left-0 z-30 mt-1 min-w-[140px] rounded-[8px] border border-[#e2e6ef] bg-white py-1 text-[12px] font-[inherit] shadow-lg dark:border-[#2a2a2a] dark:bg-[#151515] ${
+            listClassName || "max-h-56 overflow-auto"
+          }`}
         >
           {[...groups.entries()].map(([group, opts]) => (
             <div key={group || "_"}>

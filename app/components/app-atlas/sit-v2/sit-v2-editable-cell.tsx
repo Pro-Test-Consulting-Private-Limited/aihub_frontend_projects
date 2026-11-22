@@ -184,7 +184,7 @@ export function SitV2EditableCell({
       onKeyDown={onKeyDownDisplay}
       onFocus={() => onSelect({ rowId, field })}
     >
-      {display ?? <span className="line-clamp-3 whitespace-pre-wrap">{value || "—"}</span>}
+      {display ?? <span className="whitespace-pre-wrap">{value || "—"}</span>}
     </td>
   );
 }

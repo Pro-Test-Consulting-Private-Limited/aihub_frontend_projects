@@ -45,10 +45,18 @@ describe("A1 spreadsheet edit (no Edit toggle)", () => {
     expect(cellSrc).toMatch(/if \(!canEdit\) return/);
   });
 
-  it("delete/duplicate/add live in row menu and Add test case button", () => {
+  it("delete/duplicate live in row menu; Add test case is toolbar-only", () => {
     expect(gridSrc).toMatch(/Duplicate/);
     expect(gridSrc).toMatch(/Delete/);
-    expect(gridSrc).toMatch(/Add test case/);
     expect(gridSrc).toMatch(/RowMenu/);
+    expect(gridSrc).not.toMatch(/sit-add-test-case/);
+    const viewSrc = fs.readFileSync(path.join(__dirname, "sit-v2-view.tsx"), "utf8");
+    expect(viewSrc).toMatch(/sit-add-test-case/);
+  });
+
+  it("U12 has no native confirm/prompt/alert in the grid", () => {
+    expect(gridSrc).not.toMatch(/window\.confirm/);
+    expect(gridSrc).not.toMatch(/window\.prompt/);
+    expect(gridSrc).not.toMatch(/window\.alert/);
   });
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect, useRef, useCallback } from "react";
+import { useMemo, useState, useEffect, useRef, useCallback, type ReactNode } from "react";
 import {
   TbChevronDown,
   TbChevronRight,
@@ -11,7 +11,7 @@ import {
 } from "react-icons/tb";
 import type { SitEpic, SitSheetRow, SitWorkbook } from "@/app/interfaces/appatlas";
 import { displayModuleFeature } from "@/app/lib/sit-module-feature";
-import { CopyField, OriginBadge, OriginGlyph, originRowTint, provenanceTooltip } from "./sit-v2-bits";
+import { CopyField, OriginBadge, OriginGlyph, provenanceTooltip } from "./sit-v2-bits";
 import { SitV2EditableCell, type CellCoord } from "./sit-v2-editable-cell";
 import { SitV2ListEditor } from "./sit-v2-list-editor";
 import { SitV2Select } from "./sit-v2-select";
@@ -122,16 +122,49 @@ function TestDataBlock({ row }: { row: SitSheetRow }) {
   );
 }
 
+/** Clamp long cell text at a line boundary (~12 lines) with explicit Show more — never mid-line CSS cut. */
+function StepsClamp({
+  open,
+  onShowMore,
+  children,
+  lines = 12,
+}: {
+  open: boolean;
+  onShowMore: () => void;
+  children: ReactNode;
+  lines?: number;
+}) {
+  if (open) return <>{children}</>;
+  return (
+    <div className="relative">
+      <div
+        className="overflow-hidden"
+        style={{ maxHeight: `${lines * 1.35}em`, WebkitMaskImage: "linear-gradient(180deg,#000 85%,transparent)" }}
+      >
+        {children}
+      </div>
+      <button
+        type="button"
+        className="mt-1 text-[10px] font-medium text-[#8664F2]"
+        onClick={onShowMore}
+        data-testid="sit-show-more"
+      >
+        Show more
+      </button>
+    </div>
+  );
+}
+
 function RowMenu({
   canEdit,
   onDuplicate,
   onDelete,
-  onOpenDrawer,
+  onInsertBelow,
 }: {
   canEdit: boolean;
   onDuplicate: () => void;
   onDelete: () => void;
-  onOpenDrawer: () => void;
+  onInsertBelow?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
@@ -142,12 +175,14 @@ function RowMenu({
     document.addEventListener("click", close);
     return () => document.removeEventListener("click", close);
   }, []);
+  if (!canEdit) return null;
   return (
-    <div className="relative" ref={ref}>
+    <div className="relative opacity-0 group-hover:opacity-100 focus-within:opacity-100" ref={ref}>
       <button
         type="button"
         className="rounded p-0.5 text-[#6b7280] hover:bg-[#f3f4f6]"
         aria-label="Row menu"
+        data-testid="sit-row-menu"
         onClick={(e) => {
           e.stopPropagation();
           setOpen((v) => !v);
@@ -156,41 +191,39 @@ function RowMenu({
         <TbDotsVertical size={14} />
       </button>
       {open && (
-        <div className="absolute right-0 z-20 mt-1 w-36 rounded-[8px] border border-[#e2e6ef] bg-white py-1 text-[11px] shadow-lg dark:border-[#2a2a2a] dark:bg-[#151515]">
+        <div className="absolute left-0 z-20 mt-1 w-36 rounded-[8px] border border-[#e2e6ef] bg-white py-1 text-[11px] shadow-lg dark:border-[#2a2a2a] dark:bg-[#151515]">
           <button
             type="button"
-            className="block w-full px-3 py-1.5 text-left hover:bg-[#f3f0ff]"
+            className="flex w-full items-center gap-1.5 px-3 py-1.5 text-left hover:bg-[#f3f0ff]"
             onClick={() => {
               setOpen(false);
-              onOpenDrawer();
+              onDuplicate();
             }}
           >
-            Open drawer
+            <TbCopy size={12} /> Duplicate
           </button>
-          {canEdit && (
-            <>
-              <button
-                type="button"
-                className="flex w-full items-center gap-1.5 px-3 py-1.5 text-left hover:bg-[#f3f0ff]"
-                onClick={() => {
-                  setOpen(false);
-                  onDuplicate();
-                }}
-              >
-                <TbCopy size={12} /> Duplicate
-              </button>
-              <button
-                type="button"
-                className="flex w-full items-center gap-1.5 px-3 py-1.5 text-left text-[#b91c1c] hover:bg-[#fef2f2]"
-                onClick={() => {
-                  setOpen(false);
-                  if (window.confirm("Delete this test case?")) onDelete();
-                }}
-              >
-                <TbTrash size={12} /> Delete
-              </button>
-            </>
-          )}
+          {onInsertBelow ? (
+            <button
+              type="button"
+              className="flex w-full items-center gap-1.5 px-3 py-1.5 text-left hover:bg-[#f3f0ff]"
+              onClick={() => {
+                setOpen(false);
+                onInsertBelow();
+              }}
+            >
+              <TbPlus size={12} /> Insert below
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="flex w-full items-center gap-1.5 px-3 py-1.5 text-left text-[#b91c1c] hover:bg-[#fef2f2]"
+            onClick={() => {
+              setOpen(false);
+              onDelete();
+            }}
+          >
+            <TbTrash size={12} /> Delete
+          </button>
         </div>
       )}
     </div>
@@ -360,13 +393,24 @@ export function SitV2Grid({
             </button>
           </div>
         )}
-        <table className={`min-w-[1100px] w-full border-collapse font-sans ${tableText}`}>
+        <table className={`w-full table-fixed border-collapse font-sans ${tableText}`} data-testid="sit-v2-grid-table">
           <thead className="sticky top-0 z-[2] bg-[#1F4E78] text-white">
             <tr>
               <th className={`sticky left-0 z-[3] w-8 bg-[#1F4E78] ${cellPad}`}>
-                <span className="sr-only">Select</span>
+                <input
+                  type="checkbox"
+                  aria-label="Select all"
+                  className="accent-[#8664F2]"
+                  checked={rows.length > 0 && rows.every((r) => selectedRows.has(r.id))}
+                  onChange={(e) => {
+                    if (e.target.checked) setSelectedRows(new Set(rows.map((r) => r.id)));
+                    else setSelectedRows(new Set());
+                  }}
+                />
               </th>
-              <th className={`sticky left-8 z-[3] min-w-[100px] bg-[#1F4E78] ${cellPad} text-left text-[10px] font-semibold`}>
+              <th
+                className={`sticky left-8 z-[3] w-[7.5rem] bg-[#1F4E78] ${cellPad} pl-2 text-left text-[10px] font-semibold`}
+              >
                 ID
               </th>
               {!hide("module") && (
@@ -376,7 +420,12 @@ export function SitV2Grid({
                 <th className={`min-w-[72px] ${cellPad} text-left text-[10px] font-semibold`}>Feature</th>
               )}
               {!hide("prioSev") && (
-                <th className={`min-w-[100px] ${cellPad} text-left text-[10px] font-semibold`}>Prio / Sev</th>
+                <th
+                  className={`min-w-[120px] ${cellPad} text-left text-[10px] font-semibold`}
+                  title="Priority = how soon to test this. Severity = how bad it is if it fails."
+                >
+                  Priority / Severity
+                </th>
               )}
               <th className={`min-w-[180px] ${cellPad} text-left text-[10px] font-semibold`}>Scenario</th>
               {!hide("preconditions") && (
@@ -388,7 +437,7 @@ export function SitV2Grid({
               {!hide("expected") && (
                 <th className={`min-w-[160px] ${cellPad} text-left text-[10px] font-semibold`}>Expected Result</th>
               )}
-              <th className={`min-w-[110px] ${cellPad} text-left text-[10px] font-semibold`}>Status</th>
+              <th className={`min-w-[120px] ${cellPad} text-left text-[10px] font-semibold`}>Status</th>
             </tr>
           </thead>
           <tbody>
@@ -402,16 +451,15 @@ export function SitV2Grid({
               ))}
             {rows.map((row) => {
               const open = !!expanded[row.id];
-              const edited = row.cells.edited === "1";
+              const edited = row.cells.edited === "1" && row.cells.origin !== "human";
               const mf = displayModuleFeature(row.cells, epics);
               const isSel = (f: string) => selected?.rowId === row.id && selected.field === f;
               const isEdit = (f: string) => editing?.rowId === row.id && editing.field === f;
-              const tint = originRowTint(row.cells.origin, edited);
               const tip = provenanceTooltip(row.cells);
               return (
                 <tr
                   key={row.id}
-                  className={`group border-b border-[#f3f4f6] hover:bg-[#fafafa] dark:border-[#1a1a1a] dark:hover:bg-[#141414] ${tint}`}
+                  className="group border-b border-[#f3f4f6] hover:bg-[#fafafa] dark:border-[#1a1a1a] dark:hover:bg-[#141414]"
                   data-origin={row.cells.origin || "ai"}
                 >
                   <td className="sticky left-0 z-[1] bg-white px-2 py-2 dark:bg-[#101010]">
@@ -430,18 +478,36 @@ export function SitV2Grid({
                     />
                   </td>
                   <td
-                    className="sticky left-8 z-[1] bg-white px-2 py-2 align-top font-mono text-[11px] font-semibold dark:bg-[#101010]"
+                    className="sticky left-8 z-[1] whitespace-nowrap bg-white px-2 py-2 align-top font-mono text-[11px] font-semibold dark:bg-[#101010]"
                     title={tip}
+                    data-testid="sit-id-cell"
                   >
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1 text-left"
-                      onClick={() => setExpanded((e) => ({ ...e, [row.id]: !e[row.id] }))}
-                    >
-                      {open ? <TbChevronDown size={12} /> : <TbChevronRight size={12} />}
-                      <OriginGlyph origin={row.cells.origin} edited={edited} title={tip} />
-                      <span>{row.cells.caseId || row.cells.tcId}</span>
-                    </button>
+                    <div className="inline-flex max-w-full items-center gap-0.5">
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 text-left"
+                        aria-expanded={open}
+                        aria-label={open ? "Collapse row detail" : "Expand row detail"}
+                        onClick={() => {
+                          setExpanded((e) => ({ ...e, [row.id]: !e[row.id] }));
+                          setDrawer((d) => (d === row.id ? null : row.id));
+                        }}
+                        onDoubleClick={() => {
+                          setExpanded((e) => ({ ...e, [row.id]: !e[row.id] }));
+                          setDrawer((d) => (d === row.id ? null : row.id));
+                        }}
+                      >
+                        {open ? <TbChevronDown size={12} /> : <TbChevronRight size={12} />}
+                        <OriginGlyph origin={row.cells.origin} edited={edited} title={tip} />
+                        <span className="whitespace-nowrap">{row.cells.caseId || row.cells.tcId}</span>
+                      </button>
+                      <RowMenu
+                        canEdit={canEdit}
+                        onDuplicate={() => onDuplicate(row.id)}
+                        onDelete={() => onDelete(row.id)}
+                        onInsertBelow={onAdd}
+                      />
+                    </div>
                   </td>
                   {!hide("module") && (
                     <td className={`${cellPad} align-top`} title="Derived from Jira epic (not editable)">
@@ -455,25 +521,39 @@ export function SitV2Grid({
                   )}
                   {!hide("prioSev") && (
                     <td className={`${cellPad} align-top`}>
-                      <div className="flex flex-wrap gap-1">
+                      <div className="flex flex-col gap-1">
                         {(["priority", "severity"] as const).map((field) => {
                           const val = row.cells[field] || "Medium";
                           const style =
                             val === "High"
                               ? "bg-[#fee2e2] text-[#991b1b]"
                               : val === "Low"
-                                ? "bg-[#e0e7ff] text-[#3730a3]"
+                                ? "bg-[#dcfce7] text-[#166534]"
                                 : "bg-[#fef3c7] text-[#92400e]";
+                          const short =
+                            field === "priority"
+                              ? `P ${val === "Medium" ? "Med" : val}`
+                              : `S ${val === "Medium" ? "Med" : val}`;
+                          const full = field === "priority" ? `Priority ${val}` : `Severity ${val}`;
                           return (
                             <SitV2Select
                               key={field}
                               pill
                               disabled={!canEdit}
                               value={val}
-                              aria-label={field}
+                              aria-label={field === "priority" ? "Priority" : "Severity"}
                               data-testid={`sit-${field}-select`}
-                              buttonClassName={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold font-[inherit] ${style}`}
-                              options={["High", "Medium", "Low"].map((v) => ({ value: v, label: v }))}
+                              buttonClassName={`inline-flex max-w-full items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold font-[inherit] ${style}`}
+                              options={["High", "Medium", "Low"].map((v) => ({
+                                value: v,
+                                label: field === "priority" ? `Priority ${v}` : `Severity ${v}`,
+                              }))}
+                              triggerLabel={
+                                <span className="inline-flex items-center gap-1">
+                                  <span className="hidden min-[1440px]:inline">{full}</span>
+                                  <span className="min-[1440px]:hidden">{short}</span>
+                                </span>
+                              }
                               onChange={(v) => onPatch(row.id, { [field]: v })}
                             />
                           );
@@ -502,7 +582,7 @@ export function SitV2Grid({
                         >
                           {row.cells.testType || "—"}
                         </span>
-                        <span className="line-clamp-2" title={row.cells.scenario}>
+                        <span className="whitespace-pre-wrap" title={row.cells.scenario}>
                           {row.cells.scenario}
                         </span>
                       </div>
@@ -535,7 +615,7 @@ export function SitV2Grid({
                           <span className="mr-1 rounded bg-[#ede9fe] px-1.5 py-0.5 text-[10px] font-semibold text-[#5b21b6]">
                             {row.cells.requirementId || "—"}
                           </span>
-                          <span className="line-clamp-2 whitespace-pre-wrap text-[#5b647a]" title={row.cells.preconditions}>
+                          <span className="whitespace-pre-wrap text-[#5b647a]" title={row.cells.preconditions}>
                             {row.cells.preconditions}
                           </span>
                         </span>
@@ -566,18 +646,12 @@ export function SitV2Grid({
                       )}
                       display={
                         <div>
-                          <div className={open ? "" : "max-h-[7.5rem] overflow-hidden"}>
+                          <StepsClamp
+                            open={open}
+                            onShowMore={() => setExpanded((e) => ({ ...e, [row.id]: true }))}
+                          >
                             <StepsWithChips steps={row.cells.steps || ""} />
-                          </div>
-                          {!open && (row.cells.steps || "").split("\n").length > 4 && (
-                            <button
-                              type="button"
-                              className="mt-1 text-[10px] font-medium text-[#8664F2]"
-                              onClick={() => setExpanded((e) => ({ ...e, [row.id]: true }))}
-                            >
-                              Expand
-                            </button>
-                          )}
+                          </StepsClamp>
                           {open && <TestDataBlock row={row} />}
                         </div>
                       }
@@ -608,13 +682,14 @@ export function SitV2Grid({
                     />
                   )}
                   <td className="px-2 py-2 align-top">
-                    <div className="flex items-start gap-1">
+                    <div className="flex flex-col items-start gap-0.5">
                       <SitV2Select
                         pill
                         disabled={!canEdit}
                         value={row.cells.executionStatus || "Not run"}
                         aria-label="Status"
                         data-testid="sit-status-select"
+                        listClassName="max-h-none overflow-visible"
                         buttonClassName={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10.5px] font-semibold font-[inherit] disabled:opacity-80 ${
                           STATUS_STYLE[row.cells.executionStatus || "Not run"] || STATUS_STYLE["Not run"]
                         }`}
@@ -628,18 +703,13 @@ export function SitV2Grid({
                         }
                         onChange={(v) => {
                           if (v === "Stale") return;
-                          if ((v === "Failed" || v === "Blocked") && canEdit) {
-                            const reason = window.prompt("Optional reason or bug link (Enter to skip)") || undefined;
-                            onPatch(row.id, { executionStatus: v, statusReason: reason });
-                            return;
-                          }
                           onPatch(row.id, { executionStatus: v });
                         }}
                       />
                       {row.cells.executionStatus === "Draft" && row.cells.draftMissing ? (
                         <span
                           className="mt-0.5 block text-[9px] text-[#3730a3]"
-                          title={`Draft — missing: ${row.cells.draftMissing}`}
+                          title={`Draft — unfinished row. Missing: ${row.cells.draftMissing}`}
                         >
                           Draft — missing: {row.cells.draftMissing}
                         </span>
@@ -652,12 +722,6 @@ export function SitV2Grid({
                           Stale
                         </span>
                       ) : null}
-                      <RowMenu
-                        canEdit={canEdit}
-                        onDuplicate={() => onDuplicate(row.id)}
-                        onDelete={() => onDelete(row.id)}
-                        onOpenDrawer={() => setDrawer(row.id)}
-                      />
                     </div>
                   </td>
                 </tr>
@@ -665,16 +729,6 @@ export function SitV2Grid({
             })}
           </tbody>
         </table>
-        {canEdit && (
-          <button
-            type="button"
-            onClick={onAdd}
-            data-testid="sit-add-test-case"
-            className="m-3 inline-flex items-center gap-1 rounded-[8px] border border-dashed border-[#c4b5fd] px-3 py-2 text-[12px] text-[#5b21b6] hover:bg-[#f5f3ff]"
-          >
-            <TbPlus size={14} /> Add test case
-          </button>
-        )}
       </div>
 
       {drawerRow && (
@@ -743,7 +797,7 @@ export function SitV2Grid({
                     type="button"
                     className="rounded-[8px] border border-[#fecaca] px-2 py-1 text-[11px] text-[#991b1b]"
                     onClick={() => {
-                      if (window.confirm("Revert this case to the original AI version?")) {
+                      if (true) { // soft revert — no native confirm (U12)
                         onPatch(drawerRow.id, { revertAi: true });
                       }
                     }}
