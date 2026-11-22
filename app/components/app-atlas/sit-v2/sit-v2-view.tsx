@@ -15,7 +15,7 @@ import type { AtlasClient } from "@/app/services/appatlas";
 import {
   DeadTestFinderToolbar,
   filterRowsByDeadFlag,
-  QualityDrawerPanel,
+  QualityActiveChip,
   type QualityFilter,
 } from "../sit-dead-finder";
 import { SitV2Picker } from "./sit-v2-picker";
@@ -92,15 +92,6 @@ export function SitTestingViewV2({
   const [deadFlag, setDeadFlag] = useState<QualityFilter>(null);
   const [deadAudit, setDeadAudit] = useState<SitDeadAudit | null>(null);
   const [deadLoading, setDeadLoading] = useState(false);
-  const [qualityPanelOpen, setQualityPanelOpen] = useState(false);
-  const [viewportW, setViewportW] = useState(1440);
-  useEffect(() => {
-    const sync = () => setViewportW(typeof window !== "undefined" ? window.innerWidth : 1440);
-    sync();
-    window.addEventListener("resize", sync);
-    return () => window.removeEventListener("resize", sync);
-  }, []);
-  const qualityPush = viewportW >= 1440;
   const [exportOpen, setExportOpen] = useState(false);
   const [columnLayout, setColumnLayout] = useState<SitColumnLayout>(() => defaultLayout());
   const [columnsOpen, setColumnsOpen] = useState(false);
@@ -688,9 +679,6 @@ export function SitTestingViewV2({
                 loading={deadLoading}
                 activeFlag={deadFlag}
                 onFlag={setDeadFlag}
-                open={qualityPanelOpen}
-                onOpenChange={setQualityPanelOpen}
-                hideOverlayPanel={qualityPush && qualityPanelOpen}
               />
             )}
           </div>
@@ -835,6 +823,7 @@ export function SitTestingViewV2({
                   {k}
                 </button>
               ))}
+              <QualityActiveChip audit={deadAudit} activeFlag={deadFlag} onClear={() => setDeadFlag(null)} />
               <SitV2Select
                 value={typeFilter || ""}
                 placeholder="Type"
@@ -1144,10 +1133,7 @@ export function SitTestingViewV2({
               )}
             </div>
 
-            <div
-              className={`flex min-h-0 flex-1 ${qualityPush && qualityPanelOpen ? "flex-row" : "flex-col"}`}
-              data-testid="sit-grid-quality-shell"
-            >
+            <div className="flex min-h-0 flex-1 flex-col" data-testid="sit-grid-quality-shell">
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <SitV2Grid
               workbook={displayWorkbook}
@@ -1185,14 +1171,6 @@ export function SitTestingViewV2({
               }}
             />
             </div>
-            {qualityPush && qualityPanelOpen && (
-              <QualityDrawerPanel
-                audit={deadAudit}
-                activeFlag={deadFlag}
-                onFlag={setDeadFlag}
-                onClose={() => setQualityPanelOpen(false)}
-              />
-            )}
             </div>
           </div>
         ) : (

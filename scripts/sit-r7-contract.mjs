@@ -173,7 +173,7 @@ for (const [id, sel] of [
   record(id, "visible", String(n), n > 0);
 }
 
-const needsReview = page.getByRole("button", { name: /Needs review/i }).first();
+const needsReview = page.getByTestId("sit-needs-review-btn").or(page.getByRole("button", { name: /Needs review/i })).first();
 record("C4.needs_review", "Needs review button", String(await needsReview.count()), (await needsReview.count()) > 0);
 
 // ---- C1 selection ----
@@ -205,19 +205,32 @@ if (await idCell.count()) {
 const qNum = await qualityButtonNumber(page);
 const foot = parseShowing(await footerText(page));
 await qualityBtn.click();
-await page.waitForTimeout(500);
-// R6: first click applies all-flagged; R7 later: opens dropdown
+await page.waitForTimeout(400);
+const dd = page.getByTestId("sit-quality-dropdown");
+const hasDd = (await dd.count()) > 0;
+record("R7-04.dropdown_open", "Quality opens dropdown", String(hasDd), hasDd);
+if (hasDd) {
+  await page.getByTestId("sit-quality-filter-all").click();
+  await page.waitForTimeout(400);
+}
 const afterAll = await rowCount(page);
 const allFlaggedRows = afterAll;
 const uniqueNote = `button=${qNum} allFlaggedRows=${allFlaggedRows} footer=${JSON.stringify(foot)}`;
 const i3pass = qNum != null && allFlaggedRows > 0 && qNum === allFlaggedRows;
 record("I3.count_integrity", "Quality N == unique flagged == All flagged rows", uniqueNote, i3pass);
-if (!i3pass) preExisting.push(`I3 pre-existing: ${uniqueNote}`);
+if (!i3pass) preExisting.push(`I3: ${uniqueNote}`);
 
-// Toggle filter off if R6 behaviour (second click)
-await qualityBtn.click();
-await page.waitForTimeout(400);
-// Escape if panel open
+// Clear via All cases / chip
+const chipClear = page.getByTestId("sit-quality-filter-chip-clear");
+if (await chipClear.count()) await chipClear.click();
+else {
+  await qualityBtn.click();
+  await page.waitForTimeout(200);
+  if (await page.getByTestId("sit-quality-opt-all-cases").count()) {
+    await page.getByTestId("sit-quality-opt-all-cases").click();
+  }
+}
+await page.waitForTimeout(200);
 await page.keyboard.press("Escape");
 await page.waitForTimeout(200);
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { DeadFlag, DeadFlagHit, SitDeadAudit } from "@/app/interfaces/appatlas";
 
 /** Plain-words labels for Quality groups (Round 5 A3 / Round 6 A1). */
@@ -110,7 +111,7 @@ function groupHits(audit: SitDeadAudit): { flag: DeadFlag; label: string; items:
   return out;
 }
 
-function highlightRow(rowId: string) {
+export function highlightQualityRow(rowId: string) {
   const el = document.querySelector(`[data-row-id="${rowId}"]`) as HTMLElement | null;
   if (!el) return;
   el.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -122,9 +123,27 @@ function highlightRow(rowId: string) {
 
 function filterLabel(filter: QualityFilter): string {
   if (!filter) return "";
-  if (filter === "all") return "all flagged";
-  if (isNeedsReviewFlag(filter)) return "needs review";
-  return (QUALITY_GROUP_LABEL[filter] || filter).toLowerCase();
+  if (filter === "all") return "All flagged";
+  if (isNeedsReviewFlag(filter)) return "Needs review";
+  return QUALITY_GROUP_LABEL[filter] || filter;
+}
+
+function uniqueCaseCount(items: { rowId: string }[]): number {
+  return new Set(items.map((i) => i.rowId)).size;
+}
+
+/** Chip label for active quality / needs-review filter (R7-04). */
+export function qualityChipText(filter: QualityFilter, audit: SitDeadAudit | null): string {
+  if (!filter) return "";
+  if (filter === "all") return `All flagged: ${qualityCount(audit)} cases`;
+  if (isNeedsReviewFlag(filter)) {
+    const n = audit?.needsReviewRows ?? audit?.summary?.needs_review ?? audit?.summary?.not_assessed ?? 0;
+    return `Needs review: ${n} cases`;
+  }
+  const groups = audit ? groupHits(audit) : [];
+  const g = groups.find((x) => x.flag === filter);
+  const n = g ? uniqueCaseCount(g.items) : audit?.summary?.[filter] ?? 0;
+  return `${QUALITY_GROUP_LABEL[filter] || filter}: ${n} cases`;
 }
 
 /** Always-visible strip (legacy view). */
@@ -189,76 +208,107 @@ export function DeadTestFinderStrip({
 }
 
 /**
- * Round 6 A1/A3: Quality button + toggleable filter + toolbar chip + push/overlay drawer.
+ * R7-04: Quality button opens a dropdown (no side drawer).
  */
 export function DeadTestFinderToolbar({
   audit,
   loading,
   activeFlag,
   onFlag,
-  open: openControlled,
-  onOpenChange,
-  hideOverlayPanel = false,
 }: {
   audit: SitDeadAudit | null;
   loading?: boolean;
   activeFlag: QualityFilter;
   onFlag: (flag: QualityFilter) => void;
+  /** @deprecated R7-04 ignored */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-  /** When true, parent renders QualityDrawerPanel (push layout); toolbar only has controls + chip. */
   hideOverlayPanel?: boolean;
 }) {
-  const [openLocal, setOpenLocal] = useState(false);
-  const open = openControlled ?? openLocal;
-  const setOpen = onOpenChange ?? setOpenLocal;
-  const rootRef = useRef<HTMLDivElement>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [focusIdx, setFocusIdx] = useState(0);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const flagged = qualityCount(audit);
+  const issues = qualityIssueCount(audit);
   const needsReview = audit?.needsReviewRows ?? audit?.summary?.needs_review ?? audit?.summary?.not_assessed ?? 0;
   const groups = useMemo(() => (audit ? groupHits(audit) : []), [audit]);
-  const filterOn = activeFlag != null;
+  const filterOn =
+    activeFlag != null && activeFlag !== "needs_review" && activeFlag !== "not_assessed";
 
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, setOpen]);
-
-  useEffect(() => {
-    if (!open || hideOverlayPanel) return;
-    const onDoc = (e: MouseEvent) => {
-      const t = e.target as Node;
-      if (rootRef.current?.contains(t)) return;
-      const drawer = document.querySelector('[data-testid="sit-quality-drawer"]');
-      if (drawer?.contains(t)) return;
-      setOpen(false);
-    };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, [open, hideOverlayPanel, setOpen]);
-
-  const clearFilter = () => onFlag(null);
-
-  const onQualityButtonClick = () => {
-    // Round 6 A1: first click → all-flagged filter + open panel; second click → filter OFF
-    if (filterOn) {
-      clearFilter();
-      setOpen(false);
-      return;
+  type Row = { id: string; label: string; count?: number; value: QualityFilter };
+  const rows: Row[] = useMemo(() => {
+    const out: Row[] = [
+      { id: "all-cases", label: "All cases", value: null },
+      { id: "all-flagged", label: "All flagged", count: flagged, value: "all" },
+    ];
+    for (const g of groups) {
+      out.push({
+        id: g.flag,
+        label: g.label,
+        count: uniqueCaseCount(g.items),
+        value: g.flag,
+      });
     }
-    onFlag("all");
-    setOpen(true);
+    return out;
+  }, [groups, flagged]);
+
+  const placeMenu = () => {
+    const r = btnRef.current?.getBoundingClientRect();
+    if (!r) return;
+    setPos({ top: r.bottom + 4, left: Math.min(r.left, window.innerWidth - 380) });
   };
 
-  const toggleGroup = (flag: DeadFlag) => {
-    onFlag(activeFlag === flag ? null : flag);
+  useEffect(() => {
+    if (!menuOpen) return;
+    placeMenu();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setMenuOpen(false);
+        btnRef.current?.focus();
+      } else if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setFocusIdx((i) => Math.min(i + 1, rows.length - 1));
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setFocusIdx((i) => Math.max(i - 1, 0));
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        const row = rows[focusIdx];
+        if (row) {
+          onFlag(row.value);
+          setMenuOpen(false);
+          btnRef.current?.focus();
+        }
+      }
+    };
+    const onDoc = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (btnRef.current?.contains(t)) return;
+      if (menuRef.current?.contains(t)) return;
+      setMenuOpen(false);
+      btnRef.current?.focus();
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onDoc);
+    window.addEventListener("resize", placeMenu);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onDoc);
+      window.removeEventListener("resize", placeMenu);
+    };
+  }, [menuOpen, rows, focusIdx, onFlag]);
+
+  const selectRow = (value: QualityFilter) => {
+    onFlag(value);
+    setMenuOpen(false);
+    btnRef.current?.focus();
   };
 
   return (
-    <div className="relative flex flex-wrap items-center gap-2" ref={rootRef}>
+    <div className="relative flex flex-wrap items-center gap-2">
       {needsReview > 0 && (
         <button
           type="button"
@@ -268,7 +318,7 @@ export function DeadTestFinderToolbar({
               : "border-[#e2e6ef] bg-white text-[#5b647a]"
           }`}
           title="Priority and Severity not reviewed yet"
-          data-testid="sit-needs-review-chip"
+          data-testid="sit-needs-review-btn"
           onClick={() =>
             onFlag(activeFlag === "needs_review" || activeFlag === "not_assessed" ? null : "needs_review")
           }
@@ -277,270 +327,125 @@ export function DeadTestFinderToolbar({
         </button>
       )}
       <button
+        ref={btnRef}
         type="button"
-        onClick={onQualityButtonClick}
+        onClick={() => {
+          setMenuOpen((v) => !v);
+          setFocusIdx(0);
+        }}
         className={`rounded-[8px] border px-3 py-1.5 text-[12.5px] font-medium transition ${
-          filterOn || flagged > 0
-            ? "border-[#fcd34d] bg-[#fffbeb] text-[#92400e]"
-            : "border-[#e2e6ef] text-[#5b647a] dark:border-[#2a2a2a]"
-        }`}
-        title={
           filterOn
-            ? "Filter is on. Click again to show all cases."
-            : "Counts duplicates, empty expected results, cases not linked to an acceptance criterion, thin cases, and contradictions. Draft rows are never flagged."
-        }
+            ? "border-[#d97706] bg-[#d97706] text-white"
+            : flagged > 0
+              ? "border-[#fcd34d] bg-[#fffbeb] text-[#92400e]"
+              : "border-[#e2e6ef] text-[#5b647a] dark:border-[#2a2a2a]"
+        }`}
+        title="Quality filters: duplicates, empty expected, unlinked ACs, thin cases, contradictions"
         data-testid="sit-quality-btn"
+        aria-haspopup="listbox"
+        aria-expanded={menuOpen}
         aria-pressed={filterOn}
       >
-        {loading && !audit
-          ? "Quality…"
-          : `Quality: ${flagged} flagged${filterOn ? " · filter on" : ""}`}
+        {loading && !audit ? "Quality…" : `Quality ${flagged}`}
       </button>
-      {!open && (
-        <button
-          type="button"
-          className="rounded-[8px] border border-[#e2e6ef] px-2 py-1.5 text-[12px] text-[#5b647a]"
-          data-testid="sit-quality-open-panel"
-          onClick={() => setOpen(true)}
-        >
-          Open panel
-        </button>
-      )}
-      {filterOn && (
-        <span
-          className="inline-flex items-center gap-1 rounded-full border border-[#fcd34d] bg-[#fffbeb] px-2.5 py-1 text-[11.5px] font-medium text-[#92400e]"
-          data-testid="sit-quality-filter-chip"
-        >
-          Showing {filterLabel(activeFlag)} cases
-          <button
-            type="button"
-            className="ml-0.5 rounded px-1 text-[#92400e] hover:bg-[#fde68a]"
-            aria-label="Show all cases"
-            data-testid="sit-quality-filter-chip-clear"
-            onClick={clearFilter}
-          >
-            × Show all
-          </button>
-        </span>
-      )}
-      {!hideOverlayPanel && open && (
-        <>
+      {menuOpen &&
+        typeof document !== "undefined" &&
+        createPortal(
           <div
-            className="fixed inset-0 z-30 bg-black/20"
-            data-testid="sit-quality-scrim"
-            aria-hidden
-            onClick={() => setOpen(false)}
-          />
-          <div
-            className="fixed right-3 top-16 z-40 flex h-[min(70vh,640px)] w-[min(480px,92vw)] flex-col rounded-[12px] border border-[#fcd34d] bg-[#fffbeb] shadow-xl dark:border-[#78350f] dark:bg-[#2a2210]"
-            data-testid="sit-quality-drawer"
-            role="dialog"
-            aria-label="Quality findings"
+            ref={menuRef}
+            className="fixed z-[80] flex max-h-[60vh] w-[360px] flex-col overflow-hidden rounded-[10px] border border-[#e2e6ef] bg-white shadow-xl dark:border-[#2a2a2a] dark:bg-[#151515]"
+            style={{ top: pos.top, left: pos.left }}
+            data-testid="sit-quality-dropdown"
+            role="listbox"
+            aria-label="Quality filter"
           >
-            <div className="flex items-center justify-between gap-2 border-b border-[#fde68a] px-3 py-2">
-              <div className="min-w-0">
-                <div className="text-[12px] font-semibold uppercase tracking-wide text-[#92400e]">Quality findings</div>
-                {filterOn ? (
-                  <div className="truncate text-[11px] text-[#a16207]" data-testid="sit-quality-active-filter">
-                    Filter: {filterLabel(activeFlag)}
-                  </div>
-                ) : (
-                  <div className="text-[11px] text-[#a16207]">No filter · browsing all cases</div>
-                )}
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <button
-                  type="button"
-                  className="rounded-[6px] border border-[#fcd34d] bg-white px-2 py-1 text-[11.5px] font-medium text-[#92400e]"
-                  data-testid="sit-quality-show-all"
-                  onClick={clearFilter}
-                >
-                  Show all cases
-                </button>
-                <button
-                  type="button"
-                  className="text-[12px] text-[#92400e]"
-                  data-testid="sit-quality-close"
-                  onClick={() => setOpen(false)}
-                >
-                  Close
-                </button>
-              </div>
+            <div
+              className="border-b border-[#eef0f5] px-3 py-2 text-[12.5px] font-medium text-[#374151]"
+              data-testid="sit-quality-dropdown-header"
+            >
+              {flagged === 0
+                ? "No quality issues found"
+                : `${flagged} cases need attention (${issues} issues)`}
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2" data-testid="sit-quality-case-list">
-              {flagged === 0 ? (
-                <p className="text-[12px] text-[#92400e]/80">No quality issues flagged. Suite looks live.</p>
-              ) : (
-                <>
+            <div className="min-h-0 flex-1 overflow-y-auto py-1">
+              {rows.map((row, idx) => {
+                const isActive =
+                  row.value === null
+                    ? activeFlag == null
+                    : activeFlag === row.value;
+                return (
                   <button
+                    key={row.id}
                     type="button"
-                    className={`mb-3 w-full rounded-[8px] border px-2 py-1.5 text-left text-[12px] font-medium ${
-                      activeFlag === "all"
-                        ? "border-[#d97706] bg-[#d97706] text-white"
-                        : "border-[#fde68a] bg-white text-[#78350f]"
-                    }`}
-                    data-testid="sit-quality-filter-all"
-                    onClick={() => onFlag(activeFlag === "all" ? null : "all")}
+                    role="option"
+                    aria-selected={isActive}
+                    data-testid={
+                      row.value === null
+                        ? "sit-quality-opt-all-cases"
+                        : row.value === "all"
+                          ? "sit-quality-filter-all"
+                          : `sit-quality-group-${row.value}`
+                    }
+                    className={`flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] ${
+                      idx === focusIdx ? "bg-[#f3f0ff]" : "hover:bg-[#f8fafc]"
+                    } ${isActive ? "font-semibold text-[#5b21b6]" : "text-[#1F1F1F]"}`}
+                    onMouseEnter={() => setFocusIdx(idx)}
+                    onClick={() => selectRow(row.value)}
                   >
-                    All flagged · {flagged}
+                    <span className="w-4 text-center text-[#8664F2]">{isActive ? "✓" : ""}</span>
+                    <span className="flex-1">{row.label}</span>
+                    {row.count != null ? (
+                      <span className="text-[12px] text-[#6b7280]">{row.count}</span>
+                    ) : null}
                   </button>
-                  {groups.map((g) => (
-                    <div key={g.flag} className="mb-3">
-                      <button
-                        type="button"
-                        className={`mb-1 w-full rounded px-1 py-0.5 text-left text-[12px] font-semibold ${
-                          activeFlag === g.flag ? "bg-[#fde68a] text-[#78350f]" : "text-[#92400e]"
-                        }`}
-                        data-testid={`sit-quality-group-${g.flag}`}
-                        onClick={() => toggleGroup(g.flag)}
-                        title={activeFlag === g.flag ? "Click to clear this filter" : "Filter to this group"}
-                      >
-                        {g.label} · {g.items.length}
-                        {activeFlag === g.flag ? " · filter on (click to clear)" : ""}
-                      </button>
-                      <ul className="space-y-1">
-                        {g.items.map((item, i) => (
-                          <li key={`${item.rowId}-${g.flag}-${i}`}>
-                            <button
-                              type="button"
-                              className="w-full rounded-[8px] border border-[#fde68a]/80 bg-white px-2 py-1.5 text-left text-[12px] text-[#78350f] hover:border-[#d97706] dark:bg-[#1a1408] dark:text-[#FCD34D]"
-                              onClick={() => {
-                                if (activeFlag !== g.flag) onFlag(g.flag);
-                                highlightRow(item.rowId);
-                              }}
-                            >
-                              <span className="font-mono font-semibold">
-                                {item.caseId || item.rowId.slice(0, 8)}
-                              </span>
-                              {item.scenario ? (
-                                <span className="text-[#92400e]/90"> · {item.scenario.slice(0, 80)}</span>
-                              ) : null}
-                              <div className="mt-0.5 text-[11.5px] text-[#a16207]">{item.reason}</div>
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
-                </>
-              )}
+                );
+              })}
             </div>
-            <p className="border-t border-[#fde68a] px-3 py-2 text-[11px] text-[#92400e]/70">
-              Closing this panel keeps your filter chip visible. Use Show all cases or click Quality again to clear.
-            </p>
-          </div>
-        </>
-      )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
 
-export function QualityDrawerPanel({
+/** Single active quality / needs-review chip for the filter row (R7-04). */
+export function QualityActiveChip({
   audit,
   activeFlag,
-  onFlag,
-  onClose,
+  onClear,
 }: {
+  audit: SitDeadAudit | null;
+  activeFlag: QualityFilter;
+  onClear: () => void;
+}) {
+  if (!activeFlag) return null;
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full border border-[#fcd34d] bg-[#fffbeb] px-2.5 py-0.5 text-[12px] font-medium text-[#92400e]"
+      data-testid="sit-quality-filter-chip"
+    >
+      {qualityChipText(activeFlag, audit)}
+      <button
+        type="button"
+        className="ml-0.5 rounded px-1 hover:bg-[#fde68a]"
+        aria-label="Clear quality filter"
+        data-testid="sit-quality-filter-chip-clear"
+        onClick={onClear}
+      >
+        ×
+      </button>
+    </span>
+  );
+}
+
+/** @deprecated removed in R7-04 */
+export function QualityDrawerPanel(_props: {
   audit: SitDeadAudit | null;
   activeFlag: QualityFilter;
   onFlag: (flag: QualityFilter) => void;
   onClose: () => void;
 }) {
-  const flagged = qualityCount(audit);
-  const groups = useMemo(() => (audit ? groupHits(audit) : []), [audit]);
-  const filterOn = activeFlag != null;
-  return (
-    <div
-      className="flex h-full w-[min(420px,40vw)] shrink-0 flex-col border-l border-[#fcd34d] bg-[#fffbeb] dark:border-[#78350f] dark:bg-[#2a2210]"
-      data-testid="sit-quality-drawer"
-      role="dialog"
-      aria-label="Quality findings"
-    >
-      <div className="flex items-center justify-between gap-2 border-b border-[#fde68a] px-3 py-2">
-        <div className="min-w-0">
-          <div className="text-[12px] font-semibold uppercase tracking-wide text-[#92400e]">Quality findings</div>
-          {filterOn ? (
-            <div className="truncate text-[11px] text-[#a16207]" data-testid="sit-quality-active-filter">
-              Filter: {filterLabel(activeFlag)}
-            </div>
-          ) : (
-            <div className="text-[11px] text-[#a16207]">No filter · browsing all cases</div>
-          )}
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <button
-            type="button"
-            className="rounded-[6px] border border-[#fcd34d] bg-white px-2 py-1 text-[11.5px] font-medium text-[#92400e]"
-            data-testid="sit-quality-show-all"
-            onClick={() => onFlag(null)}
-          >
-            Show all cases
-          </button>
-          <button type="button" className="text-[12px] text-[#92400e]" data-testid="sit-quality-close" onClick={onClose}>
-            Close
-          </button>
-        </div>
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2" data-testid="sit-quality-case-list">
-        {flagged === 0 ? (
-          <p className="text-[12px] text-[#92400e]/80">No quality issues flagged. Suite looks live.</p>
-        ) : (
-          <>
-            <button
-              type="button"
-              className={`mb-3 w-full rounded-[8px] border px-2 py-1.5 text-left text-[12px] font-medium ${
-                activeFlag === "all"
-                  ? "border-[#d97706] bg-[#d97706] text-white"
-                  : "border-[#fde68a] bg-white text-[#78350f]"
-              }`}
-              data-testid="sit-quality-filter-all"
-              onClick={() => onFlag(activeFlag === "all" ? null : "all")}
-            >
-              All flagged · {flagged}
-            </button>
-            {groups.map((g) => (
-              <div key={g.flag} className="mb-3">
-                <button
-                  type="button"
-                  className={`mb-1 w-full rounded px-1 py-0.5 text-left text-[12px] font-semibold ${
-                    activeFlag === g.flag ? "bg-[#fde68a] text-[#78350f]" : "text-[#92400e]"
-                  }`}
-                  data-testid={`sit-quality-group-${g.flag}`}
-                  onClick={() => onFlag(activeFlag === g.flag ? null : g.flag)}
-                >
-                  {g.label} · {g.items.length}
-                  {activeFlag === g.flag ? " · filter on (click to clear)" : ""}
-                </button>
-                <ul className="space-y-1">
-                  {g.items.map((item, i) => (
-                    <li key={`${item.rowId}-${g.flag}-${i}`}>
-                      <button
-                        type="button"
-                        className="w-full rounded-[8px] border border-[#fde68a]/80 bg-white px-2 py-1.5 text-left text-[12px] text-[#78350f] hover:border-[#d97706]"
-                        onClick={() => {
-                          if (activeFlag !== g.flag) onFlag(g.flag);
-                          highlightRow(item.rowId);
-                        }}
-                      >
-                        <span className="font-mono font-semibold">{item.caseId || item.rowId.slice(0, 8)}</span>
-                        {item.scenario ? (
-                          <span className="text-[#92400e]/90"> · {item.scenario.slice(0, 80)}</span>
-                        ) : null}
-                        <div className="mt-0.5 text-[11.5px] text-[#a16207]">{item.reason}</div>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </>
-        )}
-      </div>
-      <p className="border-t border-[#fde68a] px-3 py-2 text-[11px] text-[#92400e]/70">
-        Closing this panel keeps your filter chip visible. Use Show all cases to clear the filter.
-      </p>
-    </div>
-  );
+  return null;
 }
 
 export function filterRowsByDeadFlag<T extends { id: string }>(
