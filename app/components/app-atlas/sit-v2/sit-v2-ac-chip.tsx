@@ -9,8 +9,20 @@ export type AcCoverage = {
   uncovered: { id: string; text: string }[];
 };
 
+/** Round 3 D6: an AC is earned only by a non-thin covering case. */
+function isEarnedCoveringCase(r: SitSheetRow): boolean {
+  if (r.cells.thin === "1" || r.cells.thin === "true") return false;
+  const steps = (r.cells.steps || "").split(/\n/).map((l) => l.trim()).filter(Boolean);
+  const prec = (r.cells.preconditions || "").split(/\n/).map((l) => l.trim()).filter(Boolean);
+  const exp = (r.cells.expected || "").split(/\n/).map((l) => l.trim()).filter(Boolean);
+  if (steps.length < 4) return false;
+  if (prec.length < 3 && (r.cells.preconditions || "").trim().split(/\s+/).length < 20) return false;
+  if (exp.length < 2 && (r.cells.expected || "").trim().length < 40) return false;
+  return true;
+}
+
 export function computeAcCoverage(acs: string[], rows: SitSheetRow[]): AcCoverage {
-  const live = rows.filter((r) => r.cells.deleted !== "1");
+  const live = rows.filter((r) => r.cells.deleted !== "1" && isEarnedCoveringCase(r));
   const coveredIds = new Set<string>();
   for (const r of live) {
     for (const id of (r.cells.acIds || "").split(/[,\s]+/).filter(Boolean)) coveredIds.add(id.toUpperCase());
