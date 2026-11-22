@@ -6,7 +6,7 @@ import type { DeadFlag, SitDeadAudit, SitEpic, SitModelStatus, SitSheet, SitShee
 import { EXECUTION_STATUSES, type SitExecutionStatus } from "@/app/lib/sit-eisenhower";
 import type { AtlasClient } from "@/app/services/appatlas";
 import { SitCaseDrawer } from "./sit-case-drawer";
-import { DeadFlagPills, DeadTestFinderStrip, filterRowsByDeadFlag } from "./sit-dead-finder";
+import { DeadFlagPills, DeadTestFinderStrip, filterRowsByDeadFlag, type QualityFilter } from "./sit-dead-finder";
 
 function EpicIcon() {
   return (
@@ -155,7 +155,7 @@ export function SitTestingView({
   const [activeSheetId, setActiveSheetId] = useState("test-cases");
   const [resultTicket, setResultTicket] = useState<string | "all">("all");
   const [resultType, setResultType] = useState<string | null>(null);
-  const [deadFlag, setDeadFlag] = useState<DeadFlag | null>(null);
+  const [deadFlag, setDeadFlag] = useState<QualityFilter>(null);
   const [deadAudit, setDeadAudit] = useState<SitDeadAudit | null>(null);
   const [deadLoading, setDeadLoading] = useState(false);
   const [loading, setLoading] = useState(true);
