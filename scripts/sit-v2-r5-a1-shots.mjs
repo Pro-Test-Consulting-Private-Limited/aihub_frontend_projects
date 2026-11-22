@@ -23,7 +23,8 @@ fs.writeFileSync(
 body{margin:0;font-family:"DM Sans",system-ui,sans-serif;background:#f7f8fb;font-size:13px}
 #outside{padding:12px;background:#fff;border-bottom:1px solid #eee}
 table{width:100%;border-collapse:collapse;background:#fff}
-td{padding:8px;border:1px solid #eef0f5;cursor:default}
+td{padding:8px;border:1px solid #eef0f5;cursor:default;outline:none}
+td:focus{outline:none}
 td[data-selected="1"]{background:rgba(243,240,255,.5);box-shadow:inset 0 0 0 1px rgba(134,100,242,.5)}
 td[data-editing="1"]{background:rgba(243,240,255,.6);box-shadow:inset 0 0 0 2px #8664F2}
 </style></head><body>
@@ -46,11 +47,18 @@ function paint() {
     c.setAttribute("data-editing", "0");
   }
 }
-function clear() { selected = null; paint(); }
+function clear() {
+  selected = null;
+  paint();
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+}
 for (const c of cells) {
-  c.addEventListener("click", (e) => { e.stopPropagation(); selected = c.getAttribute("data-sit-cell"); paint(); });
+  c.addEventListener("click", (e) => { e.stopPropagation(); selected = c.getAttribute("data-sit-cell"); paint(); c.focus(); });
 }
 document.getElementById("grid").addEventListener("keydown", (e) => {
+  if (e.key === "Escape") clear();
+});
+document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") clear();
 });
 document.addEventListener("mousedown", (e) => {
