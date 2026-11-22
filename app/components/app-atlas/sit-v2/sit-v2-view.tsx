@@ -337,17 +337,44 @@ export function SitTestingViewV2({
     void startGenerate(choices);
   };
 
-  const patchRow = async (rowId: string, body: Parameters<AtlasClient["patchSitCase"]>[2]) => {
+  const [saveRetry, setSaveRetry] = useState<{
+    rowId: string;
+    body: Parameters<AtlasClient["patchSitCase"]>[2];
+    label: string;
+  } | null>(null);
+
+  const patchRow = async (
+    rowId: string,
+    body: Parameters<AtlasClient["patchSitCase"]>[2],
+    opts?: { label?: string },
+  ) => {
     if (!workbook || workbook.id === "pending") return;
     setSaveState("saving");
+    const label =
+      opts?.label ||
+      (body.testType || body.cells?.testType
+        ? "Scenario type"
+        : body.priority
+          ? "Priority"
+          : body.severity
+            ? "Severity"
+            : body.executionStatus
+              ? "Status"
+              : body.cells
+                ? Object.keys(body.cells)[0] || "field"
+                : "case");
     try {
       const next = await client.patchSitCase(workbook.id, rowId, body);
       setWorkbook(next);
       setSaveState("saved");
+      setSaveRetry(null);
+      setError(null);
       setTimeout(() => setSaveState("idle"), 1500);
     } catch (err) {
       setSaveState("error");
-      setError(err instanceof Error ? err.message : "Save failed");
+      console.error("[sit-v2] patch failed", { rowId, body, err });
+      setSaveRetry({ rowId, body, label });
+      setError(`Could not save ${label}. Retry`);
     }
   };
 
@@ -701,10 +728,30 @@ export function SitTestingViewV2({
             </span>
           )}
           {(error || note) && (
-            <span className={`ml-auto max-w-md truncate ${error ? "text-[#b42318]" : "text-[#92400e]"}`} title={error || note || ""}>
-              {error || note}
+            <span
+              className={`ml-auto inline-flex max-w-lg flex-wrap items-center gap-2 text-[12px] ${
+                error ? "text-[#b42318]" : "text-[#92400e]"
+              }`}
+              data-testid="sit-error-banner"
+              title={note || undefined}
+            >
+              <span>{error || note}</span>
+              {error && saveRetry && (
+                <button
+                  type="button"
+                  className="rounded-[6px] border border-[#fecaca] bg-[#fef2f2] px-2 py-0.5 font-semibold text-[#991b1b]"
+                  data-testid="sit-save-retry"
+                  onClick={() => {
+                    const r = saveRetry;
+                    setSaveRetry(null);
+                    void patchRow(r.rowId, r.body, { label: r.label });
+                  }}
+                >
+                  Retry
+                </button>
+              )}
               {error && (
-                <button type="button" className="ml-1 underline" onClick={() => setError(null)}>
+                <button type="button" className="underline" onClick={() => { setError(null); setSaveRetry(null); }}>
                   dismiss
                 </button>
               )}

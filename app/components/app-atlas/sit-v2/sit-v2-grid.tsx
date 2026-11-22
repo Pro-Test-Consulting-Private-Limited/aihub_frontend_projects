@@ -545,6 +545,10 @@ export function SitV2Grid({
       );
     }
     if (colId === "scenario") {
+      const typeBtn = `shrink-0 max-w-[9.5rem] rounded px-1.5 py-0.5 text-[12px] font-semibold font-[inherit] ${
+        TYPE_STYLE[row.cells.testType || ""] || "bg-[#eee] text-[#444]"
+      }`;
+      const patchType = (t: string) => onPatch(row.id, { cells: { testType: t }, testType: t });
       return (
         <SitV2EditableCell
           key={colId}
@@ -559,54 +563,63 @@ export function SitV2Grid({
           onCancelEdit={() => setEditing(null)}
           onCommit={commitCell}
           onMove={moveCell}
-          className={w ? undefined : undefined}
           renderEditor={({ value, commit, cancel }) => (
-            <div className="flex items-center gap-1" data-testid="sit-scenario-type-editor">
+            <div className="flex min-w-[12rem] items-start gap-1.5" data-testid="sit-scenario-type-editor">
               <SitV2Select
                 value={row.cells.testType || "Positive"}
                 aria-label="Scenario type"
+                data-testid="sit-scenario-type-select"
                 options={Object.keys(TYPE_STYLE).map((t) => ({ value: t, label: t }))}
-                onChange={(t) => onPatch(row.id, { testType: t })}
-                buttonClassName={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold font-[inherit] ${
-                  TYPE_STYLE[row.cells.testType || ""] || "bg-[#eee] text-[#444]"
-                }`}
+                onChange={patchType}
+                buttonClassName={typeBtn}
               />
-              <input
+              <textarea
                 autoFocus
-                className="min-w-0 flex-1 rounded border border-[#8664F2] bg-white px-1 py-0.5 text-[12px] font-[inherit] outline-none dark:bg-[#141414]"
+                rows={2}
+                className="min-h-[2.5rem] min-w-0 flex-1 resize-y rounded border border-[#8664F2] bg-white px-1.5 py-1 text-[12px] font-[inherit] leading-snug outline-none dark:bg-[#141414]"
                 defaultValue={value}
+                data-testid="sit-scenario-title-editor"
                 onKeyDown={(e) => {
                   if (e.key === "Escape") {
                     e.preventDefault();
                     cancel();
                   } else if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
-                    commit((e.target as HTMLInputElement).value);
+                    commit((e.target as HTMLTextAreaElement).value);
                   }
                 }}
-                onBlur={(e) => commit(e.target.value)}
+                onBlur={(e) => {
+                  // Delay so portal type-option click can land first.
+                  const v = e.target.value;
+                  requestAnimationFrame(() => {
+                    if (document.querySelector("[data-sit-select-popover='1']")) return;
+                    commit(v);
+                  });
+                }}
               />
             </div>
           )}
           display={
-            <div className="flex items-start gap-1.5">
-              <span
-                className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${
-                  TYPE_STYLE[row.cells.testType || ""] || "bg-[#eee] text-[#444]"
-                }`}
-              >
-                {row.cells.testType || "—"}
-              </span>
+            <div className="flex min-w-0 items-start gap-1.5">
+              <SitV2Select
+                value={row.cells.testType || "Positive"}
+                aria-label="Scenario type"
+                data-testid="sit-scenario-type-chip"
+                disabled={!canEdit}
+                options={Object.keys(TYPE_STYLE).map((t) => ({ value: t, label: t }))}
+                onChange={patchType}
+                buttonClassName={typeBtn}
+              />
               {(row.cells.thin === "1" || row.cells.thin === "true") && (
                 <span
-                  className="shrink-0 rounded-full border border-[#fde68a] bg-[#fffbeb] px-1.5 py-0.5 text-[9px] font-semibold text-[#92400e]"
-                  title="Thin — below detail thresholds"
+                  className="shrink-0 rounded-full border border-[#fde68a] bg-[#fffbeb] px-1.5 py-0.5 text-[12px] font-semibold text-[#92400e]"
+                  title="Thin — below detail thresholds (fewer than 4 steps, 3 preconditions, or 2 expected bullets)"
                   data-testid="sit-thin-chip"
                 >
                   Thin
                 </span>
               )}
-              <span className="whitespace-pre-wrap">{row.cells.scenario}</span>
+              <span className="min-w-0 flex-1 whitespace-pre-wrap text-[12px]">{row.cells.scenario}</span>
             </div>
           }
         />

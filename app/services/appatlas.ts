@@ -424,6 +424,10 @@ export function atlasClient({ instance, accounts }: Msal) {
       body: {
         priority?: string;
         severity?: string;
+        testType?: string;
+        scenario?: string;
+        module?: string;
+        feature?: string;
         note?: string;
         executionStatus?: string;
         eisenhower?: string;
