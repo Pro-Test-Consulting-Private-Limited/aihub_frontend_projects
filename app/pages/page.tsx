@@ -31,6 +31,7 @@ import {
   type ModelUsage,
 } from "../services/analytics";
 import { useModelStatus } from "../hooks/use-model-status";
+import { ModelStatusPill } from "../components/model-status-pill";
 import { useMsal } from "@azure/msal-react";
 
 const LAST_OPTION_SECONDS: Record<string, number> = {
@@ -147,17 +148,7 @@ export default function Home() {
 
   const backendDown =
     server !== null && (!server.Backend || !server.database);
-  const aiStatus = backendDown
-    ? {
-        label: "Inactive" as const,
-        badge: "bg-[rgba(220,53,69,0.1)] text-[#DC3545]",
-        dot: "bg-[#DC3545]",
-      }
-    : {
-        label: modelMapped.homeLabel,
-        badge: modelMapped.homeBadgeClass,
-        dot: modelMapped.homeDotClass,
-      };
+  const pillStatus = backendDown ? "inactive" : modelMapped.ui;
 
   const totalRequests = sumPoints(stats?.total_invocations?.data);
   const inputTokens = sumPoints(stats?.tokens?.input);
@@ -201,22 +192,17 @@ export default function Home() {
             />
           </div>
 
-          <div
-            className={`h-[26px] ml-[15px] flex justify-center items-center px-[15px] rounded-[26px] text-[12px] font-[500] ${aiStatus.badge}`}
-            title={
+          <ModelStatusPill
+            status={pillStatus}
+            testId="home-ai-model-pill"
+            titleOverride={
               backendDown
                 ? `Backend: ${server?.Backend ? "up" : "down"} · Database: ${
                     server?.database ? "up" : "down"
                   }`
-                : modelMapped.tooltip
+                : undefined
             }
-            data-testid="home-ai-model-pill"
-          >
-            <div
-              className={`w-[5px] h-[5px] rounded-full mr-[8px] animate-pulse-blocking ${aiStatus.dot}`}
-            ></div>
-            AI Model {aiStatus.label}
-          </div>
+          />
         </div>
 
         <div className="font-[500] text-sm mt-[15px] mb-[5px] dark:text-[#ededed]">Domain</div>

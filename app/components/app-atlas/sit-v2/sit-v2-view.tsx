@@ -41,6 +41,10 @@ import {
   type ExportScope,
 } from "@/app/lib/sit-export";
 import { useModelStatus } from "@/app/hooks/use-model-status";
+import {
+  ModelStatusPill,
+  modelStatusPresentation,
+} from "@/app/components/model-status-pill";
 
 type Progress = Record<string, { status: string; count: number; message?: string }>;
 
@@ -189,7 +193,7 @@ export function SitTestingViewV2({
       return;
     }
     if (!modelReady) {
-      setError(modelMapped.tooltip);
+      setError(modelStatusPresentation(modelMapped.ui).tooltip);
       return;
     }
     setGenDialog(null);
@@ -315,7 +319,7 @@ export function SitTestingViewV2({
   const onClickGenerate = () => {
     if (!selected.length) return;
     if (!modelReady) {
-      setError(modelMapped.tooltip);
+      setError(modelStatusPresentation(modelMapped.ui).tooltip);
       return;
     }
     const choices: TicketGenChoice[] = selected.map((t) => {
@@ -699,13 +703,12 @@ export function SitTestingViewV2({
           </div>
 
           <div className="flex items-center gap-2">
-            <span
-              title={modelMapped.tooltip}
-              data-testid="sit-model-status-pill"
-              className={`rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${modelMapped.sitPillClass}`}
-            >
-              Model · {modelMapped.sitLabel}
-            </span>
+            <ModelStatusPill
+              status={modelMapped.ui}
+              size="sm"
+              testId="sit-model-status-pill"
+              className="ml-0"
+            />
             <button
               type="button"
               disabled={!selected.length || generating || modelMapped.generateDisabled}
@@ -713,7 +716,7 @@ export function SitTestingViewV2({
                 !selected.length
                   ? "Select tickets first"
                   : modelMapped.generateDisabled
-                    ? modelMapped.tooltip
+                    ? modelStatusPresentation(modelMapped.ui).tooltip
                     : selected.map((t) => t.key).join(", ")
               }
               onClick={() => onClickGenerate()}

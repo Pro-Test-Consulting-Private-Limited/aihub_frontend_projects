@@ -1,13 +1,14 @@
 /**
  * Model-status Playwright shots: AUTH_BYPASS Next + mocked clarify model-status.
  * Never calls the real HF endpoint.
+ * Home + SIT for ready / warming_up / inactive / checking at 1280, 1440, 1920.
  */
 import { chromium } from "playwright";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const BASE = process.env.UI_BASE || "http://localhost:3000";
-const OUT = process.env.OUT || join("docs", "sit-quality", "out", "model-status", "shots");
+const OUT = process.env.OUT || join("docs", "sit-quality", "out", "model-pill", "shots");
 const WIDTHS = [1280, 1440, 1920];
 const CANVAS_LABEL = process.env.SIT_R7_CANVAS_LABEL || "SIT R7 UI Test Canvas";
 
@@ -78,8 +79,6 @@ const scenarios = [
   { key: "warming_up", state: "pending", waitMs: 1500 },
   { key: "inactive", state: "paused", waitMs: 1500 },
   { key: "checking", state: "running", delayMs: 30_000, waitMs: 700 },
-  // Clarify fails + Atlas unconfigured → Not configured (shared source empty).
-  { key: "not_configured", state: "", clarifyFail: true, sitUnconfigured: true, waitMs: 1800 },
 ];
 
 try {
@@ -93,18 +92,14 @@ try {
       await installMocks(page, {
         state: sc.state,
         delayMs: sc.delayMs || 0,
-        sitUnconfigured: Boolean(sc.sitUnconfigured),
-        clarifyFail: Boolean(sc.clarifyFail),
       });
 
-      if (sc.key === "inactive") {
-        await page.goto(`${BASE}/pages`, { waitUntil: "domcontentloaded", timeout: 90_000 });
-        await page.waitForTimeout(sc.waitMs);
-        await page.getByTestId("home-ai-model-pill").waitFor({ timeout: 20_000 }).catch(() => undefined);
-        const hp = join(OUT, `home-inactive-${w}.png`);
-        await page.screenshot({ path: hp, fullPage: false });
-        lookat.push(`home-inactive-${w}.png`);
-      }
+      await page.goto(`${BASE}/pages`, { waitUntil: "domcontentloaded", timeout: 90_000 });
+      await page.waitForTimeout(sc.waitMs);
+      await page.getByTestId("home-ai-model-pill").waitFor({ timeout: 20_000 }).catch(() => undefined);
+      const hp = join(OUT, `home-${sc.key}-${w}.png`);
+      await page.screenshot({ path: hp, fullPage: false });
+      lookat.push(`home-${sc.key}-${w}.png`);
 
       await openSit(page);
       await page.waitForTimeout(sc.key === "checking" ? 400 : 800);
@@ -122,5 +117,5 @@ try {
   await browser.close();
 }
 
-writeFileSync(join(OUT, "files.json"), JSON.stringify(lookat, null, 2));
-console.log("WROTE", lookat.length, "shots to", OUT);
+writeFileSync(join(OUT, "files.json"), JSON.stringify({ lookat, out: OUT }, null, 2));
+console.log(JSON.stringify({ ok: true, count: lookat.length, out: OUT }, null, 2));

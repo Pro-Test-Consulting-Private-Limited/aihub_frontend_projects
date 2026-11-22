@@ -31,9 +31,9 @@ export type MapModelStatusInput = {
 
 export type MappedModelStatus = {
   ui: UiModelStatus;
-  /** Home pill text after "AI Model " */
+  /** @deprecated Prefer ModelStatusPill / modelStatusPresentation; kept for map API stability. */
   homeLabel: "Active" | "Starting" | "Inactive";
-  /** SIT pill text after "Model · " */
+  /** @deprecated Prefer ModelStatusPill / modelStatusPresentation; kept for map API stability. */
   sitLabel: string;
   /** Plain-language sentence for tooltips. */
   tooltip: string;
