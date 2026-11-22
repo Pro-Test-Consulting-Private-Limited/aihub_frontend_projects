@@ -1,0 +1,38 @@
+[
+  {
+    "name": "r5-a1-one-selected-1280.png",
+    "visible": "Cell B steps has thin purple selection; Cell A not selected"
+  },
+  {
+    "name": "r5-a1-escape-cleared-1280.png",
+    "visible": "No cell selected after Escape"
+  },
+  {
+    "name": "r5-a1-outside-cleared-1280.png",
+    "visible": "No cell selected after click outside grid"
+  },
+  {
+    "name": "r5-a1-one-selected-1440.png",
+    "visible": "Cell B steps has thin purple selection; Cell A not selected"
+  },
+  {
+    "name": "r5-a1-escape-cleared-1440.png",
+    "visible": "No cell selected after Escape"
+  },
+  {
+    "name": "r5-a1-outside-cleared-1440.png",
+    "visible": "No cell selected after click outside grid"
+  },
+  {
+    "name": "r5-a1-one-selected-1920.png",
+    "visible": "Cell B steps has thin purple selection; Cell A not selected"
+  },
+  {
+    "name": "r5-a1-escape-cleared-1920.png",
+    "visible": "No cell selected after Escape"
+  },
+  {
+    "name": "r5-a1-outside-cleared-1920.png",
+    "visible": "No cell selected after click outside grid"
+  }
+]

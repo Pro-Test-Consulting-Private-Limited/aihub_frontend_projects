@@ -333,6 +333,38 @@ export function SitV2Grid({
   const [editing, setEditing] = useState<CellCoord | null>(null);
   const [dragCol, setDragCol] = useState<SitOrderableColumnId | null>(null);
   const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const gridRootRef = useRef<HTMLDivElement>(null);
+
+  const clearCellSelection = useCallback(() => {
+    setSelected(null);
+    setEditing(null);
+  }, []);
+
+  // A1: clear cell selection on click outside the grid (not when focus moves into editor/popover)
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => {
+      const root = gridRootRef.current;
+      if (!root) return;
+      const t = e.target as Node | null;
+      if (!t) return;
+      if (root.contains(t)) return;
+      // Portaled popovers (type/status selects) live outside the grid DOM
+      if ((t as HTMLElement).closest?.("[data-sit-select-popover='1']")) return;
+      clearCellSelection();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      // If an editor or popover is open, let them handle Escape first; still clear selection
+      if ((e.target as HTMLElement)?.closest?.("[data-sit-select-popover='1']")) return;
+      clearCellSelection();
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [clearCellSelection]);
   const hide = (id: string) => layout.hidden.includes(id as never);
   const cellPad = "px-2 py-2";
   const tableText = "text-[12px]";
@@ -569,7 +601,7 @@ export function SitV2Grid({
           editing={isEdit("scenario")}
           onSelect={setSelected}
           onStartEdit={setEditing}
-          onCancelEdit={() => setEditing(null)}
+          onCancelEdit={clearCellSelection}
           onCommit={commitCell}
           onMove={moveCell}
           renderEditor={({ value, commit, cancel }) => (
@@ -592,6 +624,7 @@ export function SitV2Grid({
                   if (e.key === "Escape") {
                     e.preventDefault();
                     cancel();
+                    clearCellSelection();
                   } else if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
                     commit((e.target as HTMLTextAreaElement).value);
@@ -646,7 +679,7 @@ export function SitV2Grid({
           editing={isEdit("preconditions")}
           onSelect={setSelected}
           onStartEdit={setEditing}
-          onCancelEdit={() => setEditing(null)}
+          onCancelEdit={clearCellSelection}
           onCommit={commitCell}
           onMove={moveCell}
           renderEditor={({ value, commit, cancel }) => (
@@ -691,7 +724,7 @@ export function SitV2Grid({
           editing={isEdit("steps")}
           onSelect={setSelected}
           onStartEdit={setEditing}
-          onCancelEdit={() => setEditing(null)}
+          onCancelEdit={clearCellSelection}
           onCommit={commitCell}
           onMove={moveCell}
           renderEditor={({ value, commit, cancel }) => (
@@ -733,7 +766,7 @@ export function SitV2Grid({
           editing={isEdit("expected")}
           onSelect={setSelected}
           onStartEdit={setEditing}
-          onCancelEdit={() => setEditing(null)}
+          onCancelEdit={clearCellSelection}
           onCommit={commitCell}
           onMove={moveCell}
           renderEditor={({ value, commit, cancel }) => (
@@ -761,7 +794,24 @@ export function SitV2Grid({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-1 overflow-hidden rounded-[10px] border border-[#e2e6ef] bg-white dark:border-[#1a1a1a] dark:bg-[#101010]">
+    <div
+      ref={gridRootRef}
+      className="flex h-full min-h-0 flex-1 overflow-hidden rounded-[10px] border border-[#e2e6ef] bg-white dark:border-[#1a1a1a] dark:bg-[#101010]"
+      data-testid="sit-v2-grid-root"
+      onBlur={(e) => {
+        // A1: grid lost focus (not to a child editor/popover)
+        const next = e.relatedTarget as Node | null;
+        if (next && e.currentTarget.contains(next)) return;
+        if (next && (next as HTMLElement).closest?.("[data-sit-select-popover='1']")) return;
+        // Defer so click-to-select on another cell wins
+        requestAnimationFrame(() => {
+          const active = document.activeElement;
+          if (gridRootRef.current?.contains(active)) return;
+          if ((active as HTMLElement | null)?.closest?.("[data-sit-select-popover='1']")) return;
+          clearCellSelection();
+        });
+      }}
+    >
       <div className="min-w-0 flex-1 overflow-auto">
         {!canEdit && (
           <div className="sticky top-0 z-[5] flex items-center gap-2 border-b border-[#e2e6ef] bg-[#f8fafc] px-3 py-1.5">

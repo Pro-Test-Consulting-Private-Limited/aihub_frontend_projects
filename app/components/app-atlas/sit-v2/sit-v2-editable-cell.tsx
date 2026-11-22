@@ -27,7 +27,7 @@ type Props = {
     commit: (next: string) => void;
     cancel: () => void;
   }) => ReactNode;
-  onSelect: (coord: CellCoord) => void;
+  onSelect: (coord: CellCoord | null) => void;
   onStartEdit: (coord: CellCoord) => void;
   onCancelEdit: () => void;
   onCommit: (rowId: string, field: string, value: string) => void;
@@ -103,6 +103,7 @@ export function SitV2EditableCell({
       e.stopPropagation();
       setDraft(value);
       onCancelEdit();
+      onSelect(null);
       return;
     }
     if (e.key === "Enter") {
@@ -120,10 +121,18 @@ export function SitV2EditableCell({
     }
   };
 
+  const editingShell =
+    "px-1 py-1 align-top bg-[#f3f0ff]/60 ring-2 ring-inset ring-[#8664F2] dark:bg-[#1a1428]/40";
+
   if (editing && canEdit) {
     if (renderEditor) {
       return (
-        <td className={`px-1 py-1 align-top ${className || ""}`} data-sit-cell={`${rowId}:${field}`}>
+        <td
+          className={`${editingShell} ${className || ""}`}
+          data-sit-cell={`${rowId}:${field}`}
+          data-selected="0"
+          data-editing="1"
+        >
           {renderEditor({
             value,
             commit: (next) => onCommit(rowId, field, next),
@@ -136,7 +145,12 @@ export function SitV2EditableCell({
       "w-full rounded border border-[#8664F2] bg-white p-1 text-[12px] font-[inherit] outline-none dark:bg-[#141414]";
     if (multiline) {
       return (
-        <td className={`px-1 py-1 align-top ${className || ""}`} data-sit-cell={`${rowId}:${field}`}>
+        <td
+          className={`${editingShell} ${className || ""}`}
+          data-sit-cell={`${rowId}:${field}`}
+          data-selected="0"
+          data-editing="1"
+        >
           <textarea
             ref={inputRef as RefObject<HTMLTextAreaElement>}
             className={`${shared} min-h-[72px]`}
@@ -150,7 +164,12 @@ export function SitV2EditableCell({
       );
     }
     return (
-      <td className={`px-1 py-1 align-top ${className || ""}`} data-sit-cell={`${rowId}:${field}`}>
+      <td
+        className={`${editingShell} ${className || ""}`}
+        data-sit-cell={`${rowId}:${field}`}
+        data-selected="0"
+        data-editing="1"
+      >
         <input
           ref={inputRef as RefObject<HTMLInputElement>}
           className={shared}
@@ -167,11 +186,14 @@ export function SitV2EditableCell({
   return (
     <td
       className={`cursor-default px-2 py-2 align-top outline-none ${
-        selected ? "ring-2 ring-inset ring-[#8664F2]/70" : ""
+        selected
+          ? "bg-[#f3f0ff]/50 ring-1 ring-inset ring-[#8664F2]/50 dark:bg-[#1a1428]/30"
+          : ""
       } ${className || ""}`}
       tabIndex={0}
       data-sit-cell={`${rowId}:${field}`}
       data-selected={selected ? "1" : "0"}
+      data-editing="0"
       onClick={(e) => {
         e.stopPropagation();
         onSelect({ rowId, field });
@@ -181,10 +203,24 @@ export function SitV2EditableCell({
         if (!canEdit) return;
         onStartEdit({ rowId, field });
       }}
-      onKeyDown={onKeyDownDisplay}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          e.stopPropagation();
+          onCancelEdit();
+          onSelect(null);
+          (e.currentTarget as HTMLElement).blur();
+          return;
+        }
+        onKeyDownDisplay(e);
+      }}
       onFocus={() => onSelect({ rowId, field })}
     >
-      {display ?? <span className="whitespace-pre-wrap">{value || "—"}</span>}
+      {display ?? (
+        <span className={`whitespace-pre-wrap ${value ? "" : "text-[#9ca3af]"}`}>
+          {value || "Add value"}
+        </span>
+      )}
     </td>
   );
 }
