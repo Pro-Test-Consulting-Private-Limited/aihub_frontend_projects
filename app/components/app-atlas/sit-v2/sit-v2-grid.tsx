@@ -573,6 +573,34 @@ export function SitV2Grid({
                     onCancelEdit={() => setEditing(null)}
                     onCommit={commitCell}
                     onMove={moveCell}
+                    renderEditor={({ value, commit, cancel }) => (
+                      <div className="flex items-center gap-1" data-testid="sit-scenario-type-editor">
+                        <SitV2Select
+                          value={row.cells.testType || "Positive"}
+                          aria-label="Scenario type"
+                          options={Object.keys(TYPE_STYLE).map((t) => ({ value: t, label: t }))}
+                          onChange={(t) => onPatch(row.id, { testType: t })}
+                          buttonClassName={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold font-[inherit] ${
+                            TYPE_STYLE[row.cells.testType || ""] || "bg-[#eee] text-[#444]"
+                          }`}
+                        />
+                        <input
+                          autoFocus
+                          className="min-w-0 flex-1 rounded border border-[#8664F2] bg-white px-1 py-0.5 text-[12px] font-[inherit] outline-none dark:bg-[#141414]"
+                          defaultValue={value}
+                          onKeyDown={(e) => {
+                            if (e.key === "Escape") {
+                              e.preventDefault();
+                              cancel();
+                            } else if (e.key === "Enter" && !e.shiftKey) {
+                              e.preventDefault();
+                              commit((e.target as HTMLInputElement).value);
+                            }
+                          }}
+                          onBlur={(e) => commit(e.target.value)}
+                        />
+                      </div>
+                    )}
                     display={
                       <div className="flex items-start gap-1.5">
                         <span
