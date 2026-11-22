@@ -60,8 +60,10 @@ function qualityCount(audit: SitDeadAudit | null): number {
   return n;
 }
 
-function groupHits(audit: SitDeadAudit): { flag: DeadFlag; label: string; items: DeadFlagHit & { rowId: string }[] }[] {
-  const buckets = new Map<DeadFlag, (DeadFlagHit & { rowId: string })[]>();
+type DeadHitWithRow = DeadFlagHit & { rowId: string };
+
+function groupHits(audit: SitDeadAudit): { flag: DeadFlag; label: string; items: DeadHitWithRow[] }[] {
+  const buckets = new Map<DeadFlag, DeadHitWithRow[]>();
   for (const [rowId, hits] of Object.entries(audit.flagsByRowId || {})) {
     for (const h of hits || []) {
       if (h.flag === "not_assessed" || h.flag === "needs_review" || h.flag === "stub_workbook") continue;
@@ -70,7 +72,7 @@ function groupHits(audit: SitDeadAudit): { flag: DeadFlag; label: string; items:
       buckets.set(h.flag, list);
     }
   }
-  const out: { flag: DeadFlag; label: string; items: (DeadFlagHit & { rowId: string })[] }[] = [];
+  const out: { flag: DeadFlag; label: string; items: DeadHitWithRow[] }[] = [];
   for (const flag of QUALITY_GROUP_ORDER) {
     const items = buckets.get(flag) || [];
     if (!items.length) continue;

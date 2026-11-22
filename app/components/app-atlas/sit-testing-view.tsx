@@ -724,7 +724,7 @@ export function SitTestingView({
                             <div>
                               {row.cells[col.id] ?? ""}
                               {(col.id === "scenario" || col.id === "tcId") && (
-                                <DeadFlagPills hits={deadAudit?.flagsByRowId[row.id]} />
+                                <DeadFlagPills hits={deadAudit?.flagsByRowId[row.id] || []} />
                               )}
                             </div>
                           ) : (
