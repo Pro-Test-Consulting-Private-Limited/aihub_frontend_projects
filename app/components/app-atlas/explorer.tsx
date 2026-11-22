@@ -108,6 +108,7 @@ export function Explorer(props: Props) {
           collapsed ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
         }`}
         title="Show explorer"
+        data-testid="atlas-explorer-show"
       >
         <TbChevronRight size={14} className="shrink-0" />
         {"EXPLORER".split("").map((ch, i) => (
@@ -151,7 +152,7 @@ export function Explorer(props: Props) {
           >
             <TbPlayerPlay size={15} />
           </button>
-          <button type="button" className={iconButton} title="Hide explorer" onClick={props.onCollapse}>
+          <button type="button" className={iconButton} title="Hide explorer" data-testid="atlas-explorer-hide" onClick={props.onCollapse}>
             <TbChevronLeft size={16} />
           </button>
         </div>

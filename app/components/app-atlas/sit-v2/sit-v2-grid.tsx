@@ -18,8 +18,11 @@ import { SitV2Select } from "./sit-v2-select";
 import { SitV2ExpandPanel } from "./sit-v2-expand-panel";
 import { SitQualityFlagChip } from "./sit-quality-flag-chip";
 import {
+  SIT_CHECKBOX_COL_WIDTH,
+  SIT_DEFAULT_WIDTHS,
   SIT_MIN_WIDTHS,
   colWidth,
+  fitColumnWidthsToContainer,
   type SitColumnLayout,
   type SitOrderableColumnId,
 } from "./sit-v2-prefs";
@@ -354,6 +357,9 @@ export function SitV2Grid({
   const [dragCol, setDragCol] = useState<SitOrderableColumnId | null>(null);
   const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const gridRootRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
+  const userResizedRef = useRef<Set<string>>(new Set());
 
   const clearCellSelection = useCallback(() => {
     setSelected(null);
@@ -389,6 +395,27 @@ export function SitV2Grid({
   const cellPad = "px-2 py-2";
   const tableText = "text-[12px]";
   const order = useMemo(() => resolveOrder(layout), [layout]);
+  // R8-01: re-fit when the grid container width changes (Explorer open/close).
+  useEffect(() => {
+    const el = scrollRef.current || gridRootRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect?.width ?? el.clientWidth;
+      setContainerWidth(Math.floor(w));
+    });
+    ro.observe(el);
+    setContainerWidth(Math.floor(el.clientWidth));
+    return () => ro.disconnect();
+  }, []);
+
+  // Clear user-resize locks after "Reset layout" restores defaults.
+  useEffect(() => {
+    const restored = Object.keys(SIT_DEFAULT_WIDTHS).every(
+      (id) => (layout.widths[id] ?? SIT_DEFAULT_WIDTHS[id]) === SIT_DEFAULT_WIDTHS[id],
+    );
+    if (restored) userResizedRef.current.clear();
+  }, [layout.widths]);
+
   const visibleCols = useMemo(
     () =>
       order.filter((id) => {
@@ -399,6 +426,29 @@ export function SitV2Grid({
       }),
     [order, layout, hide],
   );
+
+  /** Columns included in the fit (ID + visible + Status). */
+  const fitColIds = useMemo(
+    () => ["id", ...visibleCols, "status"] as string[],
+    [visibleCols],
+  );
+
+  const fittedWidths = useMemo(() => {
+    const preferred: Record<string, number> = {};
+    for (const id of fitColIds) preferred[id] = colWidth(layout, id);
+    const available = Math.max(0, containerWidth - SIT_CHECKBOX_COL_WIDTH);
+    if (!containerWidth) return preferred;
+    return fitColumnWidthsToContainer(preferred, fitColIds, available, {
+      userResized: userResizedRef.current,
+    });
+  }, [layout, fitColIds, containerWidth]);
+
+  const displayWidth = useCallback(
+    (colId: string) =>
+      Math.max(SIT_MIN_WIDTHS[colId] ?? 72, fittedWidths[colId] ?? colWidth(layout, colId)),
+    [fittedWidths, layout],
+  );
+
   const colCount = 2 + visibleCols.length + 1; // checkbox+ID + cols + status
 
   const allLiveCount = useMemo(() => {
@@ -488,6 +538,7 @@ export function SitV2Grid({
   };
 
   const setWidth = (colId: string, width: number) => {
+    userResizedRef.current.add(colId);
     onLayoutChange({
       ...layout,
       widths: { ...layout.widths, [colId]: width },
@@ -579,7 +630,7 @@ export function SitV2Grid({
     const mf = displayModuleFeature(row.cells, epics);
     const isSel = (f: string) => selected?.rowId === row.id && selected.field === f;
     const isEdit = (f: string) => editing?.rowId === row.id && editing.field === f;
-    const w = Math.max(SIT_MIN_WIDTHS[colId] ?? 72, colWidth(layout, colId));
+    const w = displayWidth(colId);
     const style = { width: w, minWidth: SIT_MIN_WIDTHS[colId] ?? 72 };
 
     if (colId === "module") {
@@ -857,7 +908,7 @@ export function SitV2Grid({
         });
       }}
     >
-      <div className="min-w-0 flex-1 overflow-auto">
+      <div ref={scrollRef} className="min-w-0 flex-1 overflow-auto" data-testid="sit-v2-grid-scroll">
         {!canEdit && (
           <div className="sticky top-0 z-[5] flex items-center gap-2 border-b border-[#e2e6ef] bg-[#f8fafc] px-3 py-1.5">
             <span
@@ -918,9 +969,10 @@ export function SitV2Grid({
               <th
                 className={`sticky left-8 z-[3] relative bg-[#1F4E78] ${cellPad} pl-2 text-left text-[12px] font-semibold`}
                 style={{
-                  width: Math.max(SIT_MIN_WIDTHS.id ?? 140, colWidth(layout, "id")),
+                  width: displayWidth("id"),
                   minWidth: SIT_MIN_WIDTHS.id,
                 }}
+                data-testid="sit-col-header-id"
               >
                 ID
                 <ColResizeHandle colId="id" onResize={setWidth} />
@@ -937,7 +989,7 @@ export function SitV2Grid({
                   }}
                   className={`relative ${cellPad} text-left text-[12px] font-semibold`}
                   style={{
-                    width: Math.max(SIT_MIN_WIDTHS[colId] ?? 72, colWidth(layout, colId)),
+                    width: displayWidth(colId),
                     minWidth: SIT_MIN_WIDTHS[colId],
                   }}
                   title={
@@ -952,11 +1004,12 @@ export function SitV2Grid({
                 </th>
               ))}
               <th
-                className={`relative ${cellPad} text-left text-[12px] font-semibold`}
+                className={`sticky right-0 z-[3] relative bg-[#1F4E78] ${cellPad} text-left text-[12px] font-semibold`}
                 style={{
                   minWidth: SIT_MIN_WIDTHS.status,
-                  width: Math.max(SIT_MIN_WIDTHS.status ?? 110, colWidth(layout, "status")),
+                  width: displayWidth("status"),
                 }}
+                data-testid="sit-col-header-status"
               >
                 Status
                 <ColResizeHandle colId="status" onResize={setWidth} />
@@ -1009,7 +1062,7 @@ export function SitV2Grid({
                       title={tip}
                       data-testid="sit-id-cell"
                       style={{
-                        width: Math.max(SIT_MIN_WIDTHS.id ?? 140, colWidth(layout, "id")),
+                        width: displayWidth("id"),
                         minWidth: SIT_MIN_WIDTHS.id,
                       }}
                     >
@@ -1044,7 +1097,13 @@ export function SitV2Grid({
                       </div>
                     </td>
                     {visibleCols.map((colId) => renderBodyCell(row, colId, open))}
-                    <td className="px-2 py-2 align-top">
+                    <td
+                      className="sticky right-0 z-[1] bg-white px-2 py-2 align-top dark:bg-[#101010]"
+                      style={{
+                        width: displayWidth("status"),
+                        minWidth: SIT_MIN_WIDTHS.status,
+                      }}
+                    >
                       <div className="flex flex-col items-start gap-0.5">
                         <SitV2Select
                           pill

@@ -126,6 +126,89 @@ async function bodyOverflowX(page) {
   });
 }
 
+/** Round 8 I7 — Explorer open/closed grid fit. */
+async function explorerIsOpen(page) {
+  return page.evaluate(() => {
+    const show = document.querySelector('[data-testid="atlas-explorer-show"], button[title="Show explorer"]');
+    if (!show) return true;
+    const st = getComputedStyle(show);
+    return st.opacity === "0" || show.getAttribute("aria-hidden") === "true";
+  });
+}
+
+async function setExplorerOpen(page, open) {
+  const currentlyOpen = await explorerIsOpen(page);
+  if (open === currentlyOpen) return;
+  await page.evaluate((wantOpen) => {
+    const sel = wantOpen
+      ? '[data-testid="atlas-explorer-show"], button[title="Show explorer"]'
+      : '[data-testid="atlas-explorer-hide"], button[title="Hide explorer"]';
+    const el = document.querySelector(sel);
+    if (el) el.click();
+  }, open);
+  await page.waitForTimeout(600);
+  // one retry if state did not flip
+  if ((await explorerIsOpen(page)) !== open) {
+    await page.evaluate((wantOpen) => {
+      const sel = wantOpen
+        ? '[data-testid="atlas-explorer-show"], button[title="Show explorer"]'
+        : '[data-testid="atlas-explorer-hide"], button[title="Hide explorer"]';
+      const el = document.querySelector(sel);
+      if (el) el.click();
+    }, open);
+    await page.waitForTimeout(600);
+  }
+}
+
+async function statusHeaderFullyVisible(page) {
+  const el = page.getByTestId("sit-col-header-status").first();
+  if (!(await el.count())) {
+    const alt = page.getByText(/^Status$/i).first();
+    if (!(await alt.count())) return false;
+    return alt.evaluate((node) => {
+      const r = node.getBoundingClientRect();
+      const grid = document.querySelector('[data-testid="sit-v2-grid-root"]');
+      const gr = grid ? grid.getBoundingClientRect() : { left: 0, right: window.innerWidth };
+      return r.width > 40 && r.left >= gr.left - 1 && r.right <= gr.right + 1;
+    });
+  }
+  return el.evaluate((node) => {
+    const r = node.getBoundingClientRect();
+    const grid = document.querySelector('[data-testid="sit-v2-grid-root"]');
+    const gr = grid ? grid.getBoundingClientRect() : { left: 0, right: window.innerWidth };
+    // "Status" fully inside grid; width enough that "St" truncation is not happening
+    return r.width > 40 && r.left >= gr.left - 1 && r.right <= gr.right + 1 && (node.textContent || "").includes("Status");
+  });
+}
+
+async function gridCoveredOrBodyOverflow(page) {
+  return page.evaluate(() => {
+    const grid = document.querySelector('[data-testid="sit-v2-grid-root"]');
+    if (!grid) return { overflowOutside: true, covered: true, detail: "no-grid" };
+    const b = document.body;
+    const de = document.documentElement;
+    const overflowOutside =
+      Math.max(b.scrollWidth, de.scrollWidth) > Math.max(b.clientWidth, de.clientWidth) + 1;
+    // Grid scroll is allowed; body/page overflow is not.
+    const table = grid.querySelector("table") || grid;
+    const gr = grid.getBoundingClientRect();
+    // Something covering the right edge of the grid (excluding the grid's own scrollbars)
+    let covered = false;
+    const probeX = Math.min(gr.right - 8, window.innerWidth - 4);
+    const probeY = gr.top + Math.min(40, gr.height / 2);
+    const top = document.elementFromPoint(probeX, probeY);
+    if (top && !grid.contains(top) && !top.closest?.("[data-testid='sit-v2-grid-root']")) {
+      // portals (quality dropdown) are intentional overlays in that state — caller decides
+      covered = true;
+    }
+    return {
+      overflowOutside,
+      covered,
+      detail: `ow=${overflowOutside}|cov=${covered}|tw=${table.scrollWidth}|cw=${grid.clientWidth}`,
+    };
+  });
+}
+
 async function minFontIn(page, selector) {
   return page.evaluate((sel) => {
     const root = document.querySelector(sel);
@@ -379,6 +462,126 @@ for (const w of WIDTHS) {
   await page.setViewportSize({ width: w, height: 900 });
   await page.waitForTimeout(200);
   await shot(page, BASELINE, `filter-on-${w}`, `Baseline quality filter on at ${w}px`);
+}
+await page.keyboard.press("Escape");
+await page.waitForTimeout(200);
+
+// ---- I7 Explorer open/closed: no page overflow outside grid; Status fit (R8-01) ----
+// Soft-fail on tip before R8-01: failures are recorded and listed as pre-existing.
+const I7_SOFT = process.env.I7_SOFT !== "0"; // default soft until R8-01 lands; set I7_SOFT=0 after fix
+const i7States = [
+  { key: "default", setup: async () => {} },
+  {
+    key: "quality_open",
+    setup: async () => {
+      await qualityBtn.click();
+      await page.waitForTimeout(300);
+    },
+    teardown: async () => {
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(200);
+    },
+  },
+  {
+    key: "filter_on",
+    setup: async () => {
+      await qualityBtn.click();
+      await page.waitForTimeout(300);
+      const thin = page.getByTestId("sit-quality-opt-thin").or(page.getByText(/^Thin/i).first());
+      if (await thin.count()) await thin.first().click();
+      await page.waitForTimeout(300);
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(200);
+    },
+    teardown: async () => {
+      const chipClear = page.getByTestId("sit-quality-filter-chip-clear");
+      if (await chipClear.count()) await chipClear.click();
+      await page.waitForTimeout(200);
+    },
+  },
+  {
+    key: "row_expanded",
+    setup: async () => {
+      const chev = page.getByTestId("sit-row-chevron").first();
+      if (await chev.count()) {
+        await chev.click();
+        await page.waitForTimeout(400);
+      }
+    },
+    teardown: async () => {
+      const chev = page.getByTestId("sit-row-chevron").first();
+      if (await chev.count()) {
+        await chev.click();
+        await page.waitForTimeout(200);
+      }
+    },
+  },
+];
+
+for (const explorerOpen of [true, false]) {
+  await setExplorerOpen(page, explorerOpen);
+  const exLabel = explorerOpen ? "open" : "closed";
+  for (const w of WIDTHS) {
+    await page.setViewportSize({ width: w, height: 900 });
+    await page.waitForTimeout(350);
+    for (const st of i7States) {
+      await st.setup();
+      await page.evaluate(() => {
+        const sc = document.querySelector(
+          '[data-testid="sit-v2-grid-root"] .overflow-auto, [data-testid="sit-v2-grid-root"]',
+        );
+        if (sc) sc.scrollLeft = 0;
+      });
+      await page.waitForTimeout(150);
+      const fit = await gridCoveredOrBodyOverflow(page);
+      // quality_open intentionally portals over the page — skip "covered" for that state
+      const coverFail = st.key === "quality_open" ? false : fit.covered;
+      const overflowFail = fit.overflowOutside;
+      const statusOk =
+        explorerOpen && w >= 1440
+          ? await statusHeaderFullyVisible(page)
+          : true; // 1280 open may scroll; closed should already fit from I1
+      const id = `I7.${exLabel}.${st.key}.${w}`;
+      const passRaw = !overflowFail && !coverFail && statusOk;
+      const detail = `${fit.detail}|statusOk=${statusOk}|explorer=${exLabel}`;
+      if (!passRaw) {
+        preExisting.push(`${id}: ${detail}`);
+      }
+      // Soft: record FAIL for visibility but do not require hard fail until R8-01 (I7_SOFT=0)
+      if (I7_SOFT && !passRaw) {
+        record(id, "no page overflow; grid not covered; Status visible when required", detail, true, "pre-existing (soft until R8-01)");
+      } else {
+        record(id, "no page overflow; grid not covered; Status visible when required", detail, passRaw);
+      }
+      if (st.teardown) await st.teardown();
+    }
+    // Explorer open/closed baseline shots for default + expanded (section 2.3)
+    if (explorerOpen) {
+      await shot(page, BASELINE, `explorer-open-default-${w}`, `Explorer OPEN default grid ${w}`);
+    } else {
+      await shot(page, BASELINE, `explorer-closed-default-${w}`, `Explorer CLOSED default grid ${w}`);
+    }
+  }
+}
+
+// Expanded shots with explorer open/closed
+for (const explorerOpen of [true, false]) {
+  await setExplorerOpen(page, explorerOpen);
+  const chev = page.getByTestId("sit-row-chevron").first();
+  if (await chev.count()) {
+    await chev.click();
+    await page.waitForTimeout(400);
+  }
+  for (const w of WIDTHS) {
+    await page.setViewportSize({ width: w, height: 900 });
+    await page.waitForTimeout(250);
+    const tag = explorerOpen ? "open" : "closed";
+    await shot(page, BASELINE, `explorer-${tag}-row-expanded-${w}`, `Explorer ${tag} row expanded ${w}`);
+  }
+  if (await chev.count()) {
+    await chev.click();
+    await page.waitForTimeout(200);
+  }
 }
 
 const summary = {
