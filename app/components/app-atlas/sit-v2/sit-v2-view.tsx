@@ -890,6 +890,40 @@ export function SitTestingViewV2({
                 />
               )}
               {activeTicketKey &&
+                (() => {
+                  const missing = [
+                    ...new Set(
+                      activeRows
+                        .map((r) => (r.cells.missingTypes || "").split(",").map((s) => s.trim()).filter(Boolean))
+                        .flat(),
+                    ),
+                  ];
+                  if (!missing.length) return null;
+                  return (
+                    <button
+                      type="button"
+                      data-testid="sit-missing-types-chip"
+                      title={`Applicable types still missing: ${missing.join(", ")}`}
+                      className="rounded-full border border-[#fde68a] bg-[#fffbeb] px-2.5 py-0.5 text-[11px] font-medium text-[#92400e]"
+                      onClick={() => {
+                        const t = epics.flatMap((e) => e.tickets).find((x) => x.key === activeTicketKey);
+                        if (!t) return;
+                        void startGenerate([
+                          {
+                            issueKey: t.key,
+                            mode: "append",
+                            workbookId: workbook?.id,
+                            hasExisting: true,
+                            caseCount: activeRows.length,
+                          },
+                        ]);
+                      }}
+                    >
+                      Missing: {missing.join(", ")} · Generate for missing
+                    </button>
+                  );
+                })()}
+              {activeTicketKey &&
                 epics.flatMap((e) => e.tickets).find((x) => x.key === activeTicketKey)?.hasScreenContext ===
                   false && (
                   <span
