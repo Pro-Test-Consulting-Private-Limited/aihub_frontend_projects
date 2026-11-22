@@ -292,14 +292,22 @@ const bodyText = await page.locator('[data-testid="sit-v2-grid-root"]').innerTex
 const hasEm = bodyText.includes("\u2014") || bodyText.includes("\u2013") || bodyText.includes("\u2192");
 record("C6.no_forbidden_chars", "no em/en dash or arrow in grid text", hasEm ? "found" : "clean", !hasEm);
 
-// ---- C7 thin chip ----
-const thin = page.getByTestId("sit-thin-chip").first();
-if (await thin.count()) {
-  const title = (await thin.getAttribute("title")) || (await thin.getAttribute("aria-label")) || "";
-  record("C7.thin_tooltip", "Thin chip has reason tooltip", title.slice(0, 80), title.length > 0);
+// ---- C7 / R7-05 quality flag chip ----
+const flagChip = page.getByTestId("sit-quality-flag-chip").first();
+if (await flagChip.count()) {
+  const title = (await flagChip.getAttribute("title")) || "";
+  record("C7.flag_tooltip", "Quality flag chip has reason tooltip", title.slice(0, 80), title.length > 0);
 } else {
-  record("C7.thin_tooltip", "Thin chip visible on seed", "missing", false);
-  preExisting.push("C7 thin chip missing on current tip (may appear after scroll/filter)");
+  // Scroll to find a flagged row chip
+  await page.evaluate(() => window.scrollBy(0, 400));
+  await page.waitForTimeout(200);
+  const chip2 = page.getByTestId("sit-quality-flag-chip").first();
+  if (await chip2.count()) {
+    const title = (await chip2.getAttribute("title")) || "";
+    record("C7.flag_tooltip", "Quality flag chip has reason tooltip", title.slice(0, 80), title.length > 0);
+  } else {
+    record("C7.flag_tooltip", "Quality flag chip visible on seed", "missing", false);
+  }
 }
 
 // ---- I4 font size on quality toolbar ----
