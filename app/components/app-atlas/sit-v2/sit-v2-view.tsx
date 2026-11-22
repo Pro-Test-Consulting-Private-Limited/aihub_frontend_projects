@@ -1,12 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  TbClipboardList,
-  TbLoader2,
-  TbPlus,
-  TbChevronDown,
-} from "react-icons/tb";
+import { TbClipboardList, TbLoader2, TbPlus } from "react-icons/tb";
 import type {
   CanvasClarification,
   DeadFlag,
@@ -24,15 +19,7 @@ import { SitV2GenerateDialog, type TicketGenChoice } from "./sit-v2-generate-dia
 import { SitV2Grid } from "./sit-v2-grid";
 import { SitV2AcChip } from "./sit-v2-ac-chip";
 import { SitV2Select } from "./sit-v2-select";
-import {
-  loadHiddenColumns,
-  loadSitDensity,
-  saveHiddenColumns,
-  saveSitDensity,
-  SIT_OPTIONAL_COLUMNS,
-  type SitColumnId,
-  type SitDensity,
-} from "./sit-v2-prefs";
+import { loadHiddenColumns, saveHiddenColumns, SIT_OPTIONAL_COLUMNS, type SitColumnId } from "./sit-v2-prefs";
 import {
   buildXlsxBlob,
   downloadBlob,
@@ -79,7 +66,6 @@ export function SitTestingViewV2({
   const [generating, setGenerating] = useState(false);
   const [progress, setProgress] = useState<Progress>({});
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const [genMenuOpen, setGenMenuOpen] = useState(false);
   const [genDialog, setGenDialog] = useState<TicketGenChoice[] | null>(null);
   const [clarifications, setClarifications] = useState<CanvasClarification[]>([]);
   const [ticketFilter, setTicketFilter] = useState<string | "all">("all");
@@ -91,9 +77,7 @@ export function SitTestingViewV2({
   const [deadFlag, setDeadFlag] = useState<DeadFlag | null>(null);
   const [deadAudit, setDeadAudit] = useState<SitDeadAudit | null>(null);
   const [deadLoading, setDeadLoading] = useState(false);
-  const [legendOpen, setLegendOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
-  const [density, setDensity] = useState<SitDensity>("comfortable");
   const [hiddenColumns, setHiddenColumns] = useState<SitColumnId[]>([]);
   const [columnsOpen, setColumnsOpen] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -129,7 +113,6 @@ export function SitTestingViewV2({
   }, [client, canvasId]);
 
   useEffect(() => {
-    setDensity(loadSitDensity());
     setHiddenColumns(loadHiddenColumns());
   }, []);
 
@@ -180,14 +163,13 @@ export function SitTestingViewV2({
   };
 
   const modelReady = model?.state === "up";
-  const modelInactive = model?.state === "idle" || model?.state === "unconfigured" || model?.state === "down";
-
-  const startGenerate = async (
-    choices: TicketGenChoice[],
-    useTemplate = false,
-  ) => {
+  const startGenerate = async (choices: TicketGenChoice[]) => {
     if (!canvasId) {
       setError("Select a Jira-connected canvas first.");
+      return;
+    }
+    if (!modelReady) {
+      setError("Model is warming up. Generate is disabled until the model is Ready.");
       return;
     }
     setGenDialog(null);
@@ -212,7 +194,7 @@ export function SitTestingViewV2({
             sourceSummaries: {},
             status: "running",
             error: null,
-            generator: useTemplate ? "stub" : "huggingface",
+            generator: "huggingface",
             sheets: [
               {
                 id: "test-cases",
@@ -234,10 +216,10 @@ export function SitTestingViewV2({
           canvasId,
           tickets: choices.map((c) => ({
             issueKey: c.issueKey,
-            mode: c.mode,
+            mode: c.mode === "template" ? "new" : c.mode,
             workbookId: c.workbookId,
           })),
-          useTemplate,
+          useTemplate: false,
         },
         (event, data) => {
           const d = data as Record<string, unknown>;
@@ -310,11 +292,10 @@ export function SitTestingViewV2({
     }
   };
 
-  const onClickGenerate = (useTemplate = false) => {
-    setGenMenuOpen(false);
+  const onClickGenerate = () => {
     if (!selected.length) return;
-    if (!useTemplate && modelInactive) {
-      setError(`Model is ${modelLabel(model)}. Use template from the menu, or wait until Ready.`);
+    if (!modelReady) {
+      setError("Model is warming up. Generate is disabled until the model is Ready.");
       return;
     }
     const choices: TicketGenChoice[] = selected.map((t) => {
@@ -330,14 +311,11 @@ export function SitTestingViewV2({
       }
       return { issueKey: t.key, mode: "new" as const, hasExisting: false, caseCount: 0 };
     });
-    if (choices.some((c) => c.hasExisting) && !useTemplate) {
+    if (choices.some((c) => c.hasExisting)) {
       setGenDialog(choices);
       return;
     }
-    void startGenerate(
-      choices.map((c) => ({ ...c, mode: useTemplate ? "template" : c.mode })),
-      useTemplate,
-    );
+    void startGenerate(choices);
   };
 
   const patchRow = async (rowId: string, body: Parameters<AtlasClient["patchSitCase"]>[2]) => {
@@ -444,7 +422,14 @@ export function SitTestingViewV2({
       if (r.cells.origin === "human") human++;
       else if (r.cells.origin === "template") template++;
       else ai++;
-      if (r.cells.edited === "1") edited++;
+      // Edited = AI row changed by a person (never human / legacy template)
+      if (
+        r.cells.edited === "1" &&
+        r.cells.origin !== "human" &&
+        r.cells.origin !== "template"
+      ) {
+        edited++;
+      }
       const st = r.cells.executionStatus || "Not run";
       if (st in byStatus) byStatus[st]!++;
       else byStatus["Not run"]!++;
@@ -630,54 +615,32 @@ export function SitTestingViewV2({
             >
               Model · {modelLabel(model)}
             </span>
-            <div className="relative flex">
-              <button
-                type="button"
-                disabled={!selected.length || generating || !modelReady}
-                title={
-                  !selected.length
-                    ? "Select tickets first"
-                    : !modelReady
-                      ? `Model is ${modelLabel(model)} — use template from the menu`
-                      : selected.map((t) => t.key).join(", ")
-                }
-                onClick={() => onClickGenerate(false)}
-                className="rounded-l-[8px] bg-[#8664F2] px-4 py-2 text-[13px] font-medium text-white disabled:opacity-40"
-              >
-                {generating ? (
-                  <span className="inline-flex items-center gap-1.5">
-                    <TbLoader2 className="animate-spin" size={14} /> Generating…
-                  </span>
-                ) : selected.length === 0 ? (
-                  "Generate"
-                ) : selected.length === 1 ? (
-                  "Generate for 1 ticket"
-                ) : (
-                  `Generate for ${selected.length} tickets`
-                )}
-              </button>
-              <button
-                type="button"
-                disabled={generating}
-                onClick={() => setGenMenuOpen((v) => !v)}
-                className="rounded-r-[8px] border-l border-white/20 bg-[#8664F2] px-2 text-white disabled:opacity-40"
-                aria-label="More generate options"
-              >
-                <TbChevronDown size={16} />
-              </button>
-              {genMenuOpen && (
-                <div className="absolute right-0 top-full z-20 mt-1 min-w-[180px] rounded-[8px] border border-[#e2e6ef] bg-white py-1 shadow-lg dark:border-[#2a2a2a] dark:bg-[#151515]">
-                  <button
-                    type="button"
-                    className="block w-full px-3 py-2 text-left text-[12.5px] hover:bg-[#f3f0ff]"
-                    onClick={() => onClickGenerate(true)}
-                    disabled={!selected.length}
-                  >
-                    Use template
-                  </button>
-                </div>
+            <button
+              type="button"
+              disabled={!selected.length || generating || !modelReady}
+              title={
+                !selected.length
+                  ? "Select tickets first"
+                  : !modelReady
+                    ? "Model is warming up"
+                    : selected.map((t) => t.key).join(", ")
+              }
+              onClick={() => onClickGenerate()}
+              className="rounded-[8px] bg-[#8664F2] px-4 py-2 text-[13px] font-medium text-white disabled:opacity-40"
+              data-testid="sit-generate-btn"
+            >
+              {generating ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <TbLoader2 className="animate-spin" size={14} /> Generating…
+                </span>
+              ) : selected.length === 0 ? (
+                "Generate"
+              ) : selected.length === 1 ? (
+                "Generate for 1 ticket"
+              ) : (
+                `Generate for ${selected.length} tickets`
               )}
-            </div>
+            </button>
             {generating && (
               <button
                 type="button"
@@ -803,18 +766,27 @@ export function SitTestingViewV2({
               >
                 {(
                   [
-                    { id: null, label: "All" },
+                    { id: null as string | null, label: "All" },
                     { id: "ai", label: "AI" },
                     { id: "human", label: "Human" },
-                    { id: "template", label: "Template" },
+                    ...(counts.template
+                      ? [{ id: "template" as const, label: "Legacy" }]
+                      : []),
                     { id: "edited", label: "Edited" },
-                  ] as const
+                  ] as { id: string | null; label: string }[]
                 ).map((o) => {
                   const active = (originFilter || null) === o.id;
                   return (
                     <button
                       key={o.label}
                       type="button"
+                      title={
+                        o.id === "edited"
+                          ? "AI rows changed by a person"
+                          : o.id === "template"
+                            ? "Old template rows from a previous release"
+                            : undefined
+                      }
                       className={`rounded-[6px] px-2 py-0.5 text-[11px] font-medium transition ${
                         active
                           ? "bg-[#f3f0ff] text-[#5b21b6]"
@@ -841,7 +813,7 @@ export function SitTestingViewV2({
                   onGenerateMissing={() => {
                     const t = epics.flatMap((e) => e.tickets).find((x) => x.key === activeTicketKey);
                     if (!t) return;
-                    void startGenerate([{ issueKey: t.key, mode: "append", workbookId: workbook?.id, hasExisting: true, caseCount: activeRows.length }], false);
+                    void startGenerate([{ issueKey: t.key, mode: "append", workbookId: workbook?.id, hasExisting: true, caseCount: activeRows.length }]);
                   }}
                 />
               )}
@@ -856,91 +828,49 @@ export function SitTestingViewV2({
                     No mapped screen: steps may be less specific
                   </span>
                 )}
-              <span className="relative inline-flex items-center gap-1 text-[11px] text-[#6b7280]">
-                {counts.total} · {counts.ai} AI · {counts.edited} edited
-                {counts.human ? ` · ${counts.human} human` : ""}
-                {counts.template ? ` · ${counts.template} template` : ""}
-                {" · "}
-                {counts.Draft ? `${counts.Draft} draft · ` : ""}
-                {counts.passed} passed · {counts.failed} failed · {counts.partial} partial · {counts.notRun} not
-                run
-                {counts.Blocked ? ` · ${counts.Blocked} blocked` : ""}
-                {counts.Skipped ? ` · ${counts.Skipped} skipped` : ""}
-                {counts.Stale ? ` · ${counts.Stale} stale` : ""}
-                <button
-                  type="button"
-                  className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full border border-[#d1d5db] text-[10px] font-bold text-[#6b7280] hover:bg-[#f3f4f6]"
-                  aria-label="Origin legend"
-                  title="What AI / Human / Template / Edited mean"
-                  onClick={() => setLegendOpen((v) => !v)}
+              <span
+                className="relative inline-flex flex-wrap items-center gap-1 text-[11px] text-[#6b7280]"
+                data-testid="sit-counts-bar"
+              >
+                <span
+                  className="rounded-full border border-[#e2e6ef] bg-white px-2 py-0.5 font-medium text-[#374151]"
+                  title="All visible cases"
                 >
-                  ?
-                </button>
-                {legendOpen && (
-                  <div className="absolute left-0 top-full z-30 mt-1 w-[340px] rounded-[8px] border border-[#e2e6ef] bg-white p-3 text-left text-[11.5px] leading-snug text-[#374151] shadow-lg dark:border-[#2a2a2a] dark:bg-[#151515] dark:text-[#d1d5db]">
-                    <div className="mb-1 font-semibold text-[#1F1F1F] dark:text-[#ededed]">Legend & shortcuts</div>
-                    <p>
-                      <strong>AI</strong> — written by the model.
-                    </p>
-                    <p>
-                      <strong>Human</strong> — added by a person.
-                    </p>
-                    <p>
-                      <strong>Template</strong> — rule-based skeleton without the AI model (Use template, or model
-                      down).
-                    </p>
-                    <p>
-                      <strong>Edited</strong> — a person changed an AI or Template row (orange dot on ID).
-                    </p>
-                    <div className="mt-2 border-t border-[#eef0f5] pt-2 text-[11px]">
-                      <p>
-                        <kbd>Enter</kbd> / <kbd>F2</kbd> — edit selected cell
-                      </p>
-                      <p>
-                        <kbd>Esc</kbd> — cancel · <kbd>Enter</kbd> — commit
-                      </p>
-                      <p>
-                        <kbd>Shift</kbd>+<kbd>Enter</kbd> — line break in multi-line
-                      </p>
-                      <p>
-                        <kbd>Tab</kbd> / arrows — move · double-click — edit
-                      </p>
-                      <p>
-                        List editor: <kbd>Ctrl</kbd>+<kbd>Enter</kbd> save · type <code>{"{{"}</code> for
-                        placeholders
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      className="mt-2 text-[#8664F2]"
-                      onClick={() => setLegendOpen(false)}
-                    >
-                      Close
-                    </button>
-                  </div>
+                  All {counts.total}
+                </span>
+                {counts.ai > 0 && (
+                  <span
+                    className="rounded-full border border-[#ddd6fe] bg-[#f5f3ff] px-2 py-0.5 text-[#5b21b6]"
+                    title="Generated by AI"
+                  >
+                    AI {counts.ai}
+                  </span>
+                )}
+                {counts.human > 0 && (
+                  <span
+                    className="rounded-full border border-[#bfdbfe] bg-[#eff6ff] px-2 py-0.5 text-[#1d4ed8]"
+                    title="Added by a person"
+                  >
+                    Human {counts.human}
+                  </span>
+                )}
+                {counts.edited > 0 && (
+                  <span
+                    className="rounded-full border border-[#fde68a] bg-[#fffbeb] px-2 py-0.5 text-[#92400e]"
+                    title="Edited = an AI row changed by a person (never a human-written row)"
+                  >
+                    Edited {counts.edited}
+                  </span>
+                )}
+                {counts.template > 0 && (
+                  <span
+                    className="rounded-full border border-[#e5e7eb] bg-[#f9fafb] px-2 py-0.5 text-[#6b7280]"
+                    title="Legacy = old template rows from a previous release"
+                  >
+                    Legacy {counts.template}
+                  </span>
                 )}
               </span>
-              <div
-                className="inline-flex items-center gap-0.5 rounded-[8px] border border-[#e2e6ef] bg-white p-0.5 dark:border-[#2a2a2a]"
-                role="group"
-                aria-label="Density"
-              >
-                {(["comfortable", "compact"] as SitDensity[]).map((d) => (
-                  <button
-                    key={d}
-                    type="button"
-                    className={`rounded-[6px] px-2 py-0.5 text-[11px] capitalize ${
-                      density === d ? "bg-[#f3f0ff] text-[#5b21b6]" : "text-[#5b647a]"
-                    }`}
-                    onClick={() => {
-                      setDensity(d);
-                      saveSitDensity(d);
-                    }}
-                  >
-                    {d}
-                  </button>
-                ))}
-              </div>
               <div className="relative">
                 <button
                   type="button"
@@ -998,7 +928,7 @@ export function SitTestingViewV2({
               originFilter={originFilter}
               search={search}
               generating={generating}
-              density={density}
+              density="comfortable"
               hiddenColumns={hiddenColumns}
               onPatch={(rowId, body) => {
                 if (!canEdit) return;
@@ -1083,7 +1013,7 @@ export function SitTestingViewV2({
           choices={genDialog}
           history={history}
           onCancel={() => setGenDialog(null)}
-          onConfirm={(choices) => void startGenerate(choices, false)}
+          onConfirm={(choices) => void startGenerate(choices)}
         />
       )}
     </div>

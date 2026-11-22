@@ -18,14 +18,14 @@ describe("A3 provenance without Origin column", () => {
     expect(view).not.toMatch(/<option value="ai">AI<\/option>/);
   });
 
-  it("tooltip and tint helpers cover AI/human/template/edited", () => {
+  it("tooltip helpers cover AI/human/legacy; row tint removed in R3", () => {
     expect(provenanceTooltip({ origin: "ai" })).toMatch(/AI/i);
     expect(provenanceTooltip({ origin: "human", editedBy: "Ada" })).toMatch(/human/i);
+    expect(provenanceTooltip({ origin: "template" })).toMatch(/Legacy/i);
     expect(provenanceTooltip({ origin: "ai", edited: "1", editedBy: "Bob", aiOriginal: "{}" })).toMatch(
       /original available/,
     );
-    expect(originRowTint("ai", false)).toMatch(/8664F2/);
-    expect(originRowTint("human", false)).toMatch(/3b82f6/);
-    expect(originRowTint("ai", true)).toMatch(/d97706/);
+    expect(originRowTint("ai", false)).toBe("");
+    expect(originRowTint("human", true)).toBe("");
   });
 });
