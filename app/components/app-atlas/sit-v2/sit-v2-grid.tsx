@@ -316,6 +316,9 @@ export function SitV2Grid({
   onDelete,
   onAdd,
   onDuplicate,
+  qualityFilterActive = false,
+  onClearQualityFilter,
+  totalCaseCount,
 }: {
   workbook: SitWorkbook;
   epics: SitEpic[];
@@ -332,6 +335,10 @@ export function SitV2Grid({
   onDelete: (rowId: string) => void;
   onAdd: () => void;
   onDuplicate: (rowId: string) => void;
+  qualityFilterActive?: boolean;
+  onClearQualityFilter?: () => void;
+  /** Unfiltered live case count (before quality filter). */
+  totalCaseCount?: number;
 }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [ctxMenuRow, setCtxMenuRow] = useState<string | null>(null);
@@ -387,6 +394,11 @@ export function SitV2Grid({
     [order, layout, hide],
   );
   const colCount = 2 + visibleCols.length + 1; // checkbox+ID + cols + status
+
+  const allLiveCount = useMemo(() => {
+    const tc = workbook.sheets.find((s) => s.kind === "test-cases");
+    return (tc?.rows || []).filter((r) => r.cells.deleted !== "1").length;
+  }, [workbook]);
 
   const rows = useMemo(() => {
     const tc = workbook.sheets.find((s) => s.kind === "test-cases");
@@ -1079,6 +1091,31 @@ export function SitV2Grid({
             })}
           </tbody>
         </table>
+        {rows.length === 0 && (
+          <div
+            className="flex flex-col items-center justify-center gap-2 px-4 py-12 text-center text-[13px] text-[#5b647a]"
+            data-testid="sit-grid-empty"
+          >
+            <p>No cases match the current filters.</p>
+            {qualityFilterActive && onClearQualityFilter ? (
+              <button
+                type="button"
+                className="rounded-[8px] border border-[#fcd34d] bg-[#fffbeb] px-3 py-1.5 text-[12.5px] font-medium text-[#92400e]"
+                data-testid="sit-grid-empty-show-all"
+                onClick={onClearQualityFilter}
+              >
+                Show all cases
+              </button>
+            ) : null}
+          </div>
+        )}
+      </div>
+      <div
+        className="shrink-0 border-t border-[#e2e6ef] bg-[#fafafa] px-3 py-1.5 text-[11px] text-[#5b647a] dark:border-[#1a1a1a] dark:bg-[#121212]"
+        data-testid="sit-grid-footer-count"
+      >
+        {rows.length} of {totalCaseCount ?? allLiveCount} shown
+        {qualityFilterActive ? " (quality filter on)" : ""}
       </div>
     </div>
   );

@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TbClipboardList, TbLoader2, TbPlus } from "react-icons/tb";
 import type {
   CanvasClarification,
-  DeadFlag,
   SitDeadAudit,
   SitEpic,
   SitModelStatus,
@@ -13,7 +12,12 @@ import type {
   SitWorkbook,
 } from "@/app/interfaces/appatlas";
 import type { AtlasClient } from "@/app/services/appatlas";
-import { DeadTestFinderToolbar, filterRowsByDeadFlag } from "../sit-dead-finder";
+import {
+  DeadTestFinderToolbar,
+  filterRowsByDeadFlag,
+  QualityDrawerPanel,
+  type QualityFilter,
+} from "../sit-dead-finder";
 import { SitV2Picker } from "./sit-v2-picker";
 import { SitV2GenerateDialog, type TicketGenChoice } from "./sit-v2-generate-dialog";
 import { SitV2Grid } from "./sit-v2-grid";
@@ -85,9 +89,18 @@ export function SitTestingViewV2({
   const [originFilter, setOriginFilter] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [undoRow, setUndoRow] = useState<{ workbookId: string; rowId: string } | null>(null);
-  const [deadFlag, setDeadFlag] = useState<DeadFlag | null>(null);
+  const [deadFlag, setDeadFlag] = useState<QualityFilter>(null);
   const [deadAudit, setDeadAudit] = useState<SitDeadAudit | null>(null);
   const [deadLoading, setDeadLoading] = useState(false);
+  const [qualityPanelOpen, setQualityPanelOpen] = useState(false);
+  const [viewportW, setViewportW] = useState(1440);
+  useEffect(() => {
+    const sync = () => setViewportW(typeof window !== "undefined" ? window.innerWidth : 1440);
+    sync();
+    window.addEventListener("resize", sync);
+    return () => window.removeEventListener("resize", sync);
+  }, []);
+  const qualityPush = viewportW >= 1440;
   const [exportOpen, setExportOpen] = useState(false);
   const [columnLayout, setColumnLayout] = useState<SitColumnLayout>(() => defaultLayout());
   const [columnsOpen, setColumnsOpen] = useState(false);
@@ -646,6 +659,9 @@ export function SitTestingViewV2({
                 loading={deadLoading}
                 activeFlag={deadFlag}
                 onFlag={setDeadFlag}
+                open={qualityPanelOpen}
+                onOpenChange={setQualityPanelOpen}
+                hideOverlayPanel={qualityPush && qualityPanelOpen}
               />
             )}
           </div>
@@ -1093,6 +1109,11 @@ export function SitTestingViewV2({
               )}
             </div>
 
+            <div
+              className={`flex min-h-0 flex-1 ${qualityPush && qualityPanelOpen ? "flex-row" : "flex-col"}`}
+              data-testid="sit-grid-quality-shell"
+            >
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <SitV2Grid
               workbook={displayWorkbook}
               epics={epics}
@@ -1105,6 +1126,12 @@ export function SitTestingViewV2({
               generating={generating}
               layout={columnLayout}
               onLayoutChange={persistLayout}
+              qualityFilterActive={deadFlag != null}
+              onClearQualityFilter={() => setDeadFlag(null)}
+              totalCaseCount={
+                workbook?.sheets.find((s) => s.kind === "test-cases")?.rows.filter((r) => r.cells.deleted !== "1")
+                  .length
+              }
               onPatch={(rowId, body) => {
                 if (!canEdit) return;
                 void patchRow(rowId, body);
@@ -1122,6 +1149,16 @@ export function SitTestingViewV2({
                 void duplicateRow(rowId);
               }}
             />
+            </div>
+            {qualityPush && qualityPanelOpen && (
+              <QualityDrawerPanel
+                audit={deadAudit}
+                activeFlag={deadFlag}
+                onFlag={setDeadFlag}
+                onClose={() => setQualityPanelOpen(false)}
+              />
+            )}
+            </div>
           </div>
         ) : (
           <p className="text-[13px] text-[#8a93a8]">
