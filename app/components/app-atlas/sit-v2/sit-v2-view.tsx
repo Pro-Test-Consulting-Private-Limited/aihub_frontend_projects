@@ -460,6 +460,35 @@ export function SitTestingViewV2({
     };
   }, [workbook, deadFlag, deadAudit]);
 
+  /** R7-03: Showing N of M in toolbar (same filters as grid). */
+  const toolbarTotalCount = useMemo(() => {
+    return (
+      workbook?.sheets.find((s) => s.kind === "test-cases")?.rows.filter((r) => r.cells.deleted !== "1").length ?? 0
+    );
+  }, [workbook]);
+  const toolbarShownCount = useMemo(() => {
+    let list =
+      displayWorkbook?.sheets.find((s) => s.kind === "test-cases")?.rows.filter((r) => r.cells.deleted !== "1") ||
+      [];
+    if (ticketFilter !== "all") {
+      list = list.filter((r) => r.cells.requirementId === ticketFilter || r.cells.issueKey === ticketFilter);
+    }
+    if (typeFilter) list = list.filter((r) => (r.cells.testType || "") === typeFilter);
+    if (statusFilter) list = list.filter((r) => (r.cells.executionStatus || "Not run") === statusFilter);
+    if (originFilter === "edited") list = list.filter((r) => r.cells.edited === "1" && r.cells.origin !== "human");
+    else if (originFilter) list = list.filter((r) => (r.cells.origin || "ai") === originFilter);
+    if (search.trim()) {
+      const n = search.toLowerCase();
+      list = list.filter((r) =>
+        [r.cells.caseId, r.cells.scenario, r.cells.steps, r.cells.expected, r.cells.feature]
+          .join(" ")
+          .toLowerCase()
+          .includes(n),
+      );
+    }
+    return list.length;
+  }, [displayWorkbook, ticketFilter, typeFilter, statusFilter, originFilter, search]);
+
   const counts = useMemo(() => {
     const rows =
       workbook?.sheets.find((s) => s.kind === "test-cases")?.rows.filter((r) => r.cells.deleted !== "1") || [];
@@ -1015,6 +1044,12 @@ export function SitTestingViewV2({
                   </div>
                 );
               })()}
+              <span
+                className="text-[12px] text-[#5b647a]"
+                data-testid="sit-toolbar-showing-count"
+              >
+                Showing {toolbarShownCount} of {toolbarTotalCount} cases
+              </span>
               <div className="relative">
                 <button
                   type="button"

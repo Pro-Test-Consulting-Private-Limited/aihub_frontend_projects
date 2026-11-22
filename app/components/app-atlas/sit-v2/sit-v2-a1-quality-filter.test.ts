@@ -20,7 +20,6 @@ describe("R6 A1 quality filter contracts", () => {
 
   it("grid empty state offers Show all cases", () => {
     expect(grid).toMatch(/sit-grid-empty-show-all/);
-    expect(grid).toMatch(/sit-grid-footer-count/);
   });
 
   it("view wires push drawer at 1440 and QualityDrawerPanel", () => {

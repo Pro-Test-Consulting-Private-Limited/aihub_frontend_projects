@@ -1113,13 +1113,6 @@ export function SitV2Grid({
           </div>
         )}
       </div>
-      <div
-        className="shrink-0 border-t border-[#e2e6ef] bg-[#fafafa] px-3 py-1.5 text-[11px] text-[#5b647a] dark:border-[#1a1a1a] dark:bg-[#121212]"
-        data-testid="sit-grid-footer-count"
-      >
-        {rows.length} of {totalCaseCount ?? allLiveCount} shown
-        {qualityFilterActive ? " (quality filter on)" : ""}
-      </div>
     </div>
   );
 }
