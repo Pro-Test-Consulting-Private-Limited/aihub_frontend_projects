@@ -3,8 +3,19 @@
  * Formula-injection guarded; CSV UTF-8 BOM for ₹ in Excel.
  */
 import type { SitSheetRow, SitWorkbook } from "@/app/interfaces/appatlas";
+import { sanitizeUserText } from "@/app/lib/sit-sanitize-text";
+import { normalizeBulletText } from "@/app/components/app-atlas/sit-v2/sit-v2-bullets";
 
 export type ExportScope = "view" | "selected" | "all";
+
+/** Round 5 A4/A5: scrub dashes/arrows and dedupe bullets at export time (no DB rewrite). */
+function exportText(raw: string, mode: "plain" | "bullets" | "steps" = "plain"): string {
+  const scrubbed = sanitizeUserText(raw || "");
+  if (mode === "plain") return scrubbed;
+  const lines = normalizeBulletText(scrubbed).split(/\n/).filter(Boolean);
+  if (mode === "steps") return lines.map((l, i) => `${i + 1}. ${l}`).join("\n");
+  return lines.map((l) => `- ${l}`).join("\n");
+}
 
 const STATUS_OPTS = [
   "Draft",
@@ -68,15 +79,15 @@ export function casesForExport(
   return rows.map((r) => ({
     id: cell(r, "caseId") || cell(r, "tcId") || r.id,
     jiraKey: cell(r, "requirementId"),
-    module: cell(r, "module"),
-    feature: cell(r, "feature"),
+    module: exportText(cell(r, "module")),
+    feature: exportText(cell(r, "feature")),
     priority: cell(r, "priority"),
     severity: cell(r, "severity"),
     scenarioType: cell(r, "testType"),
-    scenarioTitle: cell(r, "scenario"),
-    preconditions: cell(r, "preconditions"),
-    steps: cell(r, "steps"),
-    expected: cell(r, "expected"),
+    scenarioTitle: exportText(cell(r, "scenario")),
+    preconditions: exportText(cell(r, "preconditions"), "bullets"),
+    steps: exportText(cell(r, "steps"), "steps"),
+    expected: exportText(cell(r, "expected"), "bullets"),
     status: cell(r, "executionStatus") || "Not run",
     origin: cell(r, "origin"),
     edited: r.cells.edited === "1" || r.cells.edited === "true" ? "yes" : "no",

@@ -225,7 +225,7 @@ export function SitV2Picker({
                                   </span>
                                   {activeTicketKey === t.key && (
                                     <span className="inline-flex items-center gap-0.5 rounded-full bg-[#8664F2] px-2 py-0.5 text-[10px] font-semibold text-white">
-                                      Active →
+                                      Active  to 
                                     </span>
                                   )}
                                   {onActivateTicket && (
@@ -291,7 +291,7 @@ export function SitV2Picker({
                 ))}
               </ol>
             ) : (
-              <p className="text-[#16a34a]">No questions — ticket reads as complete.</p>
+              <p className="text-[#16a34a]">No questions ,  ticket reads as complete.</p>
             )}
             <PickerNotes
               issueKey={focusClar?.issueKey || focusKey || ""}

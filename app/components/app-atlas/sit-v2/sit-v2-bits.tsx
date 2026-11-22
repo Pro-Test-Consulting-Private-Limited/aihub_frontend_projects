@@ -72,7 +72,7 @@ export function OriginGlyph({
     <span className="inline-flex items-center gap-0.5 text-[#8664F2]" title={tip} aria-label="AI">
       <TbSparkles size={12} />
       {showEdited ? (
-        <span className="h-1.5 w-1.5 rounded-full bg-[#d97706]" title="Edited — an AI row changed by a person" />
+        <span className="h-1.5 w-1.5 rounded-full bg-[#d97706]" title="Edited ,  an AI row changed by a person" />
       ) : null}
     </span>
   );
@@ -94,7 +94,7 @@ export function OriginBadge({ origin, edited }: { origin?: string; edited?: bool
     return (
       <span
         className="inline-flex items-center gap-0.5 rounded border border-[#e5e7eb] bg-[#f9fafb] px-1 text-[9px] font-semibold text-[#6b7280]"
-        title="Legacy — old template row from a previous release"
+        title="Legacy ,  old template row from a previous release"
       >
         <TbTemplate size={10} /> Legacy
       </span>
@@ -107,13 +107,13 @@ export function OriginBadge({ origin, edited }: { origin?: string; edited?: bool
     >
       <TbSparkles size={10} /> AI
       {edited ? (
-        <span className="ml-0.5 h-1.5 w-1.5 rounded-full bg-[#d97706]" title="Edited — an AI row changed by a person" />
+        <span className="ml-0.5 h-1.5 w-1.5 rounded-full bg-[#d97706]" title="Edited ,  an AI row changed by a person" />
       ) : null}
     </span>
   );
 }
 
-/** Row left border tint removed in Round 3 (U10) — keep helper returning empty for callers. */
+/** Row left border tint removed in Round 3 (U10) ,  keep helper returning empty for callers. */
 export function originRowTint(_origin?: string, _edited?: boolean): string {
   return "";
 }
@@ -124,7 +124,7 @@ export function CopyField({ label, value }: { label: string; value: string }) {
     <div className="flex items-center gap-1 text-[11px]">
       <span className="w-20 shrink-0 text-[#6b7280]">{label}</span>
       <code className="min-w-0 flex-1 truncate rounded bg-[#f3f4f6] px-1.5 py-0.5 font-mono dark:bg-[#1a1a1a]">
-        {value || "—"}
+        {value || ", "}
       </code>
       <button
         type="button"

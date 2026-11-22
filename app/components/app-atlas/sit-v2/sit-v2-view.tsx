@@ -497,8 +497,8 @@ export function SitTestingViewV2({
     };
   }, [workbook]);
 
-  const metaProject = projectName || projectKey || "—";
-  const metaModule = canvasName || "—";
+  const metaProject = projectName || projectKey || ", ";
+  const metaModule = canvasName || ", ";
   const activeTicketKey = ticketFilter !== "all" ? ticketFilter : workbook?.sourceIssueKeys?.[0] || null;
 
   const activeAcs = useMemo(() => {
@@ -589,7 +589,7 @@ export function SitTestingViewV2({
               type="button"
               onClick={() => {
                 if (!selected.length && !workbook) return;
-                if (true) { // soft clear — no native confirm (U12)
+                if (true) { // soft clear ,  no native confirm (U12)
                   setSelected([]);
                   setWorkbook(null);
                   setTicketFilter("all");
@@ -724,7 +724,7 @@ export function SitTestingViewV2({
           )}
           {saveState !== "idle" && (
             <span className="ml-auto text-[#8664F2]">
-              {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved" : "Save failed — retry edit"}
+              {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved" : "Save failed ,  retry edit"}
             </span>
           )}
           {(error || note) && (
@@ -934,7 +934,7 @@ export function SitTestingViewV2({
                     No mapped screen: steps may be less specific
                   </span>
                 )}
-              {/* B2: counts live on the origin filter chips above — no second set */}
+              {/* B2: counts live on the origin filter chips above ,  no second set */}
               {(() => {
                 const runStatuses = [
                   { id: "Draft", n: counts.Draft || 0, color: "#6366f1" },

@@ -62,7 +62,7 @@ export function SitV2ExpandPanel({
   row: SitSheetRow;
   canEdit: boolean;
   onPatch: (rowId: string, body: Record<string, unknown>) => void;
-  /** Optional AC id → text for Coverage/metadata. */
+  /** Optional AC id  to  text for Coverage/metadata. */
   acTexts?: Record<string, string>;
   initialTab?: ExpandTab;
 }) {
@@ -93,7 +93,7 @@ export function SitV2ExpandPanel({
             {(row.cells.thin === "1" || row.cells.thin === "true") && (
               <span
                 className="inline-flex rounded-full border border-[#fde68a] bg-[#fffbeb] px-2 py-0.5 text-[12px] font-semibold text-[#92400e]"
-                title="Thin — fewer than 4 steps, 3 precondition bullets, or 2 expected bullets after expand"
+                title="Thin ,  fewer than 4 steps, 3 precondition bullets, or 2 expected bullets after expand"
                 data-testid="sit-thin-chip"
               >
                 Thin
@@ -172,7 +172,7 @@ export function SitV2ExpandPanel({
                 {acIds.map((id) => (
                   <li key={id}>
                     <span className="font-mono font-semibold">{id}</span>
-                    {acTexts?.[id] ? <span className="text-[#5b647a]"> — {acTexts[id]}</span> : null}
+                    {acTexts?.[id] ? <span className="text-[#5b647a]"> ,  {acTexts[id]}</span> : null}
                   </li>
                 ))}
               </ul>
@@ -215,7 +215,7 @@ export function SitV2ExpandPanel({
           {tab === "coverage" && (
             <div className="space-y-2 text-[12px]">
               <p>
-                ACs: <span className="font-mono">{row.cells.acIds || row.cells.ac || "—"}</span>
+                ACs: <span className="font-mono">{row.cells.acIds || row.cells.ac || ", "}</span>
               </p>
               {acIds.map((id) =>
                 acTexts?.[id] ? (
@@ -261,15 +261,15 @@ export function SitV2ExpandPanel({
             <div className="space-y-2 text-[12px]">
               {aiOriginal ? (
                 <>
-                  <p className="font-medium">{aiOriginal.scenario || "—"}</p>
+                  <p className="font-medium">{aiOriginal.scenario || ", "}</p>
                   <div>
                     <div className="text-[12px] font-semibold text-[#5b647a]">Original steps</div>
-                    <pre className="whitespace-pre-wrap font-[inherit] text-[12px]">{aiOriginal.steps || "—"}</pre>
+                    <pre className="whitespace-pre-wrap font-[inherit] text-[12px]">{aiOriginal.steps || ", "}</pre>
                   </div>
                   <div>
                     <div className="text-[12px] font-semibold text-[#5b647a]">Original expected</div>
                     {renderBulletLines(aiOriginal.expected || "") || (
-                      <span className="text-[#9ca3af]">—</span>
+                      <span className="text-[#9ca3af]">, </span>
                     )}
                   </div>
                   {canEdit && row.cells.origin === "ai" && row.cells.edited === "1" && (

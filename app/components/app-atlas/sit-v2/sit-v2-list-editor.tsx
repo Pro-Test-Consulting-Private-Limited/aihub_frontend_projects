@@ -189,8 +189,8 @@ export function SitV2ListEditor({
       <div className="mb-1 flex items-center justify-between text-[12px] leading-snug text-[#6b7280]">
         <span>
           {kind === "steps"
-            ? "Shift+Enter — line break · Ctrl+Enter — save · Esc — cancel"
-            : "Enter — next item · Esc — cancel"}
+            ? "Shift+Enter ,  line break · Ctrl+Enter ,  save · Esc ,  cancel"
+            : "Enter ,  next item · Esc ,  cancel"}
         </span>
         <span>Ctrl+Enter save · Esc cancel</span>
       </div>
