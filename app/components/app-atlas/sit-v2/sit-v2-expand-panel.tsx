@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { SitSheetRow } from "@/app/interfaces/appatlas";
 import { CopyField, OriginBadge } from "./sit-v2-bits";
 import { renderBulletLines } from "./sit-v2-bullets";
+import { listFieldEdits } from "./sit-v2-edit-dot";
 
 function TestDataBlock({ row }: { row: SitSheetRow }) {
   const entries: [string, string][] = [];
@@ -78,6 +79,7 @@ export function SitV2ExpandPanel({
       aiOriginal = null;
     }
   }
+  const fieldEdits = listFieldEdits(row);
 
   return (
     <div
@@ -109,13 +111,59 @@ export function SitV2ExpandPanel({
           {row.cells.editedBy ? (
             <p>
               Edited by {row.cells.editedBy}
-              {row.cells.editedAt ? ` · ${new Date(Number(row.cells.editedAt)).toLocaleString()}` : ""}
+              {row.cells.editedAt ? `, ${new Date(Number(row.cells.editedAt)).toLocaleString()}` : ""}
             </p>
           ) : (
             <p className="text-[#9ca3af]">No human content edits recorded.</p>
           )}
           {(row.cells.generationVersion || row.cells.version) && (
             <p>Version: {row.cells.generationVersion || row.cells.version}</p>
+          )}
+          {fieldEdits.length > 0 && (
+            <div data-testid="sit-expand-edits">
+              <div className="mb-1 font-semibold text-[#5b647a]">Edits</div>
+              <ul className="m-0 space-y-2 pl-0">
+                {fieldEdits.map((ed) => (
+                  <li
+                    key={ed.field}
+                    className="rounded border border-[#e2e6ef] bg-white px-2 py-1.5 dark:border-[#2a2a2a] dark:bg-[#141414]"
+                  >
+                    <div className="font-mono text-[11px] font-semibold text-[#5b21b6]">{ed.field}</div>
+                    <div className="text-[#6b7280]">
+                      Old:{" "}
+                      {ed.originalRecorded
+                        ? ed.from || "(empty)"
+                        : "changed (original not recorded)"}
+                    </div>
+                    <div>New: {ed.to || "(empty)"}</div>
+                    <div className="text-[#9ca3af]">
+                      {ed.by || "unknown"}
+                      {ed.at ? `, ${new Date(Number(ed.at)).toLocaleString()}` : ""}
+                    </div>
+                    {canEdit && row.cells.origin !== "human" && (
+                      <button
+                        type="button"
+                        className="mt-1 text-[12px] font-medium text-[#8664F2] underline-offset-2 hover:underline"
+                        data-testid={`sit-revert-field-${ed.field}`}
+                        onClick={() => onPatch(row.id, { revertField: ed.field })}
+                      >
+                        Revert this field to AI
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              {canEdit && row.cells.origin === "ai" && row.cells.edited === "1" && (
+                <button
+                  type="button"
+                  className="mt-2 rounded-[8px] border border-[#fecaca] px-2 py-1 text-[12px] text-[#991b1b]"
+                  data-testid="sit-revert-all-ai"
+                  onClick={() => onPatch(row.id, { revertAi: true })}
+                >
+                  Revert all to AI
+                </button>
+              )}
+            </div>
           )}
           <div>
             <div className="mb-1 font-semibold text-[#5b647a]">Acceptance criteria covered</div>

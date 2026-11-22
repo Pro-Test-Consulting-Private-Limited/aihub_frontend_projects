@@ -23,6 +23,7 @@ import {
   type SitOrderableColumnId,
 } from "./sit-v2-prefs";
 import { normalizeBulletText, renderBulletLines } from "./sit-v2-bullets";
+import { SitV2EditDot } from "./sit-v2-edit-dot";
 
 function placeholdersForRow(row: SitSheetRow): string[] {
   const set = new Set<string>();
@@ -661,7 +662,11 @@ export function SitV2Grid({
                   Thin
                 </span>
               )}
-              <span className="min-w-0 flex-1 whitespace-pre-wrap text-[12px]">{row.cells.scenario}</span>
+              <span className="min-w-0 flex-1 whitespace-pre-wrap text-[12px]">
+                {row.cells.scenario}
+                <SitV2EditDot row={row} field="scenario" />
+                <SitV2EditDot row={row} field="testType" />
+              </span>
             </div>
           }
         />
@@ -696,6 +701,7 @@ export function SitV2Grid({
                           <span className="mr-1 rounded bg-[#ede9fe] px-1.5 py-0.5 text-[12px] font-semibold text-[#5b21b6]">
                             {row.cells.requirementId || "—"}
                           </span>
+                          <SitV2EditDot row={row} field="preconditions" />
                           {!normalizeBulletText(row.cells.preconditions || "") ? (
                             <EmptyPlaceholder text="Add preconditions" />
                           ) : (
@@ -738,6 +744,7 @@ export function SitV2Grid({
           )}
                       display={
                         <div>
+                          <SitV2EditDot row={row} field="steps" />
                           {!((row.cells.steps || "").trim()) ? (
                             <EmptyPlaceholder text="Add steps" />
                           ) : (
@@ -779,13 +786,16 @@ export function SitV2Grid({
             />
           )}
           display={
-            !normalizeBulletText(row.cells.expected || "") ? (
-              <EmptyPlaceholder text="Add expected result" />
-            ) : (
-              <StepsClamp open={open} onShowMore={() => setExpanded((e) => ({ ...e, [row.id]: true }))}>
-                {renderBulletLines(row.cells.expected || "")}
-              </StepsClamp>
-            )
+            <div>
+              <SitV2EditDot row={row} field="expected" />
+              {!normalizeBulletText(row.cells.expected || "") ? (
+                <EmptyPlaceholder text="Add expected result" />
+              ) : (
+                <StepsClamp open={open} onShowMore={() => setExpanded((e) => ({ ...e, [row.id]: true }))}>
+                  {renderBulletLines(row.cells.expected || "")}
+                </StepsClamp>
+              )}
+            </div>
           }
         />
       );
