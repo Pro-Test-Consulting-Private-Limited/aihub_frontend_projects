@@ -24,6 +24,8 @@ describe("R7-05 flag chip / R7-06 expand / R7-07 clamp", () => {
 
   it("R7-07 clamp has no maxHeight mid-line cut", () => {
     expect(grid).toMatch(/sit-steps-clamp/);
-    expect(grid).not.toMatch(/maxHeight/);
+    const clampFn = grid.slice(grid.indexOf("function StepsClamp"), grid.indexOf("function EmptyPlaceholder"));
+    expect(clampFn).not.toMatch(/maxHeight/);
+    expect(clampFn).not.toMatch(/overflow-hidden/);
   });
 });
