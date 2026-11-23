@@ -418,6 +418,16 @@ export function atlasClient({ instance, accounts }: Msal) {
         "/sit/reassess",
         json("POST", body),
       ),
+    improveSitCase: (workbookId: string, rowId: string) =>
+      request<{
+        status: "proposal" | "no_improvement";
+        proposal?: Record<string, string>;
+        fixed?: string[];
+        remaining?: string[];
+        reason?: string;
+        issuesBefore?: number;
+        issuesAfter?: number;
+      }>(`/sit/workbooks/${workbookId}/cases/${rowId}/improve`, json("POST", {})),
     patchSitCase: (
       workbookId: string,
       rowId: string,
