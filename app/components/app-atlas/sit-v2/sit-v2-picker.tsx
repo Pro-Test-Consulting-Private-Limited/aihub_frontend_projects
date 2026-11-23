@@ -16,6 +16,7 @@ export function SitV2Picker({
   selected,
   clarifications,
   activeTicketKey,
+  liveCounts,
   onChange,
   onClose,
   onActivateTicket,
@@ -24,8 +25,10 @@ export function SitV2Picker({
   epics: SitEpic[];
   selected: SitTicket[];
   clarifications: CanvasClarification[];
-  /** Ticket currently shown in the results grid (Active tag). */
+  /** Ticket whose scope pill is active. Null when All is selected. */
   activeTicketKey?: string | null;
+  /** Live non-deleted case counts by ticket key (preferred over generation.caseCount). */
+  liveCounts?: Record<string, number>;
   onChange: (tickets: SitTicket[]) => void;
   onClose: () => void;
   onActivateTicket?: (key: string) => void;
@@ -216,18 +219,29 @@ export function SitV2Picker({
                                   >
                                     {t.hasNotes ? "Has notes" : "No notes"}
                                   </span>
-                                  <span className="rounded-full bg-[#f3f4f6] px-2 py-0.5 text-[10px] text-[#4b5563]">
-                                    {gen
-                                      ? `${gen.caseCount} cases · ${gen.generator === "huggingface" ? "AI" : "Template"} · ${ago(gen.at)}${
-                                          gen.edited ? " · edited" : ""
-                                        }${gen.versions > 1 ? ` · v${gen.versions}` : ""}`
-                                      : "Not generated"}
+                                  <span
+                                    className="rounded-full bg-[#f3f4f6] px-2 py-0.5 text-[12px] text-[#4b5563]"
+                                    data-testid={`sit-jira-case-count-${t.key}`}
+                                  >
+                                    {liveCounts && liveCounts[t.key] != null
+                                      ? `${liveCounts[t.key]} cases${
+                                          gen
+                                            ? ` · ${gen.generator === "huggingface" ? "AI" : "Template"} · ${ago(gen.at)}${
+                                                gen.versions > 1 ? ` · v${gen.versions} generated ${gen.caseCount}` : ""
+                                              }`
+                                            : ""
+                                        }`
+                                      : gen
+                                        ? `${gen.caseCount} cases · ${gen.generator === "huggingface" ? "AI" : "Template"} · ${ago(gen.at)}${
+                                            gen.edited ? " · edited" : ""
+                                          }${gen.versions > 1 ? ` · v${gen.versions}` : ""}`
+                                        : "Not generated"}
                                   </span>
-                                  {activeTicketKey === t.key && (
+                                  {activeTicketKey && activeTicketKey === t.key && (
                                     <span
                                       className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full bg-[#8664F2] px-2 py-0.5 text-[12px] font-semibold text-white"
                                       data-testid="sit-jira-active-tab-badge"
-                                      title="This ticket is the active scope tab in the Cases grid"
+                                      title="This ticket is the active scope pill in the Cases grid"
                                     >
                                       Active tab
                                     </span>

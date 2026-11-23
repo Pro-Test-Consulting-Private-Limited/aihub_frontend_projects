@@ -31,6 +31,19 @@ import {
   type FlaggedFilter,
 } from "@/app/lib/sit-case-flags";
 import {
+  liveCaseCount,
+  loadPersistedMode,
+  loadPersistedScope,
+  loadPersistedSelectedKeys,
+  mergeWorkbooksForKeys,
+  savePersistedMode,
+  savePersistedScope,
+  savePersistedSelectedKeys,
+  ticketsFromKeys,
+  workbookWithMergedRows,
+  workingSetKeys,
+} from "@/app/lib/sit-scope";
+import {
   defaultLayout,
   loadColumnLayout,
   saveColumnLayout,
@@ -79,6 +92,9 @@ export function SitTestingViewV2({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [workbook, setWorkbook] = useState<SitWorkbook | null>(null);
   const [history, setHistory] = useState<SitWorkbook[]>([]);
+  const [rowWorkbookId, setRowWorkbookId] = useState<Record<string, string>>({});
+  const [liveCounts, setLiveCounts] = useState<Record<string, number>>({});
+  const [pageError, setPageError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -102,7 +118,9 @@ export function SitTestingViewV2({
     }
   });
   const [deadAudit, setDeadAudit] = useState<SitDeadAudit | null>(null);
-  const [sitMode, setSitMode] = useState<"cases" | "issues">("cases");
+  const [sitMode, setSitMode] = useState<"cases" | "issues">(() =>
+    typeof window === "undefined" ? "cases" : loadPersistedMode(),
+  );
   /** R10-07: mutually exclusive with quality chips — Show in Cases from Issues */
   const [selectedIssueIds, setSelectedIssueIds] = useState<string[] | null>(null);
   const [improveReview, setImproveReview] = useState<{
@@ -119,29 +137,68 @@ export function SitTestingViewV2({
   const abortRef = useRef<AbortController | null>(null);
   const firstRowAt = useRef<number | null>(null);
 
+  const applyMergedScope = useCallback(
+    (hist: SitWorkbook[], sel: SitTicket[]) => {
+      const selectedKeys = sel.map((t) => t.key);
+      const histKeys = hist.flatMap((h) => h.sourceIssueKeys || []);
+      const keys = workingSetKeys(selectedKeys, selectedKeys.length ? selectedKeys : histKeys);
+      const merged = mergeWorkbooksForKeys(hist, keys);
+      const seed =
+        hist.find((h) => merged.workbookIds.includes(h.id)) || hist[0] || null;
+      const next = workbookWithMergedRows(seed, merged);
+      setWorkbook(next);
+      setRowWorkbookId(merged.rowWorkbookId);
+      setLiveCounts(merged.countsByTicket);
+      return merged;
+    },
+    [],
+  );
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setPageError(null);
     try {
       const [tickets, saved] = await Promise.all([
         client.listSitTickets(canvasId),
-        client.listSitWorkbooks(canvasId).catch(() => ({ items: [] as SitWorkbook[] })),
+        client.listSitWorkbooks(canvasId),
       ]);
       setEpics(tickets.epics);
       setProjectKey(tickets.projectKey);
       setNote(tickets.note ?? null);
       if (tickets.model?.state === "unconfigured") setSitNotConfigured(true);
-      setHistory(saved.items || []);
-      if (saved.items?.[0] && !workbook) setWorkbook(saved.items[0]);
+      const items = saved.items || [];
+      setHistory(items);
+      const allTickets = tickets.epics.flatMap((e) => e.tickets);
+      let persisted = loadPersistedSelectedKeys();
+      if (!persisted.length) {
+        persisted = workingSetKeys(
+          [],
+          items.flatMap((h) => h.sourceIssueKeys || []),
+        );
+      }
+      const nextSelected = ticketsFromKeys(allTickets, persisted);
+      setSelected(nextSelected);
+      savePersistedSelectedKeys(nextSelected.map((t) => t.key));
+      const scopeKeys = workingSetKeys(
+        nextSelected.map((t) => t.key),
+        items.flatMap((h) => h.sourceIssueKeys || []),
+      );
+      const scope = loadPersistedScope(scopeKeys);
+      setTicketFilter(scope);
+      savePersistedScope(scope);
+      applyMergedScope(items, nextSelected.length ? nextSelected : ticketsFromKeys(allTickets, scopeKeys));
       if (canvasId) {
         client.getClarifications(canvasId).then((c) => setClarifications(c.items || [])).catch(() => undefined);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load");
+      const msg = err instanceof Error ? err.message : "Failed to load";
+      setPageError(msg);
+      setError(msg);
     } finally {
       setLoading(false);
     }
-  }, [client, canvasId, workbook]);
+  }, [client, canvasId, applyMergedScope]);
 
   useEffect(() => {
     void load();
@@ -205,11 +262,16 @@ export function SitTestingViewV2({
 
   const activateTicket = (key: string) => {
     setTicketFilter(key);
-    const match = history.find((h) => h.sourceIssueKeys.includes(key));
-    if (match) setWorkbook(match);
+    savePersistedScope(key);
     const all = epics.flatMap((e) => e.tickets);
     const t = all.find((x) => x.key === key);
-    if (t && !selected.some((s) => s.key === key)) setSelected((s) => [...s, t]);
+    const nextSelected =
+      t && !selected.some((s) => s.key === key) ? [...selected, t] : selected;
+    if (t && nextSelected !== selected) {
+      setSelected(nextSelected);
+      savePersistedSelectedKeys(nextSelected.map((s) => s.key));
+    }
+    applyMergedScope(history, nextSelected);
   };
 
   const modelReady = modelMapped.ui === "ready";
@@ -350,13 +412,15 @@ export function SitTestingViewV2({
     }
     const choices: TicketGenChoice[] = selected.map((t) => {
       const gen = t.generation;
-      if (gen && gen.caseCount > 0) {
+      const live = liveCounts[t.key] ?? 0;
+      const existing = live > 0 || (gen && gen.caseCount > 0);
+      if (existing) {
         return {
           issueKey: t.key,
           mode: "append" as const,
-          workbookId: gen.workbookId,
+          workbookId: gen?.workbookId || rowWorkbookId[Object.keys(rowWorkbookId)[0] || ""] || workbook?.id,
           hasExisting: true,
-          caseCount: gen.caseCount,
+          caseCount: live || gen?.caseCount || 0,
         };
       }
       return { issueKey: t.key, mode: "new" as const, hasExisting: false, caseCount: 0 };
@@ -380,6 +444,7 @@ export function SitTestingViewV2({
     opts?: { label?: string },
   ) => {
     if (!workbook || workbook.id === "pending") return;
+    const wbId = rowWorkbookId[rowId] || workbook.id;
     setSaveState("saving");
     const label =
       opts?.label ||
@@ -399,8 +464,14 @@ export function SitTestingViewV2({
                     ? Object.keys(body.cells)[0] || "field"
                     : "case");
     try {
-      const next = await client.patchSitCase(workbook.id, rowId, body);
-      setWorkbook(next);
+      const next = await client.patchSitCase(wbId, rowId, body);
+      setHistory((prev) => {
+        const hist = prev.some((h) => h.id === next.id)
+          ? prev.map((h) => (h.id === next.id ? next : h))
+          : [next, ...prev];
+        applyMergedScope(hist, selected);
+        return hist;
+      });
       setSaveState("saved");
       setSaveRetry(null);
       setError(null);
@@ -415,8 +486,9 @@ export function SitTestingViewV2({
 
   const softDelete = async (rowId: string) => {
     if (!workbook) return;
+    const wbId = rowWorkbookId[rowId] || workbook.id;
     await patchRow(rowId, { softDelete: true });
-    setUndoRow({ workbookId: workbook.id, rowIds: [rowId] });
+    setUndoRow({ workbookId: wbId, rowIds: [rowId] });
   };
 
   const softDeleteMany = async (rowIds: string[]) => {
@@ -483,13 +555,20 @@ export function SitTestingViewV2({
     }
   };
 
+  /** All non-deleted rows in the merged workbook (working set). */
+  const allWorkingRows = useMemo(() => {
+    return (
+      workbook?.sheets.find((s) => s.kind === "test-cases")?.rows.filter((r) => r.cells.deleted !== "1") || []
+    );
+  }, [workbook]);
+
   /** Ticket-scope rows for flag counts (pills only; never search/type/status). */
   const scopeRows = useMemo(() => {
-    const rows =
-      workbook?.sheets.find((s) => s.kind === "test-cases")?.rows.filter((r) => r.cells.deleted !== "1") || [];
-    if (ticketFilter === "all") return rows;
-    return rows.filter((r) => r.cells.requirementId === ticketFilter || r.cells.issueKey === ticketFilter);
-  }, [workbook, ticketFilter]);
+    if (ticketFilter === "all") return allWorkingRows;
+    return allWorkingRows.filter(
+      (r) => r.cells.requirementId === ticketFilter || r.cells.issueKey === ticketFilter,
+    );
+  }, [allWorkingRows, ticketFilter]);
 
   const flagSummary = useMemo(() => summarizeCaseFlags(scopeRows, null), [scopeRows]);
 
@@ -553,12 +632,8 @@ export function SitTestingViewV2({
     };
   }, [workbook, deadFlag, selectedIssueIds, flagSummary, ticketFilter]);
 
-  /** R7-03: Showing N of M in toolbar (same filters as grid). */
-  const toolbarTotalCount = useMemo(() => {
-    return (
-      workbook?.sheets.find((s) => s.kind === "test-cases")?.rows.filter((r) => r.cells.deleted !== "1").length ?? 0
-    );
-  }, [workbook]);
+  /** R7-03 / R12-01: Y in "Showing X of Y" is the current ticket scope (All or DW-x). */
+  const toolbarTotalCount = useMemo(() => scopeRows.length, [scopeRows]);
   const toolbarShownCount = useMemo(() => {
     let list =
       displayWorkbook?.sheets.find((s) => s.kind === "test-cases")?.rows.filter((r) => r.cells.deleted !== "1") ||
@@ -583,8 +658,8 @@ export function SitTestingViewV2({
   }, [displayWorkbook, ticketFilter, typeFilter, statusFilter, originFilter, search]);
 
   const counts = useMemo(() => {
-    const rows =
-      workbook?.sheets.find((s) => s.kind === "test-cases")?.rows.filter((r) => r.cells.deleted !== "1") || [];
+    // R12-01: origin / run chips follow the active ticket scope.
+    const rows = scopeRows;
     let ai = 0;
     let human = 0;
     let edited = 0;
@@ -630,11 +705,12 @@ export function SitTestingViewV2({
       partial: byStatus.Partial,
       notRun: byStatus["Not run"],
     };
-  }, [workbook]);
+  }, [scopeRows]);
 
   const metaProject = projectName || projectKey || ", ";
   const metaModule = canvasName || ", ";
-  const activeTicketKey = ticketFilter !== "all" ? ticketFilter : workbook?.sourceIssueKeys?.[0] || null;
+  // R12-01: Active tab only when a single pill is active, never when All is selected.
+  const activeTicketKey = ticketFilter !== "all" ? ticketFilter : null;
 
   const activeAcs = useMemo(() => {
     if (!activeTicketKey) return [] as string[];
@@ -742,11 +818,13 @@ export function SitTestingViewV2({
               type="button"
               onClick={() => {
                 if (!selected.length && !workbook) return;
-                if (true) { // soft clear ,  no native confirm (U12)
-                  setSelected([]);
-                  setWorkbook(null);
-                  setTicketFilter("all");
-                }
+                setSelected([]);
+                setWorkbook(null);
+                setRowWorkbookId({});
+                setLiveCounts({});
+                setTicketFilter("all");
+                savePersistedSelectedKeys([]);
+                savePersistedScope("all");
               }}
               className="rounded-[8px] border border-[#e2e6ef] px-3 py-1.5 text-[12.5px] text-[#5b647a] dark:border-[#2a2a2a]"
             >
@@ -793,7 +871,7 @@ export function SitTestingViewV2({
                 )}
               </div>
             )}
-            {workbook && workbook.id !== "pending" && (
+            {(selected.length > 0 || (workbook && workbook.id !== "pending")) && (
               <>
                 <div
                   className="inline-flex rounded-[8px] border border-[#e2e6ef] p-0.5 text-[12.5px]"
@@ -809,7 +887,10 @@ export function SitTestingViewV2({
                     className={`rounded-[6px] px-2.5 py-1 font-medium ${
                       sitMode === "cases" ? "bg-[#8664F2] text-white" : "text-[#5b647a]"
                     }`}
-                    onClick={() => setSitMode("cases")}
+                    onClick={() => {
+                      setSitMode("cases");
+                      savePersistedMode("cases");
+                    }}
                   >
                     Cases
                   </button>
@@ -821,7 +902,10 @@ export function SitTestingViewV2({
                     className={`rounded-[6px] px-2.5 py-1 font-medium ${
                       sitMode === "issues" ? "bg-[#8664F2] text-white" : "text-[#5b647a]"
                     }`}
-                    onClick={() => setSitMode("issues")}
+                    onClick={() => {
+                      setSitMode("issues");
+                      savePersistedMode("issues");
+                    }}
                   >
                     Issues {flagSummary.attentionCases}
                   </button>
@@ -938,44 +1022,57 @@ export function SitTestingViewV2({
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-3">
         {loading ? (
-          <div className="flex items-center gap-2 text-[13px] text-[#8a93a8]">
+          <div className="flex items-center gap-2 text-[13px] text-[#8a93a8]" data-testid="sit-page-loading">
             <TbLoader2 className="animate-spin" /> Loading…
           </div>
-        ) : displayWorkbook ? (
+        ) : pageError ? (
+          <div className="flex flex-col gap-2 text-[13px]" data-testid="sit-page-error">
+            <p className="text-[#b42318]">{pageError}</p>
+            <button
+              type="button"
+              className="w-fit rounded-[8px] border border-[#e2e6ef] px-3 py-1.5 font-medium"
+              data-testid="sit-page-retry"
+              onClick={() => void load()}
+            >
+              Retry
+            </button>
+          </div>
+        ) : displayWorkbook && allWorkingRows.length > 0 ? (
           <div className="flex min-h-0 flex-1 flex-col gap-2">
             {/* Compact in-grid chrome: ticket chips + filters (not a Saved-runs list) */}
             <div className="flex shrink-0 flex-wrap items-center gap-1.5">
               <button
                 type="button"
-                onClick={() => setTicketFilter("all")}
+                data-testid="sit-scope-pill-all"
+                onClick={() => {
+                  setTicketFilter("all");
+                  savePersistedScope("all");
+                }}
                 className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
                   ticketFilter === "all" ? "bg-[#8664F2] text-white" : "border border-[#e2e6ef] bg-white"
                 }`}
               >
-                All
+                All {liveCaseCount(allWorkingRows)}
               </button>
-              {(() => {
-                // R11-05: pills from working set (selected) union workbook keys (existing cases).
-                const keys = Array.from(
-                  new Set([
-                    ...selected.map((t) => t.key),
-                    ...(displayWorkbook.sourceIssueKeys || []),
-                  ]),
-                );
-                return keys.map((k) => (
-                  <button
-                    key={k}
-                    type="button"
-                    data-testid={`sit-scope-pill-${k}`}
-                    onClick={() => setTicketFilter(k)}
-                    className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
-                      ticketFilter === k ? "bg-[#8664F2] text-white" : "border border-[#e2e6ef] bg-white"
-                    }`}
-                  >
-                    {k}
-                  </button>
-                ));
-              })()}
+              {workingSetKeys(
+                selected.map((t) => t.key),
+                displayWorkbook.sourceIssueKeys || [],
+              ).map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  data-testid={`sit-scope-pill-${k}`}
+                  onClick={() => {
+                    setTicketFilter(k);
+                    savePersistedScope(k);
+                  }}
+                  className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
+                    ticketFilter === k ? "bg-[#8664F2] text-white" : "border border-[#e2e6ef] bg-white"
+                  }`}
+                >
+                  {k} {liveCounts[k] ?? liveCaseCount(allWorkingRows, k)}
+                </button>
+              ))}
               <QualityActiveChip
                 audit={deadAudit}
                 summary={flagSummary}
@@ -1443,8 +1540,13 @@ export function SitTestingViewV2({
             </div>
             </div>
           </div>
+        ) : selected.length > 0 ? (
+          <p className="text-[13px] text-[#8a93a8]" data-testid="sit-page-empty-no-cases">
+            No cases generated yet for the selected tickets. Click Generate for {selected.length} ticket
+            {selected.length === 1 ? "" : "s"}.
+          </p>
         ) : (
-          <p className="text-[13px] text-[#8a93a8]">
+          <p className="text-[13px] text-[#8a93a8]" data-testid="sit-page-empty-no-selection">
             Open <strong>Jira Tickets</strong>, select stories mapped to this canvas, then Generate.
           </p>
         )}
@@ -1488,7 +1590,20 @@ export function SitTestingViewV2({
           selected={selected}
           clarifications={clarifications}
           activeTicketKey={activeTicketKey}
-          onChange={setSelected}
+          liveCounts={liveCounts}
+          onChange={(tickets) => {
+            setSelected(tickets);
+            savePersistedSelectedKeys(tickets.map((t) => t.key));
+            applyMergedScope(history, tickets);
+            const keys = workingSetKeys(
+              tickets.map((t) => t.key),
+              history.flatMap((h) => h.sourceIssueKeys || []),
+            );
+            if (ticketFilter !== "all" && !keys.includes(ticketFilter)) {
+              setTicketFilter("all");
+              savePersistedScope("all");
+            }
+          }}
           onClose={() => setPickerOpen(false)}
           onActivateTicket={(key) => {
             activateTicket(key);
