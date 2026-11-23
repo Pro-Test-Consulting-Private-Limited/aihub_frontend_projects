@@ -225,11 +225,14 @@ export function DeadTestFinderToolbar({
   loading,
   activeFlag,
   onFlag,
+  draftCount = 0,
 }: {
   audit: SitDeadAudit | null;
   loading?: boolean;
   activeFlag: QualityFilter;
   onFlag: (flag: QualityFilter) => void;
+  /** R10-04: Draft rows are not quality-checked until Not run. */
+  draftCount?: number;
   /** @deprecated R7-04 ignored */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -385,6 +388,14 @@ export function DeadTestFinderToolbar({
               {flagged === 0
                 ? "No quality issues found"
                 : `${flagged} cases need attention (${issues} issues)`}
+              {draftCount > 0 ? (
+                <div
+                  className="mt-1 text-[12px] font-normal text-[#9ca3af]"
+                  data-testid="sit-quality-draft-line"
+                >
+                  {draftCount} Draft cases are not checked until they are set to Not run.
+                </div>
+              ) : null}
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto py-1">
               {rows.map((row, idx) => {

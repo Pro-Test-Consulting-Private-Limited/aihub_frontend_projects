@@ -711,6 +711,15 @@ export function SitTestingViewV2({
                 loading={deadLoading}
                 activeFlag={deadFlag}
                 onFlag={setDeadFlag}
+                draftCount={
+                  workbook.sheets
+                    .find((s) => s.kind === "test-cases")
+                    ?.rows.filter(
+                      (r) =>
+                        r.cells.deleted !== "1" &&
+                        (r.cells.executionStatus || "Not run") === "Draft",
+                    ).length || 0
+                }
               />
             )}
           </div>
