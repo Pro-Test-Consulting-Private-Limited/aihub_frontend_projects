@@ -775,8 +775,9 @@ for (const explorerOpen of [true, false]) {
     // Expand AI row and ensure Edits list does not mention Actual/Notes as content edits
     await aiRow.getByTestId("sit-row-chevron").click().catch(() => {});
     await page.waitForTimeout(400);
-    const panel = page.getByTestId("sit-row-expand-panel");
-    const panelText = (await panel.count()) ? await panel.innerText() : "";
+    // R13: more than one row can be expanded; read the first panel only.
+    const panel = page.getByTestId("sit-row-expand-panel").first();
+    const panelText = (await page.getByTestId("sit-row-expand-panel").count()) ? await panel.innerText() : "";
     const editsMentionsExec =
       /actualResult|userNote|Actual result|Add a note/i.test(panelText) &&
       /Revert this field/i.test(panelText) &&

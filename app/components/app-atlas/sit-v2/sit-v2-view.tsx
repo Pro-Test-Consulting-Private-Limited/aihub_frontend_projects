@@ -44,6 +44,14 @@ import {
   workingSetKeys,
 } from "@/app/lib/sit-scope";
 import {
+  EDITED_TOGGLE_TOOLTIP,
+  SOURCE_GROUP_LABEL,
+  countProvenance,
+  getCaseProvenance,
+  migrateOriginFilterPersist,
+  type CaseOrigin,
+} from "@/app/lib/sit-case-provenance";
+import {
   defaultLayout,
   loadColumnLayout,
   saveColumnLayout,
@@ -105,7 +113,44 @@ export function SitTestingViewV2({
   const [ticketFilter, setTicketFilter] = useState<string | "all">("all");
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
-  const [originFilter, setOriginFilter] = useState<string | null>(null);
+  const [originFilter, setOriginFilter] = useState<CaseOrigin | "all">(() => {
+    if (typeof window === "undefined") return "all";
+    try {
+      const raw = localStorage.getItem("sit_v2_origin_filter");
+      const migrated = migrateOriginFilterPersist(raw);
+      if (raw === "edited") {
+        try {
+          localStorage.setItem("sit_v2_origin_filter", "all");
+          localStorage.setItem("sit_v2_edited_only", "1");
+        } catch {
+          /* ignore */
+        }
+      }
+      return migrated.origin;
+    } catch {
+      return "all";
+    }
+  });
+  /** R13: Edited is a modifier toggle, not an origin value. */
+  const [editedOnly, setEditedOnly] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      const raw = localStorage.getItem("sit_v2_origin_filter");
+      const migrated = migrateOriginFilterPersist(raw);
+      if (migrated.editedOnly) {
+        try {
+          localStorage.setItem("sit_v2_origin_filter", "all");
+          localStorage.setItem("sit_v2_edited_only", "1");
+        } catch {
+          /* ignore */
+        }
+        return true;
+      }
+      return localStorage.getItem("sit_v2_edited_only") === "1";
+    } catch {
+      return false;
+    }
+  });
   const [search, setSearch] = useState("");
   const [undoRow, setUndoRow] = useState<{ workbookId: string; rowIds: string[] } | null>(null);
   const [deadFlag, setDeadFlag] = useState<FlaggedFilter>(() => {
@@ -643,8 +688,12 @@ export function SitTestingViewV2({
     }
     if (typeFilter) list = list.filter((r) => (r.cells.testType || "") === typeFilter);
     if (statusFilter) list = list.filter((r) => (r.cells.executionStatus || "Not run") === statusFilter);
-    if (originFilter === "edited") list = list.filter((r) => r.cells.edited === "1" && r.cells.origin !== "human");
-    else if (originFilter) list = list.filter((r) => (r.cells.origin || "ai") === originFilter);
+    if (originFilter !== "all") {
+      list = list.filter((r) => getCaseProvenance(r.cells).origin === originFilter);
+    }
+    if (editedOnly) {
+      list = list.filter((r) => getCaseProvenance(r.cells).edited);
+    }
     if (search.trim()) {
       const n = search.toLowerCase();
       list = list.filter((r) =>
@@ -655,15 +704,15 @@ export function SitTestingViewV2({
       );
     }
     return list.length;
-  }, [displayWorkbook, ticketFilter, typeFilter, statusFilter, originFilter, search]);
+  }, [displayWorkbook, ticketFilter, typeFilter, statusFilter, originFilter, editedOnly, search]);
 
+  /** R13: origin chip counts over ticket scope only (not search/type/status/flagged/edited). */
   const counts = useMemo(() => {
-    // R12-01: origin / run chips follow the active ticket scope.
     const rows = scopeRows;
-    let ai = 0;
-    let human = 0;
-    let edited = 0;
-    let template = 0;
+    const prov = countProvenance(rows);
+    const editedForOrigin = countProvenance(rows, {
+      origin: originFilter === "all" ? "all" : originFilter,
+    }).edited;
     const byStatus: Record<string, number> = {
       Draft: 0,
       "Not run": 0,
@@ -675,27 +724,16 @@ export function SitTestingViewV2({
       Stale: 0,
     };
     for (const r of rows) {
-      if (r.cells.origin === "human") human++;
-      else if (r.cells.origin === "template") template++;
-      else ai++;
-      // Edited = AI row changed by a person (never human / legacy template)
-      if (
-        r.cells.edited === "1" &&
-        r.cells.origin !== "human" &&
-        r.cells.origin !== "template"
-      ) {
-        edited++;
-      }
       const st = r.cells.executionStatus || "Not run";
       if (st in byStatus) byStatus[st]!++;
       else byStatus["Not run"]!++;
     }
     return {
-      total: rows.length,
-      ai,
-      human,
-      edited,
-      template,
+      total: prov.total,
+      ai: prov.ai,
+      human: prov.human,
+      edited: editedForOrigin,
+      template: 0,
       Draft: byStatus.Draft,
       Blocked: byStatus.Blocked,
       Skipped: byStatus.Skipped,
@@ -705,7 +743,7 @@ export function SitTestingViewV2({
       partial: byStatus.Partial,
       notRun: byStatus["Not run"],
     };
-  }, [scopeRows]);
+  }, [scopeRows, originFilter]);
 
   const metaProject = projectName || projectKey || ", ";
   const metaModule = canvasName || ", ";
@@ -1041,38 +1079,46 @@ export function SitTestingViewV2({
           <div className="flex min-h-0 flex-1 flex-col gap-2">
             {/* Compact in-grid chrome: ticket chips + filters (not a Saved-runs list) */}
             <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-              <button
-                type="button"
-                data-testid="sit-scope-pill-all"
-                onClick={() => {
-                  setTicketFilter("all");
-                  savePersistedScope("all");
-                }}
-                className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
-                  ticketFilter === "all" ? "bg-[#8664F2] text-white" : "border border-[#e2e6ef] bg-white"
-                }`}
+              <div
+                className="inline-flex flex-wrap items-center gap-1"
+                role="group"
+                aria-label="Ticket scope"
+                data-testid="sit-ticket-scope-group"
               >
-                All {liveCaseCount(allWorkingRows)}
-              </button>
-              {workingSetKeys(
-                selected.map((t) => t.key),
-                displayWorkbook.sourceIssueKeys || [],
-              ).map((k) => (
                 <button
-                  key={k}
                   type="button"
-                  data-testid={`sit-scope-pill-${k}`}
+                  data-testid="sit-scope-pill-all"
+                  title="All tickets in the working set"
                   onClick={() => {
-                    setTicketFilter(k);
-                    savePersistedScope(k);
+                    setTicketFilter("all");
+                    savePersistedScope("all");
                   }}
-                  className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
-                    ticketFilter === k ? "bg-[#8664F2] text-white" : "border border-[#e2e6ef] bg-white"
+                  className={`rounded-full px-2.5 py-0.5 text-[12px] font-medium ${
+                    ticketFilter === "all" ? "bg-[#8664F2] text-white" : "border border-[#e2e6ef] bg-white"
                   }`}
                 >
-                  {k} {liveCounts[k] ?? liveCaseCount(allWorkingRows, k)}
+                  All tickets {liveCaseCount(allWorkingRows)}
                 </button>
-              ))}
+                {workingSetKeys(
+                  selected.map((t) => t.key),
+                  displayWorkbook.sourceIssueKeys || [],
+                ).map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    data-testid={`sit-scope-pill-${k}`}
+                    onClick={() => {
+                      setTicketFilter(k);
+                      savePersistedScope(k);
+                    }}
+                    className={`rounded-full px-2.5 py-0.5 text-[12px] font-medium ${
+                      ticketFilter === k ? "bg-[#8664F2] text-white" : "border border-[#e2e6ef] bg-white"
+                    }`}
+                  >
+                    {k} {liveCounts[k] ?? liveCaseCount(allWorkingRows, k)}
+                  </button>
+                ))}
+              </div>
               <QualityActiveChip
                 audit={deadAudit}
                 summary={flagSummary}
@@ -1151,57 +1197,96 @@ export function SitTestingViewV2({
                 onChange={(v) => setStatusFilter(v || null)}
               />
               <div
-                className="inline-flex flex-wrap items-center gap-0.5 rounded-[8px] border border-[#e2e6ef] bg-white p-0.5 dark:border-[#2a2a2a] dark:bg-[#141414]"
-                role="group"
-                aria-label="Origin filter with counts"
-                data-testid="sit-origin-filter-chips"
+                className="inline-flex flex-wrap items-center gap-1"
+                data-testid="sit-source-group"
               >
-                {(
-                  [
-                    { id: null as string | null, label: "All", n: counts.total, always: true },
-                    { id: "ai", label: "AI", n: counts.ai, always: false },
-                    { id: "human", label: "Human", n: counts.human, always: false },
-                    ...(counts.template
-                      ? [{ id: "template" as const, label: "Legacy", n: counts.template, always: false }]
-                      : []),
-                    { id: "edited", label: "Edited", n: counts.edited, always: false },
-                  ] as { id: string | null; label: string; n: number; always: boolean }[]
-                )
-                  .filter((o) => o.always || o.n > 0)
-                  .map((o) => {
-                    const active = (originFilter || null) === o.id;
+                <span
+                  className="text-[12px] font-medium text-[#8a93a8]"
+                  title="Who created the case. All sources = AI + Human."
+                >
+                  {SOURCE_GROUP_LABEL}
+                </span>
+                <div
+                  className="inline-flex flex-wrap items-center gap-0.5 rounded-[8px] border border-[#e2e6ef] bg-white p-0.5 dark:border-[#2a2a2a] dark:bg-[#141414]"
+                  role="group"
+                  aria-label="Source filter with counts"
+                  data-testid="sit-origin-filter-chips"
+                >
+                  {(
+                    [
+                      { id: "all" as const, label: "All sources", n: counts.total },
+                      { id: "ai" as const, label: "AI", n: counts.ai },
+                      { id: "human" as const, label: "Human", n: counts.human },
+                    ] as { id: CaseOrigin | "all"; label: string; n: number }[]
+                  ).map((o) => {
+                    const active = originFilter === o.id;
+                    const muted = o.id === "human" && o.n === 0 && !active;
                     return (
                       <button
-                        key={o.label}
+                        key={o.id}
                         type="button"
+                        data-testid={`sit-origin-chip-${o.id}`}
                         title={
-                          o.id === "edited"
-                            ? "Edited = an AI row changed by a person"
-                            : o.id === "template"
-                              ? "Legacy = old template rows"
-                              : o.id === "ai"
-                                ? "Generated by AI"
-                                : o.id === "human"
-                                  ? "Added by a person"
-                                  : "All cases"
+                          o.id === "ai"
+                            ? "Generated by AI"
+                            : o.id === "human"
+                              ? "Added by a person"
+                              : "All sources = AI + Human"
                         }
                         className={`rounded-[6px] px-2 py-0.5 text-[12px] font-medium transition ${
                           active
                             ? "bg-[#f3f0ff] text-[#5b21b6]"
-                            : "text-[#5b647a] hover:bg-[#f8fafc]"
+                            : muted
+                              ? "text-[#c0c6d4]"
+                              : "text-[#5b647a] hover:bg-[#f8fafc]"
                         }`}
                         aria-pressed={active}
-                        onClick={() => setOriginFilter(o.id)}
+                        onClick={() => {
+                          setOriginFilter(o.id);
+                          try {
+                            localStorage.setItem("sit_v2_origin_filter", o.id);
+                          } catch {
+                            /* ignore */
+                          }
+                        }}
                       >
                         {o.label} {o.n}
                       </button>
                     );
                   })}
+                </div>
+                <button
+                  type="button"
+                  data-testid="sit-edited-toggle"
+                  title={EDITED_TOGGLE_TOOLTIP}
+                  aria-pressed={editedOnly}
+                  onClick={() => {
+                    setEditedOnly((v) => {
+                      const next = !v;
+                      try {
+                        localStorage.setItem("sit_v2_edited_only", next ? "1" : "0");
+                        // Clear legacy "edited" origin persist once migrated.
+                        const raw = localStorage.getItem("sit_v2_origin_filter");
+                        if (raw === "edited") localStorage.setItem("sit_v2_origin_filter", originFilter);
+                      } catch {
+                        /* ignore */
+                      }
+                      return next;
+                    });
+                  }}
+                  className={`rounded-[6px] border px-2 py-0.5 text-[12px] font-medium transition ${
+                    editedOnly
+                      ? "border-[#f59e0b] bg-[#fffbeb] text-[#b45309]"
+                      : "border-[#e2e6ef] bg-white text-[#5b647a] hover:bg-[#f8fafc]"
+                  }`}
+                >
+                  Edited {counts.edited}
+                </button>
               </div>
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search…"
+                placeholder="Search..."
                 className="w-28 rounded-[6px] border border-[#e2e6ef] bg-white px-2 py-0.5 text-[11px] dark:border-[#2a2a2a] dark:bg-[#141414]"
               />
               {activeTicketKey && activeAcs.length > 0 && (
@@ -1283,7 +1368,7 @@ export function SitTestingViewV2({
                   <div
                     className="inline-flex flex-wrap items-center gap-2 text-[11px]"
                     data-testid="sit-status-bar"
-                    title="Draft = unfinished row. Edited = an AI row changed by a person."
+                    title="Draft = unfinished row. Edited = content changed by a person after creation."
                   >
                     <span className="font-medium text-[#374151]">
                       {runDone} of {total} run
@@ -1499,6 +1584,7 @@ export function SitTestingViewV2({
               typeFilter={typeFilter}
               statusFilter={statusFilter}
               originFilter={originFilter}
+              editedOnly={editedOnly}
               search={search}
               generating={generating}
               layout={columnLayout}

@@ -5,6 +5,7 @@
 import type { SitSheetRow, SitWorkbook } from "@/app/interfaces/appatlas";
 import { sanitizeUserText } from "@/app/lib/sit-sanitize-text";
 import { normalizeBulletText } from "@/app/components/app-atlas/sit-v2/sit-v2-bullets";
+import { getCaseProvenance } from "@/app/lib/sit-case-provenance";
 
 export type ExportScope = "view" | "selected" | "all";
 
@@ -93,8 +94,8 @@ export function casesForExport(
     status: cell(r, "executionStatus") || "Not run",
     actualResult: exportText(cell(r, "actualResult")),
     notes: exportText(cell(r, "userNote")),
-    origin: cell(r, "origin"),
-    edited: r.cells.edited === "1" || r.cells.edited === "true" ? "yes" : "no",
+    origin: getCaseProvenance(r.cells).origin,
+    edited: getCaseProvenance(r.cells).edited ? "yes" : "no",
     acIds: cell(r, "acIds") || cell(r, "ac"),
     version: cell(r, "version"),
     statusBy: cell(r, "statusBy"),

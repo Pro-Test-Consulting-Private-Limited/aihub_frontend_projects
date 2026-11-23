@@ -12,6 +12,7 @@ import {
 import type { SitDeadAudit, SitEpic, SitSheetRow, SitWorkbook } from "@/app/interfaces/appatlas";
 import { displayModuleFeature } from "@/app/lib/sit-module-feature";
 import { OriginGlyph, provenanceTooltip } from "./sit-v2-bits";
+import { getCaseProvenance } from "@/app/lib/sit-case-provenance";
 import { SitV2EditableCell, type CellCoord } from "./sit-v2-editable-cell";
 import { SitV2ListEditor } from "./sit-v2-list-editor";
 import { SitV2Select } from "./sit-v2-select";
@@ -313,6 +314,7 @@ export function SitV2Grid({
   typeFilter,
   statusFilter,
   originFilter,
+  editedOnly = false,
   search,
   generating,
   layout,
@@ -334,7 +336,8 @@ export function SitV2Grid({
   ticketFilter: string | "all";
   typeFilter: string | null;
   statusFilter: string | null;
-  originFilter: string | null;
+  originFilter: "all" | "ai" | "human";
+  editedOnly?: boolean;
   search: string;
   generating?: boolean;
   layout: SitColumnLayout;
@@ -480,8 +483,12 @@ export function SitV2Grid({
     }
     if (typeFilter) list = list.filter((r) => (r.cells.testType || "") === typeFilter);
     if (statusFilter) list = list.filter((r) => (r.cells.executionStatus || "Not run") === statusFilter);
-    if (originFilter === "edited") list = list.filter((r) => r.cells.edited === "1" && r.cells.origin !== "human");
-    else if (originFilter) list = list.filter((r) => (r.cells.origin || "ai") === originFilter);
+    if (originFilter !== "all") {
+      list = list.filter((r) => getCaseProvenance(r.cells).origin === originFilter);
+    }
+    if (editedOnly) {
+      list = list.filter((r) => getCaseProvenance(r.cells).edited);
+    }
     if (search.trim()) {
       const n = search.toLowerCase();
       list = list.filter((r) =>
@@ -492,7 +499,7 @@ export function SitV2Grid({
       );
     }
     return list;
-  }, [workbook, ticketFilter, typeFilter, statusFilter, originFilter, search]);
+  }, [workbook, ticketFilter, typeFilter, statusFilter, originFilter, editedOnly, search]);
 
   const schedulePatch = (rowId: string, cells: Record<string, string>) => {
     const key = `${rowId}:${Object.keys(cells).join(",")}`;
@@ -1149,7 +1156,8 @@ export function SitV2Grid({
               ))}
             {rows.map((row) => {
               const open = !!expanded[row.id];
-              const edited = row.cells.edited === "1" && row.cells.origin !== "human";
+              const prov = getCaseProvenance(row.cells);
+              const edited = prov.edited;
               const tip = provenanceTooltip(row.cells);
               return (
                 <Fragment key={row.id}>
@@ -1205,7 +1213,7 @@ export function SitV2Grid({
                           }}
                         >
                           {open ? <TbChevronDown size={12} /> : <TbChevronRight size={12} />}
-                          <OriginGlyph origin={row.cells.origin} edited={edited} title={tip} />
+                          <OriginGlyph origin={prov.origin} edited={edited} title={tip} />
                           <span className="whitespace-nowrap">{row.cells.caseId || row.cells.tcId}</span>
                         </button>
                         <RowMenu

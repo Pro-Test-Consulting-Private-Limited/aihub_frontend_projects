@@ -14,12 +14,13 @@ describe("U1 Remove Template from SIT v2", () => {
     expect(view).toMatch(/modelMapped\.generateDisabled/);
   });
 
-  it("labels old template origin as Legacy", () => {
+  it("labels old template origin as Legacy in tooltip", () => {
     expect(bits).toMatch(/Legacy/);
     expect(bits).toMatch(/old template row/);
+    expect(bits).toMatch(/getCaseProvenance/);
   });
 
-  it("does not count human rows as Edited in the counts loop", () => {
-    expect(view).toMatch(/never human \/ legacy template/);
+  it("uses getCaseProvenance SOT for edited (human never edited)", () => {
+    expect(view).toMatch(/getCaseProvenance|countProvenance/);
   });
 });

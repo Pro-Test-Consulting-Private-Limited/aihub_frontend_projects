@@ -6,6 +6,7 @@ import { OriginBadge } from "./sit-v2-bits";
 import { renderBulletLines } from "./sit-v2-bullets";
 import { listFieldEdits } from "./sit-v2-edit-dot";
 import { SitQualityFlagChip, SitQualityReasons } from "./sit-quality-flag-chip";
+import { getCaseProvenance } from "@/app/lib/sit-case-provenance";
 
 function TestDataTable({ row }: { row: SitSheetRow }) {
   const entries: [string, string][] = [];
@@ -56,7 +57,8 @@ export function SitV2ExpandPanel({
   qualityHits?: DeadFlagHit[];
   initialTab?: ExpandTab;
 }) {
-  const isAi = (row.cells.origin || "").toLowerCase() === "ai";
+  const prov = getCaseProvenance(row.cells);
+  const isAi = prov.origin === "ai";
   const [tab, setTab] = useState<ExpandTab>(initialTab === "ai" && !isAi ? "history" : initialTab);
   const [showAllAc, setShowAllAc] = useState(false);
   const acIds = (row.cells.acIds || row.cells.ac || "")
@@ -106,7 +108,7 @@ export function SitV2ExpandPanel({
         className="mb-3 flex flex-wrap items-center gap-2 text-[13px]"
         data-testid="sit-expand-header"
       >
-        <OriginBadge origin={row.cells.origin} edited={row.cells.edited === "1"} />
+        <OriginBadge origin={prov.origin} edited={prov.edited} />
         <span className="rounded-full border border-[#e2e6ef] bg-white px-2 py-0.5 text-[12px]">
           Version {version}
         </span>
