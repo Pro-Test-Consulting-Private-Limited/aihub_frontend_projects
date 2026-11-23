@@ -22,6 +22,8 @@ import { SitV2GenerateDialog, type TicketGenChoice } from "./sit-v2-generate-dia
 import { SitV2Grid } from "./sit-v2-grid";
 import { SitV2AcChip } from "./sit-v2-ac-chip";
 import { SitV2Select } from "./sit-v2-select";
+import { SitV2IssuesScreen } from "./sit-v2-issues-screen";
+import { qualityCount, highlightQualityRow } from "../sit-dead-finder";
 import {
   defaultLayout,
   loadColumnLayout,
@@ -86,6 +88,9 @@ export function SitTestingViewV2({
   const [undoRow, setUndoRow] = useState<{ workbookId: string; rowIds: string[] } | null>(null);
   const [deadFlag, setDeadFlag] = useState<QualityFilter>(null);
   const [deadAudit, setDeadAudit] = useState<SitDeadAudit | null>(null);
+  const [sitMode, setSitMode] = useState<"cases" | "issues">("cases");
+  /** R10-07: mutually exclusive with quality chips — Show in Cases from Issues */
+  const [selectedIssueIds, setSelectedIssueIds] = useState<string[] | null>(null);
   const [deadLoading, setDeadLoading] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [columnLayout, setColumnLayout] = useState<SitColumnLayout>(() => defaultLayout());
@@ -458,7 +463,17 @@ export function SitTestingViewV2({
   };
 
   const displayWorkbook = useMemo(() => {
-    if (!workbook || !deadFlag || !deadAudit) return workbook;
+    if (!workbook) return workbook;
+    if (selectedIssueIds?.length) {
+      const set = new Set(selectedIssueIds);
+      return {
+        ...workbook,
+        sheets: workbook.sheets.map((s) =>
+          s.kind !== "test-cases" ? s : { ...s, rows: s.rows.filter((r) => set.has(r.id)) },
+        ),
+      };
+    }
+    if (!deadFlag || !deadAudit) return workbook;
     return {
       ...workbook,
       sheets: workbook.sheets.map((s) =>
@@ -467,7 +482,7 @@ export function SitTestingViewV2({
           : { ...s, rows: filterRowsByDeadFlag(s.rows, deadAudit, deadFlag) },
       ),
     };
-  }, [workbook, deadFlag, deadAudit]);
+  }, [workbook, deadFlag, deadAudit, selectedIssueIds]);
 
   /** R7-03: Showing N of M in toolbar (same filters as grid). */
   const toolbarTotalCount = useMemo(() => {
@@ -710,21 +725,59 @@ export function SitTestingViewV2({
               </div>
             )}
             {workbook && workbook.id !== "pending" && (
-              <DeadTestFinderToolbar
-                audit={deadAudit}
-                loading={deadLoading}
-                activeFlag={deadFlag}
-                onFlag={setDeadFlag}
-                draftCount={
-                  workbook.sheets
-                    .find((s) => s.kind === "test-cases")
-                    ?.rows.filter(
-                      (r) =>
-                        r.cells.deleted !== "1" &&
-                        (r.cells.executionStatus || "Not run") === "Draft",
-                    ).length || 0
-                }
-              />
+              <>
+                <div
+                  className="inline-flex rounded-[8px] border border-[#e2e6ef] p-0.5 text-[12.5px]"
+                  data-testid="sit-mode-switch"
+                  role="tablist"
+                  aria-label="SIT view"
+                >
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={sitMode === "cases"}
+                    data-testid="sit-mode-cases"
+                    className={`rounded-[6px] px-2.5 py-1 font-medium ${
+                      sitMode === "cases" ? "bg-[#8664F2] text-white" : "text-[#5b647a]"
+                    }`}
+                    onClick={() => setSitMode("cases")}
+                  >
+                    Cases
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={sitMode === "issues"}
+                    data-testid="sit-mode-issues"
+                    className={`rounded-[6px] px-2.5 py-1 font-medium ${
+                      sitMode === "issues" ? "bg-[#8664F2] text-white" : "text-[#5b647a]"
+                    }`}
+                    onClick={() => setSitMode("issues")}
+                  >
+                    Issues {qualityCount(deadAudit)}
+                  </button>
+                </div>
+                <DeadTestFinderToolbar
+                  audit={deadAudit}
+                  loading={deadLoading}
+                  activeFlag={deadFlag}
+                  onFlag={(f) => {
+                    setSelectedIssueIds(null);
+                    setDeadFlag(f);
+                    setSitMode("cases");
+                  }}
+                  onOpenIssues={() => setSitMode("issues")}
+                  draftCount={
+                    workbook.sheets
+                      .find((s) => s.kind === "test-cases")
+                      ?.rows.filter(
+                        (r) =>
+                          r.cells.deleted !== "1" &&
+                          (r.cells.executionStatus || "Not run") === "Draft",
+                      ).length || 0
+                  }
+                />
+              </>
             )}
           </div>
 
@@ -865,6 +918,17 @@ export function SitTestingViewV2({
                 </button>
               ))}
               <QualityActiveChip audit={deadAudit} activeFlag={deadFlag} onClear={() => setDeadFlag(null)} />
+              {selectedIssueIds?.length ? (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 rounded-full border border-[#ddd6fe] bg-[#f5f3ff] px-2 py-0.5 text-[12px] font-medium text-[#5b21b6]"
+                  data-testid="sit-selected-issues-chip"
+                  onClick={() => setSelectedIssueIds(null)}
+                  title="Clear selected issues filter"
+                >
+                  Selected issues: {selectedIssueIds.length} cases ×
+                </button>
+              ) : null}
               <SitV2Select
                 value={typeFilter || ""}
                 placeholder="Type"
@@ -1176,6 +1240,53 @@ export function SitTestingViewV2({
 
             <div className="flex min-h-0 flex-1 flex-col" data-testid="sit-grid-quality-shell">
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            {sitMode === "issues" ? (
+              <SitV2IssuesScreen
+                audit={deadAudit}
+                loading={deadLoading}
+                rows={
+                  workbook?.sheets.find((s) => s.kind === "test-cases")?.rows.filter((r) => r.cells.deleted !== "1") ||
+                  []
+                }
+                draftCount={
+                  workbook?.sheets
+                    .find((s) => s.kind === "test-cases")
+                    ?.rows.filter(
+                      (r) =>
+                        r.cells.deleted !== "1" &&
+                        (r.cells.executionStatus || "Not run") === "Draft",
+                    ).length || 0
+                }
+                canEdit={canEdit}
+                improveDisabledReason={
+                  deadLoading
+                    ? "Still loading quality audit"
+                    : !deadAudit
+                      ? "Still loading"
+                      : "Improve with AI arrives in R10-09"
+                }
+                onOpenInCases={(rowId) => {
+                  setSitMode("cases");
+                  setSelectedIssueIds(null);
+                  setDeadFlag(null);
+                  requestAnimationFrame(() => {
+                    highlightQualityRow(rowId);
+                    const el = document.querySelector(`[data-row-id="${rowId}"]`);
+                    el?.scrollIntoView({ block: "center" });
+                  });
+                }}
+                onEditInCases={(rowId) => {
+                  setSitMode("cases");
+                  setSelectedIssueIds(null);
+                  highlightQualityRow(rowId);
+                }}
+                onShowInCases={(rowIds) => {
+                  setDeadFlag(null);
+                  setSelectedIssueIds(rowIds);
+                  setSitMode("cases");
+                }}
+              />
+            ) : (
             <SitV2Grid
               workbook={displayWorkbook}
               epics={epics}
@@ -1188,8 +1299,11 @@ export function SitTestingViewV2({
               generating={generating}
               layout={columnLayout}
               onLayoutChange={persistLayout}
-              qualityFilterActive={deadFlag != null}
-              onClearQualityFilter={() => setDeadFlag(null)}
+              qualityFilterActive={deadFlag != null || !!selectedIssueIds?.length}
+              onClearQualityFilter={() => {
+                setDeadFlag(null);
+                setSelectedIssueIds(null);
+              }}
               deadAudit={deadAudit}
               acTexts={acTextsById}
               totalCaseCount={
@@ -1217,6 +1331,7 @@ export function SitTestingViewV2({
                 void duplicateRow(rowId);
               }}
             />
+            )}
             </div>
             </div>
           </div>

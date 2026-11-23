@@ -226,6 +226,7 @@ export function DeadTestFinderToolbar({
   activeFlag,
   onFlag,
   draftCount = 0,
+  onOpenIssues,
 }: {
   audit: SitDeadAudit | null;
   loading?: boolean;
@@ -233,6 +234,8 @@ export function DeadTestFinderToolbar({
   onFlag: (flag: QualityFilter) => void;
   /** R10-04: Draft rows are not quality-checked until Not run. */
   draftCount?: number;
+  /** R10-07: footer link to Issues screen */
+  onOpenIssues?: () => void;
   /** @deprecated R7-04 ignored */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -431,6 +434,21 @@ export function DeadTestFinderToolbar({
                 );
               })}
             </div>
+            {onOpenIssues ? (
+              <div className="border-t border-[#eef0f5] px-3 py-2">
+                <button
+                  type="button"
+                  className="w-full text-left text-[13px] font-medium text-[#8664F2]"
+                  data-testid="sit-quality-open-issues"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onOpenIssues();
+                  }}
+                >
+                  Open Issues screen
+                </button>
+              </div>
+            ) : null}
           </div>,
           document.body,
         )}
