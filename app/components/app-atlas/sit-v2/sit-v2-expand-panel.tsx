@@ -18,7 +18,7 @@ function TestDataTable({ row }: { row: SitSheetRow }) {
   }
   if (!entries.length) return null;
   return (
-    <div data-testid="sit-expand-testdata">
+    <div data-testid="sit-expand-testdata" className="mt-3">
       <div className="mb-1 text-[12px] font-semibold text-[#7c3aed]">Test data</div>
       <table className="w-full border-collapse text-[13px]">
         <tbody>
@@ -37,7 +37,9 @@ function TestDataTable({ row }: { row: SitSheetRow }) {
 export type ExpandTab = "history" | "ai";
 
 /**
- * R7-06: sticky left panel as wide as visible grid; Covers / Test data / Activity.
+ * R10-05: left-aligned Covers / Quality / Activity (max-width columns, no stretch gap).
+ * Header chips use short labels; long reasons only in Quality.
+ * AI original tab only for AI origin.
  */
 export function SitV2ExpandPanel({
   row,
@@ -54,7 +56,8 @@ export function SitV2ExpandPanel({
   qualityHits?: DeadFlagHit[];
   initialTab?: ExpandTab;
 }) {
-  const [tab, setTab] = useState<ExpandTab>(initialTab);
+  const isAi = (row.cells.origin || "").toLowerCase() === "ai";
+  const [tab, setTab] = useState<ExpandTab>(initialTab === "ai" && !isAi ? "history" : initialTab);
   const [showAllAc, setShowAllAc] = useState(false);
   const acIds = (row.cells.acIds || row.cells.ac || "")
     .split(/[,\s]+/)
@@ -69,7 +72,6 @@ export function SitV2ExpandPanel({
     }
   }
   const fieldEdits = listFieldEdits(row);
-  // Normalize OPEN ids: "OPEN:Q1" / "OPEN:OPEN:Q1" / "Q1" → display "OPEN Q1"
   const openQs = (row.cells.openQuestions || "")
     .split(/[,\n]+/)
     .map((s) => s.trim())
@@ -88,6 +90,11 @@ export function SitV2ExpandPanel({
   const statusHuman = Boolean(row.cells.statusBy);
   const visibleAcs = showAllAc ? acIds : acIds.slice(0, 5);
   const hasTestData = Object.keys(row.cells).some((k) => k.startsWith("td_") && row.cells[k]);
+  const statusLabel = statusHuman
+    ? `Set to ${status} by ${row.cells.statusBy}${
+        row.cells.statusAt ? `, ${new Date(Number(row.cells.statusAt)).toLocaleDateString()}` : ""
+      }`
+    : status;
 
   return (
     <div
@@ -103,12 +110,8 @@ export function SitV2ExpandPanel({
         <span className="rounded-full border border-[#e2e6ef] bg-white px-2 py-0.5 text-[12px]">
           Version {version}
         </span>
-        <span className="rounded-full border border-[#e2e6ef] bg-white px-2 py-0.5 text-[12px]">
-          {statusHuman
-            ? `${status} by ${row.cells.statusBy}${
-                row.cells.statusAt ? `, ${new Date(Number(row.cells.statusAt)).toLocaleDateString()}` : ""
-              }`
-            : "Not run"}
+        <span className="rounded-full border border-[#e2e6ef] bg-white px-2 py-0.5 text-[12px]" data-testid="sit-expand-status">
+          {statusLabel}
         </span>
         {fieldEdits.length > 0 ? (
           <span className="rounded-full border border-[#ddd6fe] bg-[#f5f3ff] px-2 py-0.5 text-[12px] text-[#5b21b6]">
@@ -127,8 +130,11 @@ export function SitV2ExpandPanel({
         <SitQualityFlagChip hits={qualityHits} />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3" data-testid="sit-expand-columns">
-        <div data-testid="sit-expand-covers">
+      <div
+        className="flex flex-wrap items-start gap-6"
+        data-testid="sit-expand-columns"
+      >
+        <div data-testid="sit-expand-covers" className="w-full max-w-[320px] shrink-0">
           <div className="mb-1 text-[12px] font-semibold text-[#5b647a]">Covers</div>
           {acIds.length ? (
             <ul className="m-0 list-none space-y-1 p-0 text-[13px]">
@@ -144,7 +150,7 @@ export function SitV2ExpandPanel({
               ))}
             </ul>
           ) : (
-            <p className="text-[13px] text-[#9ca3af]">No AC ids on this case.</p>
+            <p className="text-[13px] text-[#9ca3af]">No acceptance criteria linked</p>
           )}
           {acIds.length > 5 && !showAllAc ? (
             <button
@@ -155,39 +161,48 @@ export function SitV2ExpandPanel({
               Show all
             </button>
           ) : null}
-          <div className="mt-3">
-            <SitQualityReasons hits={qualityHits} />
-          </div>
+          {hasTestData ? <TestDataTable row={row} /> : null}
         </div>
 
-        {hasTestData || Object.keys(row.cells).some((k) => k.startsWith("td_")) ? (
-          <TestDataTable row={row} />
-        ) : (
-          <div className="hidden lg:block" />
-        )}
+        <div data-testid="sit-expand-quality-col" className="w-full max-w-[360px] shrink-0">
+          {qualityHits && qualityHits.length > 0 ? (
+            <SitQualityReasons hits={qualityHits} />
+          ) : (
+            <>
+              <div className="mb-1 text-[12px] font-semibold text-[#5b647a]">Quality</div>
+              <p className="text-[13px] text-[#9ca3af]">No quality issues</p>
+            </>
+          )}
+        </div>
 
-        <div data-testid="sit-expand-activity">
+        <div data-testid="sit-expand-activity" className="w-full max-w-[420px] shrink-0">
           <div className="mb-2 flex flex-wrap gap-1" role="tablist" aria-label="Activity">
-            {(
-              [
-                ["history", "History"],
-                ["ai", "AI original"],
-              ] as const
-            ).map(([id, label]) => (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === "history"}
+              data-testid="sit-expand-tab-history"
+              className={`rounded-[6px] px-2 py-0.5 text-[12px] font-medium ${
+                tab === "history" ? "bg-[#8664F2] text-white" : "border border-[#e2e6ef] bg-white text-[#5b647a]"
+              }`}
+              onClick={() => setTab("history")}
+            >
+              History
+            </button>
+            {isAi ? (
               <button
-                key={id}
                 type="button"
                 role="tab"
-                aria-selected={tab === id}
-                data-testid={`sit-expand-tab-${id}`}
+                aria-selected={tab === "ai"}
+                data-testid="sit-expand-tab-ai"
                 className={`rounded-[6px] px-2 py-0.5 text-[12px] font-medium ${
-                  tab === id ? "bg-[#8664F2] text-white" : "border border-[#e2e6ef] bg-white text-[#5b647a]"
+                  tab === "ai" ? "bg-[#8664F2] text-white" : "border border-[#e2e6ef] bg-white text-[#5b647a]"
                 }`}
-                onClick={() => setTab(id)}
+                onClick={() => setTab("ai")}
               >
-                {label}
+                AI original
               </button>
-            ))}
+            ) : null}
           </div>
           {tab === "history" && (
             <div className="space-y-2 text-[13px] text-[#374151]" data-testid="sit-expand-edits">
@@ -235,7 +250,7 @@ export function SitV2ExpandPanel({
               )}
             </div>
           )}
-          {tab === "ai" && (
+          {tab === "ai" && isAi && (
             <div className="space-y-2 text-[13px]">
               {aiOriginal ? (
                 <>
