@@ -430,11 +430,14 @@ export function atlasClient({ instance, accounts }: Msal) {
         feature?: string;
         note?: string;
         executionStatus?: string;
+        actualResult?: string;
+        userNote?: string;
         eisenhower?: string;
         cells?: Record<string, string>;
         softDelete?: boolean;
         undelete?: boolean;
         revertAi?: boolean;
+        revertField?: string;
       },
     ) => request<SitWorkbook>(`/sit/workbooks/${workbookId}/cases/${rowId}`, json("PATCH", body)),
     addSitCase: (workbookId: string, ticketKey: string) =>

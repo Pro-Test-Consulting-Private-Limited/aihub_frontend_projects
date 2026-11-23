@@ -8,9 +8,10 @@ export type SitColumnId =
   | "severity"
   | "preconditions"
   | "steps"
-  | "expected";
+  | "expected"
+  | "notes";
 
-/** Orderable columns (checkbox + ID fixed left; Status fixed right). */
+/** Orderable columns (checkbox + ID fixed left; Result/status fixed right). */
 export type SitOrderableColumnId =
   | "module"
   | "feature"
@@ -20,7 +21,8 @@ export type SitOrderableColumnId =
   | "scenario"
   | "preconditions"
   | "steps"
-  | "expected";
+  | "expected"
+  | "notes";
 
 export const SIT_OPTIONAL_COLUMNS: { id: SitColumnId; label: string }[] = [
   { id: "module", label: "Module" },
@@ -29,6 +31,7 @@ export const SIT_OPTIONAL_COLUMNS: { id: SitColumnId; label: string }[] = [
   { id: "preconditions", label: "Preconditions" },
   { id: "steps", label: "Test Steps" },
   { id: "expected", label: "Expected Result" },
+  { id: "notes", label: "Notes" },
 ];
 
 export const SIT_DEFAULT_ORDER: SitOrderableColumnId[] = [
@@ -39,9 +42,10 @@ export const SIT_DEFAULT_ORDER: SitOrderableColumnId[] = [
   "preconditions",
   "steps",
   "expected",
+  "notes",
 ];
 
-/** Round 4 B1 — weighted defaults at 1440px reference width. */
+/** Round 4 B1 — weighted defaults at 1440px reference width. R10-06: Notes 200, Result 200. */
 export const SIT_DEFAULT_WIDTHS: Record<string, number> = {
   id: 150,
   module: 120,
@@ -53,7 +57,8 @@ export const SIT_DEFAULT_WIDTHS: Record<string, number> = {
   preconditions: 320,
   steps: 380,
   expected: 320,
-  status: 130,
+  notes: 200,
+  status: 200,
 };
 
 /** Absolute floor used by resize handles (never below these). */
@@ -67,7 +72,8 @@ export const SIT_MIN_WIDTHS: Record<string, number> = {
   preconditions: 220,
   steps: 260,
   expected: 220,
-  status: 110,
+  notes: 140,
+  status: 170,
   id: 110,
 };
 
@@ -239,14 +245,21 @@ export function loadColumnLayout(
     if (!raw) return defaultLayout(loadHiddenColumns());
     const parsed = JSON.parse(raw) as Partial<SitColumnLayout>;
     const allowed = new Set<string>([...SIT_DEFAULT_ORDER, "priority", "severity"]);
-    const order = (parsed.order || SIT_DEFAULT_ORDER).filter((id): id is SitOrderableColumnId =>
+    let order = (parsed.order || SIT_DEFAULT_ORDER).filter((id): id is SitOrderableColumnId =>
       allowed.has(id),
     );
+    // R10-06: saved layouts without Notes get Notes at its default position (after expected)
+    if (!order.includes("notes")) {
+      const ei = order.indexOf("expected");
+      if (ei >= 0) order = [...order.slice(0, ei + 1), "notes", ...order.slice(ei + 1)];
+      else order = [...order, "notes"];
+    }
     const base = defaultLayout(parsed.hidden || loadHiddenColumns());
     const widths =
       parsed.widths && typeof parsed.widths === "object" && Object.keys(parsed.widths).length
         ? { ...SIT_DEFAULT_WIDTHS, ...parsed.widths }
         : { ...SIT_DEFAULT_WIDTHS };
+    if (widths.notes == null) widths.notes = SIT_DEFAULT_WIDTHS.notes;
     return {
       ...base,
       order: order.length ? order : base.order,

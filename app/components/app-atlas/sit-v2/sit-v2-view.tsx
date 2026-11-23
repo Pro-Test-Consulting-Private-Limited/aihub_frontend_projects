@@ -365,9 +365,13 @@ export function SitTestingViewV2({
             ? "Severity"
             : body.executionStatus
               ? "Status"
-              : body.cells
-                ? Object.keys(body.cells)[0] || "field"
-                : "case");
+              : body.actualResult !== undefined
+                ? "Actual result"
+                : body.userNote !== undefined
+                  ? "Notes"
+                  : body.cells
+                    ? Object.keys(body.cells)[0] || "field"
+                    : "case");
     try {
       const next = await client.patchSitCase(workbook.id, rowId, body);
       setWorkbook(next);

@@ -549,6 +549,13 @@ export function SitV2Grid({
     setEditing(null);
   };
 
+  /** R10-06: Actual result / Notes — top-level PATCH, never markEdited. */
+  const commitExecutionData = (rowId: string, field: string, value: string) => {
+    if (field === "actualResult") onPatch(rowId, { actualResult: value });
+    else if (field === "userNote") onPatch(rowId, { userNote: value });
+    setEditing(null);
+  };
+
   const toggleExpand = (rowId: string) => {
     setExpanded((e) => ({ ...e, [rowId]: !e[rowId] }));
   };
@@ -592,6 +599,8 @@ export function SitV2Grid({
         return "Test Steps";
       case "expected":
         return "Expected Result";
+      case "notes":
+        return "Notes";
       default:
         return id;
     }
@@ -911,6 +920,53 @@ export function SitV2Grid({
         />
       );
     }
+    if (colId === "notes") {
+      const note = row.cells.userNote || "";
+      const noteTip = row.cells.executionDataBy
+        ? `Updated by ${row.cells.executionDataBy}${
+            row.cells.executionDataAt
+              ? `, ${new Date(Number(row.cells.executionDataAt)).toLocaleString()}`
+              : ""
+          }`
+        : undefined;
+      const noteLines = note.split(/\n/).filter(Boolean);
+      return (
+        <SitV2EditableCell
+          key={colId}
+          rowId={row.id}
+          field="userNote"
+          value={note}
+          canEdit={canEdit}
+          multiline
+          selected={isSel("userNote")}
+          editing={isEdit("userNote")}
+          onSelect={setSelected}
+          onStartEdit={setEditing}
+          onCancelEdit={clearCellSelection}
+          onCommit={commitExecutionData}
+          onMove={moveCell}
+          className="align-top"
+          display={
+            <div title={noteTip} data-testid="sit-notes-cell">
+              {!note ? (
+                <EmptyPlaceholder text="Add a note" />
+              ) : (
+                <StepsClamp
+                  open={open}
+                  lines={3}
+                  itemCount={noteLines.length}
+                  onShowMore={() => setExpanded((e) => ({ ...e, [row.id]: true }))}
+                >
+                  <span className="whitespace-pre-wrap text-[12px]">
+                    {(open ? noteLines : noteLines.slice(0, 3)).join("\n")}
+                  </span>
+                </StepsClamp>
+              )}
+            </div>
+          }
+        />
+      );
+    }
     return null;
   };
 
@@ -1077,7 +1133,7 @@ export function SitV2Grid({
                 }}
                 data-testid="sit-col-header-status"
               >
-                Status
+                Result
                 <ColResizeHandle colId="status" onResize={setWidth} />
               </th>
             </tr>
@@ -1169,37 +1225,101 @@ export function SitV2Grid({
                         width: displayWidth("status"),
                         minWidth: SIT_MIN_WIDTHS.status,
                       }}
+                      data-testid="sit-result-cell"
                     >
-                      <div className="flex flex-col items-start gap-0.5">
-                        <SitV2Select
-                          pill
-                          disabled={!canEdit}
-                          value={row.cells.executionStatus || "Not run"}
-                          aria-label="Status"
-                          data-testid="sit-status-select"
-                          listClassName="max-h-none overflow-visible"
-                          buttonClassName={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10.5px] font-semibold font-[inherit] disabled:opacity-80 ${
-                            STATUS_STYLE[row.cells.executionStatus || "Not run"] || STATUS_STYLE["Not run"]
-                          }`}
-                          options={
-                            row.cells.executionStatus === "Stale"
-                              ? [
-                                  { value: "Stale", label: "Stale (system)", group: "System", disabled: true },
-                                  ...STATUS_OPTIONS,
-                                ]
-                              : STATUS_OPTIONS
-                          }
-                          onChange={(v) => {
-                            if (v === "Stale") return;
-                            onPatch(row.id, { executionStatus: v });
-                          }}
-                        />
-                        {row.cells.executionStatus === "Draft" && row.cells.draftMissing ? (
-                          <span className="mt-0.5 block text-[12px] leading-snug text-[#3730a3]" title={`Draft ,  unfinished. Missing: ${row.cells.draftMissing}`}>
-                            Draft ,  missing: {row.cells.draftMissing}
-                          </span>
-                        ) : null}
-                      </div>
+                      {(() => {
+                        const st = row.cells.executionStatus || "Not run";
+                        const actual = row.cells.actualResult || "";
+                        const needsActualHint = ["Failed", "Partial", "Blocked"].includes(st) && !actual;
+                        const showActualArea = !["Draft", "Not run"].includes(st);
+                        const actualTip = row.cells.executionDataBy
+                          ? `Updated by ${row.cells.executionDataBy}${
+                              row.cells.executionDataAt
+                                ? `, ${new Date(Number(row.cells.executionDataAt)).toLocaleString()}`
+                                : ""
+                            }`
+                          : undefined;
+                        const editingActual = editing?.rowId === row.id && editing.field === "actualResult";
+                        return (
+                          <div className="flex flex-col items-start gap-0.5">
+                            <SitV2Select
+                              pill
+                              disabled={!canEdit}
+                              value={st}
+                              aria-label="Status"
+                              data-testid="sit-status-select"
+                              listClassName="max-h-none overflow-visible"
+                              buttonClassName={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10.5px] font-semibold font-[inherit] disabled:opacity-80 ${
+                                STATUS_STYLE[st] || STATUS_STYLE["Not run"]
+                              }`}
+                              options={
+                                st === "Stale"
+                                  ? [
+                                      { value: "Stale", label: "Stale (system)", group: "System", disabled: true },
+                                      ...STATUS_OPTIONS,
+                                    ]
+                                  : STATUS_OPTIONS
+                              }
+                              onChange={(v) => {
+                                if (v === "Stale") return;
+                                onPatch(row.id, { executionStatus: v });
+                              }}
+                            />
+                            {st === "Draft" && row.cells.draftMissing ? (
+                              <span
+                                className="mt-0.5 block text-[12px] leading-snug text-[#3730a3]"
+                                title={`Draft ,  unfinished. Missing: ${row.cells.draftMissing}`}
+                              >
+                                Draft ,  missing: {row.cells.draftMissing}
+                              </span>
+                            ) : null}
+                            {editingActual && canEdit ? (
+                              <textarea
+                                className="mt-1 w-full min-h-[56px] rounded border border-[#8664F2] bg-white p-1 text-[12px] font-[inherit] outline-none"
+                                defaultValue={actual}
+                                autoFocus
+                                data-testid="sit-cell-editor-actualResult"
+                                onKeyDown={(e) => {
+                                  if (e.key === "Escape") {
+                                    e.preventDefault();
+                                    clearCellSelection();
+                                  } else if (e.key === "Enter" && !e.shiftKey) {
+                                    e.preventDefault();
+                                    commitExecutionData(row.id, "actualResult", (e.target as HTMLTextAreaElement).value);
+                                  }
+                                }}
+                                onBlur={(e) => commitExecutionData(row.id, "actualResult", e.target.value)}
+                              />
+                            ) : showActualArea ? (
+                              <button
+                                type="button"
+                                className={`mt-0.5 w-full text-left text-[12px] leading-snug ${
+                                  actual
+                                    ? "text-[#374151]"
+                                    : needsActualHint
+                                      ? "text-[#92400e] underline decoration-dotted decoration-[#f59e0b]"
+                                      : "text-[#9ca3af]"
+                                }`}
+                                title={actualTip}
+                                data-testid="sit-actual-result"
+                                onClick={() => canEdit && setEditing({ rowId: row.id, field: "actualResult" })}
+                                onDoubleClick={() => canEdit && setEditing({ rowId: row.id, field: "actualResult" })}
+                              >
+                                {actual || "Add actual result"}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="mt-0.5 hidden text-[12px] text-[#8664F2] group-hover:inline"
+                                data-testid="sit-add-actual-result"
+                                onClick={() => canEdit && setEditing({ rowId: row.id, field: "actualResult" })}
+                              >
+                                Add actual result
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </td>
                   </tr>
                   {open && (

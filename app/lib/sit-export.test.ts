@@ -26,6 +26,8 @@ describe("sit-export", () => {
         steps: "1. Enter amount\n2. Pay",
         expected: "Toast shows ₹100 paid",
         status: "Not run",
+        actualResult: "",
+        notes: "tester note",
         origin: "ai",
         edited: "no",
         acIds: "AC1",
@@ -38,6 +40,9 @@ describe("sit-export", () => {
     expect(csv.charCodeAt(0)).toBe(0xfeff);
     expect(csv).toContain("Pay ₹100");
     expect(csv).toMatch(/"1\. Enter amount\r?\n2\. Pay"/);
+    expect(csv).toContain("Actual Result");
+    expect(csv).toContain("Notes");
+    expect(csv).toContain("tester note");
   });
 
   it("casesForExport respects scope selected", () => {

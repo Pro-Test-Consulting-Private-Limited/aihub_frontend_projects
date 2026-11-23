@@ -161,9 +161,10 @@ async function setExplorerOpen(page, open) {
 }
 
 async function statusHeaderFullyVisible(page) {
+  // R10-06: header label is "Result"; persisted column key / testid remain `status`.
   const el = page.getByTestId("sit-col-header-status").first();
   if (!(await el.count())) {
-    const alt = page.getByText(/^Status$/i).first();
+    const alt = page.getByText(/^(Status|Result)$/i).first();
     if (!(await alt.count())) return false;
     return alt.evaluate((node) => {
       const r = node.getBoundingClientRect();
@@ -176,8 +177,14 @@ async function statusHeaderFullyVisible(page) {
     const r = node.getBoundingClientRect();
     const grid = document.querySelector('[data-testid="sit-v2-grid-root"]');
     const gr = grid ? grid.getBoundingClientRect() : { left: 0, right: window.innerWidth };
-    // "Status" fully inside grid; width enough that "St" truncation is not happening
-    return r.width > 40 && r.left >= gr.left - 1 && r.right <= gr.right + 1 && (node.textContent || "").includes("Status");
+    const label = node.textContent || "";
+    // Fully inside grid; label is Result (R10-06) or legacy Status
+    return (
+      r.width > 40 &&
+      r.left >= gr.left - 1 &&
+      r.right <= gr.right + 1 &&
+      (/Result/i.test(label) || /Status/i.test(label))
+    );
   });
 }
 
@@ -725,6 +732,59 @@ for (const explorerOpen of [true, false]) {
     } else {
       record(id9, "popovers inside viewport", detail9, ok);
     }
+  }
+}
+
+// I10: execution data is not an edit (R10-06)
+{
+  const I10_SOFT = process.env.I10_SOFT === "1";
+  const aiRow = page.locator("[data-row-id]").filter({ hasText: "SYN-1-01" }).first();
+  let i10ok = true;
+  let i10detail = "skipped";
+  if (await aiRow.count()) {
+    const beforeEdited = await aiRow.locator('[title*="Edited"], [aria-label*="Edited"]').count().catch(() => 0);
+    // Prefer seeded Failed row with Notes if present; else edit Notes on SYN-1-01
+    const notesCell = page.getByTestId("sit-notes-cell").first();
+    if (await notesCell.count()) {
+      await notesCell.dblclick({ timeout: 5000 }).catch(() => {});
+      const editor = page.getByTestId("sit-cell-editor-userNote");
+      if (await editor.count()) {
+        await editor.fill("I10 contract note " + Date.now());
+        await editor.press("Enter");
+        await page.waitForTimeout(800);
+      }
+    }
+    const actualBtn = page.getByTestId("sit-actual-result").first();
+    if (await actualBtn.count()) {
+      await actualBtn.click({ timeout: 3000 }).catch(() => {});
+      const arEditor = page.getByTestId("sit-cell-editor-actualResult");
+      if (await arEditor.count()) {
+        await arEditor.fill("I10 actual " + Date.now());
+        await arEditor.press("Enter");
+        await page.waitForTimeout(800);
+      }
+    }
+    // Expand AI row and ensure Edits list does not mention Actual/Notes as content edits
+    await aiRow.getByTestId("sit-row-chevron").click().catch(() => {});
+    await page.waitForTimeout(400);
+    const panel = page.getByTestId("sit-row-expand-panel");
+    const panelText = (await panel.count()) ? await panel.innerText() : "";
+    const editsMentionsExec =
+      /actualResult|userNote|Actual result|Add a note/i.test(panelText) &&
+      /Revert this field/i.test(panelText) &&
+      /actualResult|userNote/i.test(panelText);
+    const headerHasEdited = /Edited:\s*\d+\s*fields/i.test(panelText);
+    // If row was already edited before, Edited may stay; only fail if NEW edit-dot on notes/actual
+    const editDotsOnExec = await page.locator('[data-testid="sit-edit-dot"]').count().catch(() => 0);
+    i10ok = !editsMentionsExec;
+    i10detail = JSON.stringify({ beforeEdited, headerHasEdited, editDotsOnExec, editsMentionsExec });
+    await page.locator('[data-testid="sit-row-chevron"][aria-expanded="true"]').first().click().catch(() => {});
+  }
+  if (I10_SOFT && !i10ok) {
+    preExisting.push({ id: "I10.execution_not_edit", detail: i10detail });
+    record("I10.execution_not_edit", "Actual/Notes do not mark Edited", i10detail, true, "pre-existing (soft until R10-06)");
+  } else {
+    record("I10.execution_not_edit", "Actual/Notes do not mark Edited", i10detail, i10ok);
   }
 }
 

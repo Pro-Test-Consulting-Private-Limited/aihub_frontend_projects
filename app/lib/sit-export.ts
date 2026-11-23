@@ -52,6 +52,8 @@ export type ExportCaseRow = {
   steps: string;
   expected: string;
   status: string;
+  actualResult: string;
+  notes: string;
   origin: string;
   edited: string;
   acIds: string;
@@ -89,6 +91,8 @@ export function casesForExport(
     steps: exportText(cell(r, "steps"), "steps"),
     expected: exportText(cell(r, "expected"), "bullets"),
     status: cell(r, "executionStatus") || "Not run",
+    actualResult: exportText(cell(r, "actualResult")),
+    notes: exportText(cell(r, "userNote")),
     origin: cell(r, "origin"),
     edited: r.cells.edited === "1" || r.cells.edited === "true" ? "yes" : "no",
     acIds: cell(r, "acIds") || cell(r, "ac"),
@@ -164,6 +168,8 @@ export function toCsv(rows: ExportCaseRow[]): string {
     "Test Steps",
     "Expected Result",
     "Status",
+    "Actual Result",
+    "Notes",
     "Origin",
     "Edited",
     "AC ids",
@@ -192,6 +198,8 @@ export function toCsv(rows: ExportCaseRow[]): string {
         r.steps,
         r.expected,
         r.status,
+        r.actualResult,
+        r.notes,
         r.origin,
         r.edited,
         r.acIds,
@@ -220,6 +228,8 @@ export function toCopyTable(rows: ExportCaseRow[]): string {
     "Test Steps",
     "Expected Result",
     "Status",
+    "Actual Result",
+    "Notes",
     "Origin",
     "Edited",
     "AC ids",
@@ -241,6 +251,8 @@ export function toCopyTable(rows: ExportCaseRow[]): string {
         r.steps,
         r.expected,
         r.status,
+        r.actualResult,
+        r.notes,
         r.origin,
         r.edited,
         r.acIds,
@@ -283,6 +295,8 @@ export async function buildXlsxBlob(
     "Test Steps",
     "Expected Result",
     "Status",
+    "Actual Result",
+    "Notes",
     "Origin",
     "Edited",
     "AC ids",
@@ -308,6 +322,8 @@ export async function buildXlsxBlob(
       r.steps,
       r.expected,
       r.status,
+      r.actualResult,
+      r.notes,
       r.origin,
       r.edited,
       r.acIds,

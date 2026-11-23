@@ -7,6 +7,7 @@ import {
   sumColumnWidths,
 } from "./sit-v2-prefs";
 
+/** R10-06: Notes added before Result(status); Result default/min widths raised. */
 const VISIBLE = [
   "id",
   "module",
@@ -16,6 +17,7 @@ const VISIBLE = [
   "preconditions",
   "steps",
   "expected",
+  "notes",
   "status",
 ] as const;
 
