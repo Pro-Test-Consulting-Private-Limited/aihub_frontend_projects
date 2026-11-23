@@ -83,7 +83,7 @@ export function SitTestingViewV2({
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [originFilter, setOriginFilter] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [undoRow, setUndoRow] = useState<{ workbookId: string; rowId: string } | null>(null);
+  const [undoRow, setUndoRow] = useState<{ workbookId: string; rowIds: string[] } | null>(null);
   const [deadFlag, setDeadFlag] = useState<QualityFilter>(null);
   const [deadAudit, setDeadAudit] = useState<SitDeadAudit | null>(null);
   const [deadLoading, setDeadLoading] = useState(false);
@@ -386,12 +386,25 @@ export function SitTestingViewV2({
   const softDelete = async (rowId: string) => {
     if (!workbook) return;
     await patchRow(rowId, { softDelete: true });
-    setUndoRow({ workbookId: workbook.id, rowId });
+    setUndoRow({ workbookId: workbook.id, rowIds: [rowId] });
+  };
+
+  const softDeleteMany = async (rowIds: string[]) => {
+    if (!workbook || !rowIds.length) return;
+    const wbId = workbook.id;
+    setUndoRow({ workbookId: wbId, rowIds: [...rowIds] });
+    for (const id of rowIds) {
+      await patchRow(id, { softDelete: true });
+    }
   };
 
   const undoDelete = async () => {
     if (!undoRow) return;
-    await client.patchSitCase(undoRow.workbookId, undoRow.rowId, { undelete: true }).then(setWorkbook);
+    let wb = workbook;
+    for (const id of undoRow.rowIds) {
+      wb = await client.patchSitCase(undoRow.workbookId, id, { undelete: true });
+    }
+    if (wb) setWorkbook(wb);
     setUndoRow(null);
   };
 
@@ -1178,6 +1191,10 @@ export function SitTestingViewV2({
                 if (!canEdit) return;
                 void softDelete(rowId);
               }}
+              onBulkDeleted={(rowIds) => {
+                if (!canEdit) return;
+                void softDeleteMany(rowIds);
+              }}
               onAdd={() => {
                 if (!canEdit) return;
                 void addRow();
@@ -1198,8 +1215,13 @@ export function SitTestingViewV2({
       </div>
 
       {undoRow && (
-        <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-[10px] border border-[#e2e6ef] bg-white px-4 py-2 text-[12.5px] shadow-lg dark:border-[#2a2a2a] dark:bg-[#151515]">
-          Row deleted.{" "}
+        <div
+          className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-[10px] border border-[#e2e6ef] bg-white px-4 py-2 text-[12.5px] shadow-lg dark:border-[#2a2a2a] dark:bg-[#151515]"
+          data-testid="sit-bulk-delete-toast"
+        >
+          {undoRow.rowIds.length === 1
+            ? "Row deleted. "
+            : `${undoRow.rowIds.length} cases deleted. `}
           <button type="button" className="font-semibold text-[#8664F2]" onClick={() => void undoDelete()}>
             Undo
           </button>

@@ -319,6 +319,7 @@ export function SitV2Grid({
   onLayoutChange,
   onPatch,
   onDelete,
+  onBulkDeleted,
   onAdd,
   onDuplicate,
   qualityFilterActive = false,
@@ -340,6 +341,8 @@ export function SitV2Grid({
   onLayoutChange: (next: SitColumnLayout) => void;
   onPatch: (rowId: string, body: Record<string, unknown>) => void;
   onDelete: (rowId: string) => void;
+  /** R10-03: after confirmed bulk delete, parent shows undo toast. */
+  onBulkDeleted?: (rowIds: string[]) => void;
   onAdd: () => void;
   onDuplicate: (rowId: string) => void;
   qualityFilterActive?: boolean;
@@ -352,6 +355,19 @@ export function SitV2Grid({
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [ctxMenuRow, setCtxMenuRow] = useState<string | null>(null);
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+
+  useEffect(() => {
+    if (!bulkDeleteOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setBulkDeleteOpen(false);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [bulkDeleteOpen]);
   const [selected, setSelected] = useState<CellCoord | null>(null);
   const [editing, setEditing] = useState<CellCoord | null>(null);
   const [dragCol, setDragCol] = useState<SitOrderableColumnId | null>(null);
@@ -929,7 +945,10 @@ export function SitV2Grid({
           </div>
         )}
         {selectedRows.size > 0 && canEdit && (
-          <div className="sticky top-0 z-[4] flex flex-wrap items-center gap-2 border-b border-[#e2e6ef] bg-[#f8fafc] px-3 py-1.5 text-[11px]">
+          <div
+            className="sticky top-0 z-[4] flex flex-wrap items-center gap-2 border-b border-[#e2e6ef] bg-[#f8fafc] px-3 py-1.5 text-[11px]"
+            data-testid="sit-bulk-bar"
+          >
             <span className="font-medium text-[#5b647a]">{selectedRows.size} selected</span>
             <span className="text-[#9ca3af]">Set status:</span>
             {BULK_STATUSES.map((s) => (
@@ -942,22 +961,60 @@ export function SitV2Grid({
                 {s}
               </button>
             ))}
-            {selectedRows.size >= 3 && (
-              <button
-                type="button"
-                className="rounded-full border border-[#fecaca] bg-[#fef2f2] px-2 py-0.5 font-medium text-[#b91c1c]"
-                data-testid="sit-bulk-delete"
-                onClick={() => {
-                  for (const id of selectedRows) onDelete(id);
-                  setSelectedRows(new Set());
-                }}
-              >
-                Delete {selectedRows.size}
-              </button>
-            )}
-            <button type="button" className="ml-auto text-[#8664F2]" onClick={() => setSelectedRows(new Set())}>
+            <button type="button" className="text-[#8664F2]" onClick={() => setSelectedRows(new Set())}>
               Clear selection
             </button>
+            <span className="ml-auto hidden h-4 w-px bg-[#d1d5db] sm:block" aria-hidden />
+            <button
+              type="button"
+              className="rounded-full border border-[#fecaca] bg-[#fef2f2] px-2.5 py-0.5 font-semibold text-[#b91c1c] hover:bg-[#fee2e2]"
+              data-testid="sit-bulk-delete"
+              onClick={() => setBulkDeleteOpen(true)}
+            >
+              Delete {selectedRows.size}
+            </button>
+          </div>
+        )}
+        {bulkDeleteOpen && (
+          <div
+            className="fixed inset-0 z-[90] flex items-center justify-center bg-black/30 p-4"
+            data-testid="sit-bulk-delete-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="sit-bulk-delete-title"
+          >
+            <div className="w-full max-w-sm rounded-[12px] border border-[#e2e6ef] bg-white p-4 shadow-xl dark:border-[#2a2a2a] dark:bg-[#151515]">
+              <h2 id="sit-bulk-delete-title" className="text-[14px] font-semibold text-[#1F1F1F]">
+                Delete {selectedRows.size} cases?
+              </h2>
+              <p className="mt-2 text-[12.5px] text-[#5b647a]">
+                You can undo this for a short time.
+              </p>
+              <div className="mt-4 flex justify-end gap-2">
+                <button
+                  type="button"
+                  className="rounded-full border border-[#e2e6ef] px-3 py-1.5 text-[12px] font-medium"
+                  data-testid="sit-bulk-delete-cancel"
+                  onClick={() => setBulkDeleteOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="rounded-full border border-[#fecaca] bg-[#b91c1c] px-3 py-1.5 text-[12px] font-semibold text-white"
+                  data-testid="sit-bulk-delete-confirm"
+                  onClick={() => {
+                    const ids = [...selectedRows];
+                    setSelectedRows(new Set());
+                    setBulkDeleteOpen(false);
+                    if (onBulkDeleted) onBulkDeleted(ids);
+                    else for (const id of ids) onDelete(id);
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
           </div>
         )}
         <table className={`w-full table-fixed border-collapse font-sans ${tableText}`} data-testid="sit-v2-grid-table">
