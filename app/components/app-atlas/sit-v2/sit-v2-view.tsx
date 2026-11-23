@@ -121,7 +121,7 @@ export function SitTestingViewV2({
   const [sitMode, setSitMode] = useState<"cases" | "issues">(() =>
     typeof window === "undefined" ? "cases" : loadPersistedMode(),
   );
-  /** R10-07: mutually exclusive with quality chips — Show in Cases from Issues */
+  /** R10-07: mutually exclusive with quality chips: Show in Cases from Issues */
   const [selectedIssueIds, setSelectedIssueIds] = useState<string[] | null>(null);
   const [improveReview, setImproveReview] = useState<{
     rowId: string;
