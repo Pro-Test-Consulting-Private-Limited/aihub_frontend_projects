@@ -44,8 +44,9 @@ export type IssuesScreenProps = {
   onOpenInCases: (rowId: string) => void;
   onShowInCases: (rowIds: string[]) => void;
   onEditInCases: (rowId: string) => void;
-  /** R10-08 hook */
-  onLinkToAc?: (rowId: string) => void;
+  /** R10-08: map ACn → text for the focused ticket */
+  acTexts?: Record<string, string>;
+  onLinkAc?: (rowId: string, acId: string) => void;
   /** R10-09 hook */
   onImprove?: (rowIds: string[]) => void;
   improveDisabledReason?: string | null;
@@ -60,7 +61,8 @@ export function SitV2IssuesScreen({
   onOpenInCases,
   onShowInCases,
   onEditInCases,
-  onLinkToAc,
+  acTexts,
+  onLinkAc,
   onImprove,
   improveDisabledReason,
 }: IssuesScreenProps) {
@@ -69,6 +71,7 @@ export function SitV2IssuesScreen({
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
   const [narrowOverlay, setNarrowOverlay] = useState(false);
+  const [linkPickerOpen, setLinkPickerOpen] = useState(false);
 
   useEffect(() => {
     const onResize = () => {
@@ -238,12 +241,12 @@ export function SitV2IssuesScreen({
               <p className="mt-1 text-[13px] text-[#78350f]">{h.reason}</p>
               <p className="mt-1 text-[12px] text-[#92400e]">Suggested fix: {suggestedFix(h.flag)}</p>
               <div className="mt-2 flex flex-wrap gap-2">
-                {h.flag === "orphan_ticket" && onLinkToAc ? (
+                {h.flag === "orphan_ticket" && onLinkAc ? (
                   <button
                     type="button"
                     className="rounded-[6px] border border-[#8664F2] px-2 py-1 text-[12px] font-medium text-[#8664F2]"
                     data-testid="sit-issues-link-ac"
-                    onClick={() => onLinkToAc(focus.rowId)}
+                    onClick={() => setLinkPickerOpen(true)}
                   >
                     Link to AC
                   </button>
@@ -303,6 +306,49 @@ export function SitV2IssuesScreen({
           Edit in Cases
         </button>
       </div>
+      {linkPickerOpen ? (
+        <div
+          className="rounded-[8px] border border-[#ddd6fe] bg-[#f5f3ff] p-3"
+          data-testid="sit-issues-link-ac-picker"
+        >
+          <div className="mb-2 text-[13px] font-semibold text-[#5b21b6]">Link to AC</div>
+          {acTexts && Object.keys(acTexts).length ? (
+            <ul className="m-0 space-y-1 p-0">
+              {Object.entries(acTexts).map(([id, text]) => (
+                <li key={id}>
+                  <button
+                    type="button"
+                    className="w-full rounded-[6px] border border-[#e2e6ef] bg-white px-2 py-1.5 text-left text-[13px] hover:border-[#8664F2]"
+                    data-testid={`sit-issues-link-ac-opt-${id}`}
+                    onClick={() => {
+                      onLinkAc?.(focus.rowId, id);
+                      setLinkPickerOpen(false);
+                    }}
+                  >
+                    <span className="font-mono font-semibold">{id}</span>
+                    {text ? (
+                      <span className="text-[#374151]">: {text}</span>
+                    ) : (
+                      <span className="text-[#9ca3af]"> (AC text not available)</span>
+                    )}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-[13px] text-[#6b7280]">
+              No acceptance criteria text on this ticket. Link by id only is unavailable until ACs exist.
+            </p>
+          )}
+          <button
+            type="button"
+            className="mt-2 text-[12px] text-[#6b7280]"
+            onClick={() => setLinkPickerOpen(false)}
+          >
+            Cancel
+          </button>
+        </div>
+      ) : null}
     </div>
   ) : (
     <div className="p-6 text-[13px] text-[#9ca3af]">Select a case</div>

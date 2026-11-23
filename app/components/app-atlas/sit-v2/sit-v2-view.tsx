@@ -23,6 +23,7 @@ import { SitV2Grid } from "./sit-v2-grid";
 import { SitV2AcChip } from "./sit-v2-ac-chip";
 import { SitV2Select } from "./sit-v2-select";
 import { SitV2IssuesScreen } from "./sit-v2-issues-screen";
+import { SitV2ImproveReview } from "./sit-v2-improve-review";
 import { qualityCount, highlightQualityRow } from "../sit-dead-finder";
 import {
   defaultLayout,
@@ -91,6 +92,13 @@ export function SitTestingViewV2({
   const [sitMode, setSitMode] = useState<"cases" | "issues">("cases");
   /** R10-07: mutually exclusive with quality chips — Show in Cases from Issues */
   const [selectedIssueIds, setSelectedIssueIds] = useState<string[] | null>(null);
+  const [improveReview, setImproveReview] = useState<{
+    rowId: string;
+    before: Record<string, string>;
+    after: Record<string, string>;
+    fixed: string[];
+    remaining: string[];
+  } | null>(null);
   const [deadLoading, setDeadLoading] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [columnLayout, setColumnLayout] = useState<SitColumnLayout>(() => defaultLayout());
@@ -1258,13 +1266,54 @@ export function SitTestingViewV2({
                     ).length || 0
                 }
                 canEdit={canEdit}
+                acTexts={acTextsById}
+                onLinkAc={(rowId, acId) => {
+                  if (!canEdit) return;
+                  const row = workbook?.sheets
+                    .find((s) => s.kind === "test-cases")
+                    ?.rows.find((r) => r.id === rowId);
+                  const existing = (row?.cells.acIds || row?.cells.ac || "")
+                    .split(/[,\s]+/)
+                    .map((s) => s.trim())
+                    .filter(Boolean);
+                  if (!existing.includes(acId)) existing.push(acId);
+                  void patchRow(rowId, { cells: { acIds: existing.join(",") } }, { label: "AC link" });
+                }}
                 improveDisabledReason={
-                  deadLoading
+                  deadLoading || !deadAudit
                     ? "Still loading quality audit"
-                    : !deadAudit
-                      ? "Still loading"
-                      : "Improve with AI arrives in R10-09"
+                    : generating
+                      ? "Generation is running"
+                      : !modelReady
+                        ? "Model is inactive"
+                        : null
                 }
+                onImprove={(rowIds) => {
+                  const id = rowIds[0];
+                  if (!id || !workbook || workbook.id === "pending") return;
+                  void (async () => {
+                    try {
+                      const row = workbook.sheets
+                        .find((s) => s.kind === "test-cases")
+                        ?.rows.find((r) => r.id === id);
+                      if (!row) return;
+                      const res = await client.improveSitCase(workbook.id, id);
+                      if (res.status !== "proposal" || !res.proposal) {
+                        setError(res.reason || "No improvement");
+                        return;
+                      }
+                      setImproveReview({
+                        rowId: id,
+                        before: { ...row.cells },
+                        after: { ...row.cells, ...res.proposal },
+                        fixed: res.fixed || [],
+                        remaining: res.remaining || [],
+                      });
+                    } catch (err) {
+                      setError(err instanceof Error ? err.message : "Improve failed");
+                    }
+                  })();
+                }}
                 onOpenInCases={(rowId) => {
                   setSitMode("cases");
                   setSelectedIssueIds(null);
@@ -1341,6 +1390,24 @@ export function SitTestingViewV2({
           </p>
         )}
       </div>
+
+      {improveReview ? (
+        <SitV2ImproveReview
+          before={improveReview.before}
+          after={improveReview.after}
+          fixed={improveReview.fixed}
+          remaining={improveReview.remaining}
+          onDiscard={() => setImproveReview(null)}
+          onApply={(fields) => {
+            const body: Record<string, string> = {};
+            for (const f of fields) {
+              if (improveReview.after[f] != null) body[f] = improveReview.after[f]!;
+            }
+            void patchRow(improveReview.rowId, { cells: body }, { label: "AI improve" });
+            setImproveReview(null);
+          }}
+        />
+      ) : null}
 
       {undoRow && (
         <div
