@@ -224,8 +224,12 @@ export function SitV2Picker({
                                       : "Not generated"}
                                   </span>
                                   {activeTicketKey === t.key && (
-                                    <span className="inline-flex items-center gap-0.5 rounded-full bg-[#8664F2] px-2 py-0.5 text-[10px] font-semibold text-white">
-                                      Active  to 
+                                    <span
+                                      className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full bg-[#8664F2] px-2 py-0.5 text-[12px] font-semibold text-white"
+                                      data-testid="sit-jira-active-tab-badge"
+                                      title="This ticket is the active scope tab in the Cases grid"
+                                    >
+                                      Active tab
                                     </span>
                                   )}
                                   {onActivateTicket && (

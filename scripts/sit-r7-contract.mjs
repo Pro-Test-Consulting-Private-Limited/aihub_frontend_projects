@@ -272,10 +272,18 @@ for (const [id, sel] of [
   record(id, "visible", String(n), n > 0);
 }
 
-const needsReviewBtn = page.getByTestId("sit-needs-review-btn");
-const needsReviewRole = page.getByRole("button", { name: /Needs review/i });
-const needsN = (await needsReviewBtn.count()) + (await needsReviewRole.count());
-record("C4.needs_review", "Needs review control present (or zero needs-review cases)", String(needsN), true, needsN > 0 ? "visible" : "none_needed");
+// R11-02: Needs review moved into Flagged dropdown (no top-level Needs review button).
+const flaggedBtn = page.getByTestId("sit-flagged-btn");
+let needsN = 0;
+if (await flaggedBtn.count()) {
+  await flaggedBtn.click();
+  await page.waitForTimeout(200);
+  const opt = page.getByTestId("sit-flagged-opt-needs_review");
+  needsN = await opt.count();
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(100);
+}
+record("C4.needs_review", "Needs review available via Flagged dropdown (or zero needs-review cases)", String(needsN), true, needsN > 0 ? "visible" : "none_needed");
 
 // ---- C1 selection ----
 const idCell = page.getByTestId("sit-id-cell").first();
@@ -307,7 +315,7 @@ const qNum = await qualityButtonNumber(page);
 const foot = parseShowing(await footerText(page));
 await qualityBtn.click();
 await page.waitForTimeout(400);
-const dd = page.getByTestId("sit-quality-dropdown");
+const dd = page.getByTestId("sit-flagged-dropdown");
 const hasDd = (await dd.count()) > 0;
 record("R7-04.dropdown_open", "Quality opens dropdown", String(hasDd), hasDd);
 if (hasDd) {
@@ -494,7 +502,7 @@ const i7States = [
     setup: async () => {
       await qualityBtn.click();
       await page.waitForTimeout(300);
-      const thin = page.getByTestId("sit-quality-opt-thin").or(page.getByText(/^Thin/i).first());
+      const thin = page.getByTestId("sit-quality-group-thin_case").or(page.getByText(/^Thin/i).first());
       if (await thin.count()) await thin.first().click();
       await page.waitForTimeout(300);
       await page.keyboard.press("Escape");
@@ -641,7 +649,7 @@ async function popoversInsideViewport(page) {
   return page.evaluate(() => {
     const pops = [
       ...document.querySelectorAll("[data-sit-select-popover='1']"),
-      ...document.querySelectorAll("[data-testid='sit-quality-dropdown']"),
+      ...document.querySelectorAll("[data-testid='sit-flagged-dropdown']"),
       ...document.querySelectorAll("[data-testid$='-popover']"),
     ];
     const vw = window.innerWidth;
@@ -681,7 +689,7 @@ async function dismissPopovers(page) {
   await page.keyboard.press("Escape");
   await page.waitForTimeout(80);
   await page.evaluate(() => {
-    document.querySelectorAll("[data-sit-select-popover='1'], [data-testid='sit-quality-dropdown']").forEach((n) => {
+    document.querySelectorAll("[data-sit-select-popover='1'], [data-testid='sit-flagged-dropdown']").forEach((n) => {
       n.remove();
     });
   });

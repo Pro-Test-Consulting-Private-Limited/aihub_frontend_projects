@@ -4,6 +4,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { DeadFlag, DeadFlagHit, SitDeadAudit } from "@/app/interfaces/appatlas";
 import { placePopover } from "./sit-v2/sit-popover-place";
+import {
+  DEFECT_FLAG_LABEL,
+  DEFECT_FLAG_ORDER,
+  DEFECT_TO_DEAD,
+  migrateFlaggedFilter,
+  type CaseDefectFlag,
+  type FlagSummary,
+  type FlaggedFilter,
+} from "@/app/lib/sit-case-flags";
 
 /** Plain-words labels for Quality groups (Round 5 A3 / Round 6 A1). */
 export const QUALITY_GROUP_LABEL: Partial<Record<DeadFlag, string>> = {
@@ -142,18 +151,35 @@ function uniqueCaseCount(items: { rowId: string }[]): number {
   return new Set(items.map((i) => i.rowId)).size;
 }
 
-/** Chip label for active quality / needs-review filter (R7-04). */
-export function qualityChipText(filter: QualityFilter, audit: SitDeadAudit | null): string {
-  if (!filter) return "";
-  if (filter === "all") return `All flagged: ${qualityCount(audit)} cases`;
-  if (isNeedsReviewFlag(filter)) {
-    const n = audit?.needsReviewRows ?? audit?.summary?.needs_review ?? audit?.summary?.not_assessed ?? 0;
+/** Chip label for active Flagged filter (R7-04 / R11-02). */
+export function qualityChipText(
+  filter: QualityFilter | FlaggedFilter,
+  audit: SitDeadAudit | null,
+  summary?: FlagSummary | null,
+): string {
+  const f = migrateFlaggedFilter(filter);
+  if (!f) return "";
+  if (f === "all") {
+    const n = summary?.defectCases ?? qualityCount(audit);
+    return `All flagged: ${n} cases`;
+  }
+  if (f === "needs_review") {
+    const n =
+      summary?.reviewCases ??
+      audit?.needsReviewRows ??
+      audit?.summary?.needs_review ??
+      audit?.summary?.not_assessed ??
+      0;
     return `Needs review: ${n} cases`;
   }
+  if (summary) {
+    return `${DEFECT_FLAG_LABEL[f]}: ${summary.byDefect[f] ?? 0} cases`;
+  }
+  const dead = DEFECT_TO_DEAD[f] as DeadFlag;
   const groups = audit ? groupHits(audit) : [];
-  const g = groups.find((x) => x.flag === filter);
-  const n = g ? uniqueCaseCount(g.items) : audit?.summary?.[filter] ?? 0;
-  return `${QUALITY_GROUP_LABEL[filter] || filter}: ${n} cases`;
+  const g = groups.find((x) => x.flag === dead);
+  const n = g ? uniqueCaseCount(g.items) : audit?.summary?.[dead] ?? 0;
+  return `${DEFECT_FLAG_LABEL[f]}: ${n} cases`;
 }
 
 /** Always-visible strip (legacy view). */
@@ -218,28 +244,22 @@ export function DeadTestFinderStrip({
 }
 
 /**
- * R7-04: Quality button opens a dropdown (no side drawer).
+ * R11-02: Flagged filter dropdown for the Cases filter row (replaces top-level Quality + Needs review).
  */
-export function DeadTestFinderToolbar({
-  audit,
+export function FlaggedFilterDropdown({
+  summary,
   loading,
   activeFlag,
   onFlag,
   draftCount = 0,
   onOpenIssues,
 }: {
-  audit: SitDeadAudit | null;
+  summary: FlagSummary | null;
   loading?: boolean;
-  activeFlag: QualityFilter;
-  onFlag: (flag: QualityFilter) => void;
-  /** R10-04: Draft rows are not quality-checked until Not run. */
+  activeFlag: FlaggedFilter;
+  onFlag: (flag: FlaggedFilter) => void;
   draftCount?: number;
-  /** R10-07: footer link to Issues screen */
   onOpenIssues?: () => void;
-  /** @deprecated R7-04 ignored */
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
-  hideOverlayPanel?: boolean;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [focusIdx, setFocusIdx] = useState(0);
@@ -250,29 +270,28 @@ export function DeadTestFinderToolbar({
     left: 0,
     maxHeight: 480,
   });
-  const flagged = qualityCount(audit);
-  const issues = qualityIssueCount(audit);
-  const needsReview = audit?.needsReviewRows ?? audit?.summary?.needs_review ?? audit?.summary?.not_assessed ?? 0;
-  const groups = useMemo(() => (audit ? groupHits(audit) : []), [audit]);
-  const filterOn =
-    activeFlag != null && activeFlag !== "needs_review" && activeFlag !== "not_assessed";
+  const migrated = migrateFlaggedFilter(activeFlag);
+  const defectN = summary?.defectCases ?? 0;
+  const reviewN = summary?.reviewCases ?? 0;
+  const attentionN = summary?.attentionCases ?? 0;
+  const filterOn = migrated != null;
 
-  type Row = { id: string; label: string; count?: number; value: QualityFilter };
+  type Row = { id: string; label: string; count?: number; value: FlaggedFilter };
   const rows: Row[] = useMemo(() => {
     const out: Row[] = [
       { id: "all-cases", label: "All cases", value: null },
-      { id: "all-flagged", label: "All flagged", count: flagged, value: "all" },
+      { id: "all-flagged", label: "All flagged", count: defectN, value: "all" },
     ];
-    for (const g of groups) {
-      out.push({
-        id: g.flag,
-        label: g.label,
-        count: uniqueCaseCount(g.items),
-        value: g.flag,
-      });
+    for (const flag of DEFECT_FLAG_ORDER) {
+      const n = summary?.byDefect[flag] ?? 0;
+      if (!n && migrated !== flag) continue;
+      out.push({ id: flag, label: DEFECT_FLAG_LABEL[flag], count: n, value: flag });
+    }
+    if (reviewN > 0 || migrated === "needs_review") {
+      out.push({ id: "needs_review", label: "Needs review", count: reviewN, value: "needs_review" });
     }
     return out;
-  }, [groups, flagged]);
+  }, [summary, defectN, reviewN, migrated]);
 
   const placeMenu = () => {
     const r = btnRef.current?.getBoundingClientRect();
@@ -326,31 +345,15 @@ export function DeadTestFinderToolbar({
     };
   }, [menuOpen, rows, focusIdx, onFlag]);
 
-  const selectRow = (value: QualityFilter) => {
-    onFlag(value);
+  // R11-02 / R10-03: mousedown+preventDefault so document mousedown cannot close before option registers.
+  const selectRow = (value: FlaggedFilter) => {
+    onFlag(migrateFlaggedFilter(value));
     setMenuOpen(false);
     btnRef.current?.focus();
   };
 
   return (
     <div className="relative flex flex-wrap items-center gap-2">
-      {needsReview > 0 && (
-        <button
-          type="button"
-          className={`rounded-[8px] border px-2.5 py-1.5 text-[12.5px] font-medium ${
-            activeFlag === "needs_review" || activeFlag === "not_assessed"
-              ? "border-[#8664F2] bg-[#f3f0ff] text-[#5b21b6]"
-              : "border-[#e2e6ef] bg-white text-[#5b647a]"
-          }`}
-          title="Priority and Severity not reviewed yet"
-          data-testid="sit-needs-review-btn"
-          onClick={() =>
-            onFlag(activeFlag === "needs_review" || activeFlag === "not_assessed" ? null : "needs_review")
-          }
-        >
-          Needs review {needsReview}
-        </button>
-      )}
       <button
         ref={btnRef}
         type="button"
@@ -361,17 +364,18 @@ export function DeadTestFinderToolbar({
         className={`rounded-[8px] border px-3 py-1.5 text-[12.5px] font-medium transition ${
           filterOn
             ? "border-[#d97706] bg-[#d97706] text-white"
-            : flagged > 0
+            : attentionN > 0
               ? "border-[#fcd34d] bg-[#fffbeb] text-[#92400e]"
               : "border-[#e2e6ef] text-[#5b647a] dark:border-[#2a2a2a]"
         }`}
-        title="Quality filters: duplicates, empty expected, unlinked ACs, thin cases, contradictions"
-        data-testid="sit-quality-btn"
+        title="Flagged filters: defects and needs-review triage"
+        data-testid="sit-flagged-btn"
         aria-haspopup="listbox"
         aria-expanded={menuOpen}
         aria-pressed={filterOn}
       >
-        {loading && !audit ? "Quality…" : `Quality ${flagged}`}
+        {/* Nested legacy testid so waitFor(sit-quality-btn) still finds a visible control */}
+        <span data-testid="sit-quality-btn">{loading && !summary ? "Flagged…" : `Flagged ${attentionN}`}</span>
       </button>
       {menuOpen &&
         typeof document !== "undefined" &&
@@ -380,22 +384,19 @@ export function DeadTestFinderToolbar({
             ref={menuRef}
             className="fixed z-[80] flex w-[360px] flex-col overflow-hidden rounded-[10px] border border-[#e2e6ef] bg-white shadow-xl dark:border-[#2a2a2a] dark:bg-[#151515]"
             style={{ top: pos.top, left: pos.left, maxHeight: pos.maxHeight }}
-            data-testid="sit-quality-dropdown"
+            data-testid="sit-flagged-dropdown"
             role="listbox"
-            aria-label="Quality filter"
+            aria-label="Flagged filter"
           >
             <div
               className="border-b border-[#eef0f5] px-3 py-2 text-[12.5px] font-medium text-[#374151]"
-              data-testid="sit-quality-dropdown-header"
+              data-testid="sit-flagged-dropdown-header"
             >
-              {flagged === 0
-                ? "No quality issues found"
-                : `${flagged} cases need attention (${issues} issues)`}
+              {attentionN === 0
+                ? "No flagged cases"
+                : `${attentionN} cases need attention: ${defectN} with defects, ${reviewN} awaiting review`}
               {draftCount > 0 ? (
-                <div
-                  className="mt-1 text-[12px] font-normal text-[#9ca3af]"
-                  data-testid="sit-quality-draft-line"
-                >
+                <div className="mt-1 text-[12px] font-normal text-[#9ca3af]" data-testid="sit-quality-draft-line">
                   {draftCount} Draft cases are not checked until they are set to Not run.
                 </div>
               ) : null}
@@ -403,9 +404,11 @@ export function DeadTestFinderToolbar({
             <div className="min-h-0 flex-1 overflow-y-auto py-1">
               {rows.map((row, idx) => {
                 const isActive =
-                  row.value === null
-                    ? activeFlag == null
-                    : activeFlag === row.value;
+                  row.value === null ? migrated == null : migrated === migrateFlaggedFilter(row.value);
+                const deadAlias =
+                  row.value && row.value !== "all" && row.value !== "needs_review"
+                    ? DEFECT_TO_DEAD[row.value as CaseDefectFlag]
+                    : null;
                 return (
                   <button
                     key={row.id}
@@ -417,19 +420,23 @@ export function DeadTestFinderToolbar({
                         ? "sit-quality-opt-all-cases"
                         : row.value === "all"
                           ? "sit-quality-filter-all"
-                          : `sit-quality-group-${row.value}`
+                          : row.value === "needs_review"
+                            ? "sit-flagged-opt-needs_review"
+                            : `sit-quality-group-${deadAlias || row.value}`
                     }
                     className={`flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] ${
                       idx === focusIdx ? "bg-[#f3f0ff]" : "hover:bg-[#f8fafc]"
                     } ${isActive ? "font-semibold text-[#5b21b6]" : "text-[#1F1F1F]"}`}
                     onMouseEnter={() => setFocusIdx(idx)}
-                    onClick={() => selectRow(row.value)}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      selectRow(row.value);
+                    }}
                   >
                     <span className="w-4 text-center text-[#8664F2]">{isActive ? "✓" : ""}</span>
                     <span className="flex-1">{row.label}</span>
-                    {row.count != null ? (
-                      <span className="text-[12px] text-[#6b7280]">{row.count}</span>
-                    ) : null}
+                    {row.count != null ? <span className="text-[12px] text-[#6b7280]">{row.count}</span> : null}
                   </button>
                 );
               })}
@@ -440,7 +447,8 @@ export function DeadTestFinderToolbar({
                   type="button"
                   className="w-full text-left text-[13px] font-medium text-[#8664F2]"
                   data-testid="sit-quality-open-issues"
-                  onClick={() => {
+                  onMouseDown={(e) => {
+                    e.preventDefault();
                     setMenuOpen(false);
                     onOpenIssues();
                   }}
@@ -456,27 +464,65 @@ export function DeadTestFinderToolbar({
   );
 }
 
-/** Single active quality / needs-review chip for the filter row (R7-04). */
+/** @deprecated R11-02: use FlaggedFilterDropdown in Cases row. */
+export function DeadTestFinderToolbar(props: {
+  audit: SitDeadAudit | null;
+  loading?: boolean;
+  activeFlag: QualityFilter;
+  onFlag: (flag: QualityFilter) => void;
+  draftCount?: number;
+  onOpenIssues?: () => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  hideOverlayPanel?: boolean;
+  summary?: FlagSummary | null;
+}) {
+  const summary =
+    props.summary ||
+    ({
+      flagsByRowId: {},
+      defectCases: qualityCount(props.audit),
+      reviewCases: props.audit?.needsReviewRows ?? props.audit?.summary?.needs_review ?? 0,
+      attentionCases:
+        (qualityCount(props.audit) || 0) +
+        (props.audit?.needsReviewRows ?? props.audit?.summary?.needs_review ?? 0),
+      byDefect: { duplicate: 0, noExpected: 0, noAC: 0, thin: 0, conflict: 0 },
+    } satisfies FlagSummary);
+  return (
+    <FlaggedFilterDropdown
+      summary={summary}
+      loading={props.loading}
+      activeFlag={migrateFlaggedFilter(props.activeFlag)}
+      onFlag={(f) => props.onFlag(f as QualityFilter)}
+      draftCount={props.draftCount}
+      onOpenIssues={props.onOpenIssues}
+    />
+  );
+}
+
+/** Single active Flagged filter chip for the Cases filter row (R7-04 / R11-02). */
 export function QualityActiveChip({
   audit,
   activeFlag,
   onClear,
+  summary = null,
 }: {
   audit: SitDeadAudit | null;
-  activeFlag: QualityFilter;
+  activeFlag: QualityFilter | FlaggedFilter;
   onClear: () => void;
+  summary?: FlagSummary | null;
 }) {
-  if (!activeFlag) return null;
+  if (!migrateFlaggedFilter(activeFlag)) return null;
   return (
     <span
       className="inline-flex items-center gap-1 rounded-full border border-[#fcd34d] bg-[#fffbeb] px-2.5 py-0.5 text-[12px] font-medium text-[#92400e]"
       data-testid="sit-quality-filter-chip"
     >
-      {qualityChipText(activeFlag, audit)}
+      {qualityChipText(activeFlag, audit, summary)}
       <button
         type="button"
         className="ml-0.5 rounded px-1 hover:bg-[#fde68a]"
-        aria-label="Clear quality filter"
+        aria-label="Clear flagged filter"
         data-testid="sit-quality-filter-chip-clear"
         onClick={onClear}
       >
@@ -496,7 +542,7 @@ export function QualityDrawerPanel(_props: {
   return null;
 }
 
-export function filterRowsByDeadFlag<T extends { id: string }>(
+export function filterRowsByDeadFlag<T extends { id: string; cells?: Record<string, string> }>(
   rows: T[],
   audit: SitDeadAudit | null,
   flag: QualityFilter,
@@ -508,9 +554,18 @@ export function filterRowsByDeadFlag<T extends { id: string }>(
     );
   }
   if (flag === "needs_review" || flag === "not_assessed") {
-    return rows.filter((r) =>
-      (audit.flagsByRowId[r.id] || []).some((h) => isNeedsReviewFlag(h.flag)),
-    );
+    // R11-03: BE audit increments needsReviewRows but does not push needs_review into
+    // flagsByRowId. Prefer audit hits when present; otherwise fall back to cells.
+    return rows.filter((r) => {
+      const hits = audit.flagsByRowId[r.id] || [];
+      if (hits.some((h) => isNeedsReviewFlag(h.flag))) return true;
+      const cells = r.cells;
+      if (!cells) return false;
+      if ((cells.executionStatus || "").trim() === "Draft" || cells.deleted === "1") return false;
+      if ((cells.origin || "ai").toLowerCase() === "human") return false;
+      const src = (cells.assessmentSource || "").trim();
+      return src === "Not assessed" || !src;
+    });
   }
   return rows.filter((r) => (audit.flagsByRowId[r.id] || []).some((h) => h.flag === flag));
 }

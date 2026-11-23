@@ -1,34 +1,35 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { DeadFlag, DeadFlagHit, SitDeadAudit, SitSheetRow } from "@/app/interfaces/appatlas";
+import type { SitDeadAudit, SitSheetRow } from "@/app/interfaces/appatlas";
 import {
-  QUALITY_CHIP_SHORT_LABEL,
-  QUALITY_GROUP_LABEL,
-  QUALITY_GROUP_ORDER,
-  qualityCount,
-  qualityIssueCount,
-} from "../sit-dead-finder";
+  DEFECT_FLAG_LABEL,
+  DEFECT_FLAG_ORDER,
+  DEFECT_TO_DEAD,
+  type CaseDefectFlag,
+  type FlagSummary,
+  type FlaggedFilter,
+} from "@/app/lib/sit-case-flags";
 
-const CATEGORY_MEANING: Partial<Record<DeadFlag, string>> = {
-  duplicate_case: "Same steps and expected as another case",
-  thin_case: "Fewer than 4 steps",
-  contradiction: "Preconditions conflict",
-  empty_oracle: "Expected result missing or too short",
-  orphan_ticket: "Not linked to an acceptance criterion",
+const CATEGORY_MEANING: Record<CaseDefectFlag, string> = {
+  duplicate: "Same steps and expected as another case",
+  thin: "Fewer than 4 steps",
+  conflict: "Preconditions conflict",
+  noExpected: "Expected result missing or too short",
+  noAC: "Not linked to an acceptance criterion",
 };
 
-function suggestedFix(flag: DeadFlag): string {
+function suggestedFix(flag: CaseDefectFlag): string {
   switch (flag) {
-    case "duplicate_case":
+    case "duplicate":
       return "Compare with the peer case and keep one, or differentiate steps.";
-    case "thin_case":
+    case "thin":
       return "Add steps until there are at least 4, naming real UI controls.";
-    case "contradiction":
+    case "conflict":
       return "Remove conflicting precondition bullets so the setup is consistent.";
-    case "empty_oracle":
+    case "noExpected":
       return "Add clear expected result bullets tied to Verify steps.";
-    case "orphan_ticket":
+    case "noAC":
       return "Link an acceptance criterion from this ticket.";
     default:
       return "Review and fix the flagged content.";
@@ -37,23 +38,27 @@ function suggestedFix(flag: DeadFlag): string {
 
 export type IssuesScreenProps = {
   audit: SitDeadAudit | null;
+  flagSummary: FlagSummary;
   loading?: boolean;
   rows: SitSheetRow[];
   draftCount: number;
   canEdit: boolean;
   onOpenInCases: (rowId: string) => void;
-  onShowInCases: (rowIds: string[]) => void;
+  onShowInCases: (rowIds: string[], filter?: FlaggedFilter) => void;
   onEditInCases: (rowId: string) => void;
+  onApplyFlaggedFilter?: (filter: FlaggedFilter) => void;
   /** R10-08: map ACn → text for the focused ticket */
   acTexts?: Record<string, string>;
   onLinkAc?: (rowId: string, acId: string) => void;
-  /** R10-09 hook */
+  /** R10-09 hook — live path disabled in R11 */
   onImprove?: (rowIds: string[]) => void;
   improveDisabledReason?: string | null;
 };
 
+type CardFilter = CaseDefectFlag | "needs_review" | null;
+
 export function SitV2IssuesScreen({
-  audit,
+  flagSummary,
   loading,
   rows,
   draftCount,
@@ -61,12 +66,13 @@ export function SitV2IssuesScreen({
   onOpenInCases,
   onShowInCases,
   onEditInCases,
+  onApplyFlaggedFilter,
   acTexts,
   onLinkAc,
   onImprove,
   improveDisabledReason,
 }: IssuesScreenProps) {
-  const [cardFilter, setCardFilter] = useState<DeadFlag | "needs_review" | null>(null);
+  const [cardFilter, setCardFilter] = useState<CardFilter>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
@@ -77,7 +83,6 @@ export function SitV2IssuesScreen({
     const onResize = () => {
       const narrow = window.innerWidth < 1280;
       setNarrowOverlay(narrow);
-      // Entering narrow: drop focus so the list is visible until the user picks a row.
       if (narrow) setFocusId(null);
     };
     onResize();
@@ -91,15 +96,23 @@ export function SitV2IssuesScreen({
     return m;
   }, [rows]);
 
-  const flaggedEntries = useMemo(() => {
-    if (!audit) return [];
-    const out: { rowId: string; hits: DeadFlagHit[]; row: SitSheetRow }[] = [];
-    for (const [rowId, hits] of Object.entries(audit.flagsByRowId || {})) {
-      const quality = hits.filter((h) => QUALITY_GROUP_ORDER.includes(h.flag));
-      if (!quality.length) continue;
+  const attentionEntries = useMemo(() => {
+    const out: {
+      rowId: string;
+      defects: { flag: CaseDefectFlag; reason: string }[];
+      needsReview: boolean;
+      row: SitSheetRow;
+    }[] = [];
+    for (const [rowId, flags] of Object.entries(flagSummary.flagsByRowId || {})) {
+      if (!flags.defects.length && !flags.needsReview) continue;
       const row = rowById.get(rowId);
       if (!row || row.cells.deleted === "1") continue;
-      out.push({ rowId, hits: quality, row });
+      out.push({
+        rowId,
+        defects: flags.defects,
+        needsReview: flags.needsReview,
+        row,
+      });
     }
     out.sort((a, b) => {
       const ta = a.row.cells.requirementId || "";
@@ -108,12 +121,14 @@ export function SitV2IssuesScreen({
       return (a.row.cells.caseId || "").localeCompare(b.row.cells.caseId || "");
     });
     return out;
-  }, [audit, rowById]);
+  }, [flagSummary, rowById]);
 
   const filtered = useMemo(() => {
-    let list = flaggedEntries;
-    if (cardFilter && cardFilter !== "needs_review") {
-      list = list.filter((e) => e.hits.some((h) => h.flag === cardFilter));
+    let list = attentionEntries;
+    if (cardFilter === "needs_review") {
+      list = list.filter((e) => e.needsReview);
+    } else if (cardFilter) {
+      list = list.filter((e) => e.defects.some((h) => h.flag === cardFilter));
     }
     if (search.trim()) {
       const q = search.trim().toLowerCase();
@@ -125,10 +140,9 @@ export function SitV2IssuesScreen({
       );
     }
     return list;
-  }, [flaggedEntries, cardFilter, search]);
+  }, [attentionEntries, cardFilter, search]);
 
   useEffect(() => {
-    // Narrow: keep list until the user selects a row (overlay + Back).
     if (narrowOverlay) {
       if (focusId && !filtered.some((e) => e.rowId === focusId)) setFocusId(null);
       return;
@@ -139,24 +153,13 @@ export function SitV2IssuesScreen({
     }
   }, [filtered, focusId, narrowOverlay]);
 
-  const flaggedN = qualityCount(audit);
-  const issuesN = qualityIssueCount(audit);
-  const needsReview = audit?.needsReviewRows ?? audit?.summary?.needs_review ?? 0;
+  const attentionN = flagSummary.attentionCases;
+  const defectN = flagSummary.defectCases;
+  const reviewN = flagSummary.reviewCases;
   const focus = filtered.find((e) => e.rowId === focusId) || null;
 
-  const cardCounts = useMemo(() => {
-    const c: Partial<Record<DeadFlag, number>> = {};
-    for (const flag of QUALITY_GROUP_ORDER) {
-      const ids = new Set<string>();
-      for (const e of flaggedEntries) {
-        if (e.hits.some((h) => h.flag === flag)) ids.add(e.rowId);
-      }
-      c[flag] = ids.size;
-    }
-    return c;
-  }, [flaggedEntries]);
-
-  const toggleCheck = (id: string) => {
+  const toggleCheck = (id: string, e?: React.MouseEvent | React.ChangeEvent) => {
+    e?.stopPropagation?.();
     setChecked((prev) => {
       const n = new Set(prev);
       if (n.has(id)) n.delete(id);
@@ -186,7 +189,7 @@ export function SitV2IssuesScreen({
     }
   };
 
-  if (loading && !audit) {
+  if (loading && attentionN === 0 && Object.keys(flagSummary.flagsByRowId).length === 0) {
     return (
       <div className="p-6 text-[13px] text-[#5b647a]" data-testid="sit-issues-loading">
         Loading issues…
@@ -194,10 +197,10 @@ export function SitV2IssuesScreen({
     );
   }
 
-  if (!audit || flaggedN === 0) {
+  if (attentionN === 0) {
     return (
       <div className="flex flex-1 flex-col gap-3 p-6" data-testid="sit-issues-empty">
-        <p className="text-[14px] font-medium text-[#374151]">No quality issues found</p>
+        <p className="text-[14px] font-medium text-[#374151]">No cases need attention</p>
         {draftCount > 0 ? (
           <p className="text-[12px] text-[#9ca3af]" data-testid="sit-issues-draft-line">
             {draftCount} Draft cases are not checked until they are set to Not run.
@@ -206,6 +209,21 @@ export function SitV2IssuesScreen({
       </div>
     );
   }
+
+  const showInCasesForCard = (filter: FlaggedFilter, count: number) => {
+    const ids = attentionEntries
+      .filter((e) => {
+        if (filter === "needs_review") return e.needsReview;
+        if (filter === "all") return e.defects.length > 0;
+        return e.defects.some((d) => d.flag === filter);
+      })
+      .map((e) => e.rowId);
+    if (ids.length !== count && process.env.NODE_ENV !== "production") {
+      console.warn(`[sit-issues] Show in Cases count mismatch filter=${String(filter)} card=${count} ids=${ids.length}`);
+    }
+    onApplyFlaggedFilter?.(filter);
+    onShowInCases(ids, filter);
+  };
 
   const detail = focus ? (
     <div className="flex h-full min-h-0 flex-col gap-3 overflow-auto p-4" data-testid="sit-issues-detail">
@@ -229,19 +247,19 @@ export function SitV2IssuesScreen({
       <div>
         <div className="mb-2 text-[12px] font-semibold text-[#5b647a]">Why this is flagged</div>
         <ul className="m-0 space-y-3 p-0">
-          {focus.hits.map((h, i) => (
+          {focus.defects.map((h, i) => (
             <li
               key={`${h.flag}-${i}`}
               className="rounded-[8px] border border-[#fde68a] bg-[#fffbeb] px-3 py-2"
-              data-testid={`sit-issues-reason-${h.flag}`}
+              data-testid={`sit-issues-reason-${DEFECT_TO_DEAD[h.flag]}`}
             >
               <span className="inline-block rounded-full border border-[#fde68a] bg-white px-2 py-0.5 text-[12px] font-semibold text-[#92400e]">
-                {QUALITY_CHIP_SHORT_LABEL[h.flag] || QUALITY_GROUP_LABEL[h.flag] || h.flag}
+                {DEFECT_FLAG_LABEL[h.flag]}
               </span>
               <p className="mt-1 text-[13px] text-[#78350f]">{h.reason}</p>
               <p className="mt-1 text-[12px] text-[#92400e]">Suggested fix: {suggestedFix(h.flag)}</p>
               <div className="mt-2 flex flex-wrap gap-2">
-                {h.flag === "orphan_ticket" && onLinkAc ? (
+                {h.flag === "noAC" && onLinkAc ? (
                   <button
                     type="button"
                     className="rounded-[6px] border border-[#8664F2] px-2 py-1 text-[12px] font-medium text-[#8664F2]"
@@ -251,7 +269,7 @@ export function SitV2IssuesScreen({
                     Link to AC
                   </button>
                 ) : null}
-                {h.flag === "duplicate_case" ? (
+                {h.flag === "duplicate" ? (
                   <button
                     type="button"
                     className="rounded-[6px] border border-[#e2e6ef] px-2 py-1 text-[12px]"
@@ -274,6 +292,20 @@ export function SitV2IssuesScreen({
               </div>
             </li>
           ))}
+          {focus.needsReview ? (
+            <li
+              className="rounded-[8px] border border-[#ddd6fe] bg-[#f5f3ff] px-3 py-2"
+              data-testid="sit-issues-reason-needs_review"
+            >
+              <span className="inline-block rounded-full border border-[#ddd6fe] bg-white px-2 py-0.5 text-[12px] font-semibold text-[#5b21b6]">
+                Needs review
+              </span>
+              <p className="mt-1 text-[13px] text-[#5b21b6]">
+                Priority or severity has not been assessed by a human yet.
+              </p>
+              <p className="mt-1 text-[12px] text-[#6b7280]">Suggested fix: Review Priority and Severity, then mark assessed.</p>
+            </li>
+          ) : null}
         </ul>
       </div>
       <div data-testid="sit-issues-preview">
@@ -358,7 +390,7 @@ export function SitV2IssuesScreen({
     <div className="flex min-h-0 flex-1 flex-col" data-testid="sit-issues-screen" onKeyDown={onKeyList}>
       <div className="border-b border-[#eef0f5] px-4 py-3">
         <div className="text-[14px] font-semibold text-[#1F1F1F]" data-testid="sit-issues-headline">
-          {flaggedN} cases need attention ({issuesN} issues)
+          {attentionN} cases need attention: {defectN} with defects, {reviewN} awaiting review
         </div>
         {draftCount > 0 ? (
           <p className="mt-1 text-[12px] text-[#9ca3af]" data-testid="sit-issues-draft-line">
@@ -366,37 +398,64 @@ export function SitV2IssuesScreen({
           </p>
         ) : null}
         <div className="mt-3 flex flex-wrap gap-2" data-testid="sit-issues-cards">
-          {QUALITY_GROUP_ORDER.map((flag) => {
-            const n = cardCounts[flag] || 0;
+          {DEFECT_FLAG_ORDER.map((flag) => {
+            const n = flagSummary.byDefect[flag] || 0;
             const active = cardFilter === flag;
+            const dead = DEFECT_TO_DEAD[flag];
             return (
-              <button
+              <div
                 key={flag}
-                type="button"
-                data-testid={`sit-issues-card-${flag}`}
+                data-testid={`sit-issues-card-${dead}`}
                 className={`min-w-[120px] rounded-[10px] border px-3 py-2 text-left ${
                   active ? "border-[#d97706] bg-[#fffbeb]" : "border-[#e2e6ef] bg-white"
                 }`}
-                onClick={() => setCardFilter(active ? null : flag)}
               >
-                <div className="text-[16px] font-semibold text-[#92400e]">{n}</div>
-                <div className="text-[12px] font-semibold">{QUALITY_CHIP_SHORT_LABEL[flag]}</div>
-                <div className="text-[12px] text-[#6b7280]">{CATEGORY_MEANING[flag]}</div>
-              </button>
+                <button type="button" className="w-full text-left" onClick={() => setCardFilter(active ? null : flag)}>
+                  <div className="text-[16px] font-semibold text-[#92400e]">{n}</div>
+                  <div className="text-[12px] font-semibold">{DEFECT_FLAG_LABEL[flag]}</div>
+                  <div className="text-[12px] text-[#6b7280]">{CATEGORY_MEANING[flag]}</div>
+                  <div className="mt-1 text-[11px] text-[#9ca3af]">{n} cases</div>
+                </button>
+                {n > 0 ? (
+                  <button
+                    type="button"
+                    className="mt-2 text-[12px] font-medium text-[#8664F2]"
+                    data-testid={`sit-issues-show-in-cases-${dead}`}
+                    onClick={() => showInCasesForCard(flag, n)}
+                  >
+                    Show in Cases
+                  </button>
+                ) : null}
+              </div>
             );
           })}
-          <button
-            type="button"
+          <div
             data-testid="sit-issues-card-needs_review"
             className={`min-w-[120px] rounded-[10px] border px-3 py-2 text-left ${
               cardFilter === "needs_review" ? "border-[#8664F2] bg-[#f3f0ff]" : "border-[#e2e6ef] bg-white"
             }`}
-            onClick={() => setCardFilter(cardFilter === "needs_review" ? null : "needs_review")}
           >
-            <div className="text-[16px] font-semibold text-[#5b21b6]">{needsReview}</div>
-            <div className="text-[12px] font-semibold">Needs review</div>
-            <div className="text-[12px] text-[#6b7280]">Priority or severity not assessed</div>
-          </button>
+            <button
+              type="button"
+              className="w-full text-left"
+              onClick={() => setCardFilter(cardFilter === "needs_review" ? null : "needs_review")}
+            >
+              <div className="text-[16px] font-semibold text-[#5b21b6]">{reviewN}</div>
+              <div className="text-[12px] font-semibold">Needs review</div>
+              <div className="text-[12px] text-[#6b7280]">Priority or severity not assessed</div>
+              <div className="mt-1 text-[11px] text-[#9ca3af]">{reviewN} cases</div>
+            </button>
+            {reviewN > 0 ? (
+              <button
+                type="button"
+                className="mt-2 text-[12px] font-medium text-[#8664F2]"
+                data-testid="sit-issues-show-in-cases-needs_review"
+                onClick={() => showInCasesForCard("needs_review", reviewN)}
+              >
+                Show in Cases
+              </button>
+            ) : null}
+          </div>
         </div>
       </div>
 
@@ -453,8 +512,8 @@ export function SitV2IssuesScreen({
             <ul className="m-0 min-h-0 flex-1 list-none overflow-auto p-0" tabIndex={0}>
               {filtered.map((e) => {
                 const active = e.rowId === focusId;
-                const short = e.hits[0] ? QUALITY_CHIP_SHORT_LABEL[e.hits[0].flag] : "";
-                const extra = e.hits.length > 1 ? ` +${e.hits.length - 1}` : "";
+                const short = e.defects[0] ? DEFECT_FLAG_LABEL[e.defects[0].flag] : e.needsReview ? "Needs review" : "";
+                const extra = e.defects.length > 1 ? ` +${e.defects.length - 1}` : "";
                 return (
                   <li key={e.rowId}>
                     <div
@@ -468,7 +527,7 @@ export function SitV2IssuesScreen({
                         type="checkbox"
                         className="mt-1 accent-[#8664F2]"
                         checked={checked.has(e.rowId)}
-                        onChange={() => toggleCheck(e.rowId)}
+                        onChange={(ev) => toggleCheck(e.rowId, ev)}
                         onClick={(ev) => ev.stopPropagation()}
                         aria-label={`Select ${e.row.cells.caseId}`}
                       />
