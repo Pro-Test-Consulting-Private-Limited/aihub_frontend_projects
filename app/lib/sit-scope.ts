@@ -309,6 +309,58 @@ export function ticketsFromKeys(epicsTickets: SitTicket[], keys: string[]): SitT
   return keys.map((k) => map.get(normalizeTicketKey(k))).filter(Boolean) as SitTicket[];
 }
 
+export type StreamScopeMerge = {
+  rows: SitSheetRow[];
+  workingKeys: string[];
+  /** Owning workbook id for stream rows (generating tickets). */
+  streamRowWorkbookId: Record<string, string>;
+};
+
+/**
+ * R16: merge a generate stream into the frozen base working set without shrinking pills.
+ * - Keep base rows for tickets NOT in generatingKeys.
+ * - Take stream workbook rows ONLY when ticketKeyOf is in generatingKeys (ignore foreign parent seed rows).
+ * - Dedupe by row id (stream wins).
+ * - workingKeys is always a superset of baseWorkingKeys (union generatingKeys).
+ */
+export function mergeStreamIntoScope(
+  baseRows: SitSheetRow[],
+  baseWorkingKeys: string[],
+  streamWorkbook: SitWorkbook | null | undefined,
+  generatingKeys: string[],
+): StreamScopeMerge {
+  const baseKeys = sortTicketKeys(baseWorkingKeys.map(normalizeTicketKey).filter(Boolean));
+  const genKeys = sortTicketKeys(generatingKeys.map(normalizeTicketKey).filter(Boolean));
+  const workingKeys = workingSetKeys(baseKeys, genKeys);
+  const genSet = new Set(genKeys);
+
+  if (!genSet.size || !streamWorkbook) {
+    return { rows: liveRows(baseRows), workingKeys, streamRowWorkbookId: {} };
+  }
+
+  const streamId = streamWorkbook.id && streamWorkbook.id !== "pending" ? streamWorkbook.id : "";
+  const streamAll = streamWorkbook.sheets.find((s) => s.kind === "test-cases")?.rows || [];
+  const streamForGen = liveRows(streamAll).filter((r) => {
+    const k = ticketKeyOf(r);
+    return Boolean(k && genSet.has(k));
+  });
+
+  const baseKept = liveRows(baseRows).filter((r) => {
+    const k = ticketKeyOf(r);
+    return !k || !genSet.has(k);
+  });
+
+  const byId = new Map<string, SitSheetRow>();
+  for (const r of baseKept) byId.set(r.id, r);
+  const streamRowWorkbookId: Record<string, string> = {};
+  for (const r of streamForGen) {
+    byId.set(r.id, r);
+    if (streamId) streamRowWorkbookId[r.id] = streamId;
+  }
+
+  return { rows: [...byId.values()], workingKeys, streamRowWorkbookId };
+}
+
 /** Persist helpers */
 export const SIT_SELECTED_KEYS = "sit_v2_selected_keys";
 export const SIT_SCOPE_PILL = "sit_v2_scope_pill";

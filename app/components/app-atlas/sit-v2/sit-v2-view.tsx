@@ -35,12 +35,15 @@ import {
   loadPersistedMode,
   loadPersistedScope,
   loadPersistedSelectedKeys,
+  mergeStreamIntoScope,
   mergeWorkbooksForKeys,
+  normalizeTicketKey,
   reportScopeInvariantBreaks,
   rowsForTicket,
   savePersistedMode,
   savePersistedScope,
   savePersistedSelectedKeys,
+  sortTicketKeys,
   ticketKeyOf,
   ticketsFromKeys,
   workbookWithMergedRows,
@@ -156,7 +159,19 @@ export function SitTestingViewV2({
     }
   });
   const [search, setSearch] = useState("");
-  const [undoRow, setUndoRow] = useState<{ workbookId: string; rowIds: string[] } | null>(null);
+  const [undoRow, setUndoRow] = useState<{
+    workbookId: string;
+    rowIds: string[];
+    /** Per-row owning workbook when bulk spans workbooks (R16). */
+    byRow?: Record<string, string>;
+  } | null>(null);
+  /** R16: stream workbook kept separate from the frozen base merged workbook. */
+  const [streamWorkbook, setStreamWorkbook] = useState<SitWorkbook | null>(null);
+  const [generatingKeys, setGeneratingKeys] = useState<string[]>([]);
+  const [streamRowOwners, setStreamRowOwners] = useState<Record<string, string>>({});
+  const baseKeysAtStreamRef = useRef<string[]>([]);
+  const streamRafRef = useRef<number | null>(null);
+  const pendingStreamWbRef = useRef<SitWorkbook | null>(null);
   const [deadFlag, setDeadFlag] = useState<FlaggedFilter>(() => {
     if (typeof window === "undefined") return null;
     try {
@@ -323,6 +338,40 @@ export function SitTestingViewV2({
   };
 
   const modelReady = modelMapped.ui === "ready";
+
+  const flushStreamWorkbook = useCallback((next: SitWorkbook) => {
+    pendingStreamWbRef.current = next;
+    if (streamRafRef.current != null) return;
+    streamRafRef.current = requestAnimationFrame(() => {
+      streamRafRef.current = null;
+      const pending = pendingStreamWbRef.current;
+      if (pending) setStreamWorkbook(pending);
+    });
+  }, []);
+
+  const clearStreamState = useCallback(() => {
+    if (streamRafRef.current != null) {
+      cancelAnimationFrame(streamRafRef.current);
+      streamRafRef.current = null;
+    }
+    pendingStreamWbRef.current = null;
+    setStreamWorkbook(null);
+    setGeneratingKeys([]);
+    setStreamRowOwners({});
+    baseKeysAtStreamRef.current = [];
+  }, []);
+
+  const ownerWorkbookId = useCallback(
+    (rowId: string, fallback?: string | null) =>
+      streamRowOwners[rowId] || rowWorkbookId[rowId] || fallback || workbook?.id || "",
+    [streamRowOwners, rowWorkbookId, workbook?.id],
+  );
+
+  const realignAfterStream = useCallback(async () => {
+    clearStreamState();
+    await load();
+  }, [clearStreamState, load]);
+
   const startGenerate = async (choices: TicketGenChoice[]) => {
     if (!canvasId) {
       setError("Select a Jira-connected canvas first.");
@@ -342,7 +391,45 @@ export function SitTestingViewV2({
     const ac = new AbortController();
     abortRef.current = ac;
 
-    // Seed skeleton workbook
+    const genKeys = sortTicketKeys(choices.map((c) => normalizeTicketKey(c.issueKey)).filter(Boolean));
+    const baseRowsNow =
+      workbook?.sheets.find((s) => s.kind === "test-cases")?.rows.filter((r) => r.cells.deleted !== "1") || [];
+    const baseKeysNow = workingSetKeys(
+      selected.map((t) => t.key),
+      workbook?.sourceIssueKeys || history.flatMap((h) => h.sourceIssueKeys || []),
+    );
+    baseKeysAtStreamRef.current = baseKeysNow;
+    setGeneratingKeys(genKeys);
+
+    // Seed stream with current rows of generating tickets so append does not flash empty.
+    const genSet = new Set(genKeys.map(normalizeTicketKey));
+    const seedRows = baseRowsNow.filter((r) => genSet.has(ticketKeyOf(r)));
+    const seedWb: SitWorkbook = {
+      id: "pending",
+      canvasId,
+      confirmedId: "",
+      sourceIssueKeys: genKeys,
+      sourceSummaries: {},
+      status: "running",
+      error: null,
+      generator: "huggingface",
+      sheets: [
+        {
+          id: "test-cases",
+          name: "Test Cases",
+          kind: "test-cases",
+          columns: workbook?.sheets.find((s) => s.kind === "test-cases")?.columns || [],
+          rows: seedRows,
+        },
+      ],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      createdBy: { id: "", name: "" },
+    } as SitWorkbook;
+    setStreamWorkbook(seedWb);
+    pendingStreamWbRef.current = seedWb;
+
+    // Keep base workbook if present; only seed skeleton when nothing is loaded.
     setWorkbook((prev) =>
       prev
         ? prev
@@ -350,7 +437,7 @@ export function SitTestingViewV2({
             id: "pending",
             canvasId,
             confirmedId: "",
-            sourceIssueKeys: choices.map((c) => c.issueKey),
+            sourceIssueKeys: genKeys,
             sourceSummaries: {},
             status: "running",
             error: null,
@@ -369,6 +456,15 @@ export function SitTestingViewV2({
             createdBy: { id: "", name: "" },
           } as SitWorkbook),
     );
+
+    const patchStreamRows = (mutate: (rows: SitSheetRow[]) => SitSheetRow[]) => {
+      const cur = pendingStreamWbRef.current || seedWb;
+      const sheets = cur.sheets.map((s) => {
+        if (s.kind !== "test-cases") return s;
+        return { ...s, rows: mutate(s.rows) };
+      });
+      flushStreamWorkbook({ ...cur, sheets, status: "running" });
+    };
 
     try {
       await client.streamSitGenerate(
@@ -399,15 +495,8 @@ export function SitTestingViewV2({
               ...p,
               [issueKey]: { status: "generating", count: Number(d.index) || (p[issueKey]?.count || 0) + 1 },
             }));
-            setWorkbook((prev) => {
-              if (!prev) return prev;
-              const sheets = prev.sheets.map((s) => {
-                if (s.kind !== "test-cases") return s;
-                if (s.rows.some((r) => r.id === row.id)) return s;
-                return { ...s, rows: [...s.rows, row] };
-              });
-              return { ...prev, sheets, status: "running" };
-            });
+            // R16: append into stream workbook only (never replace base).
+            patchStreamRows((rows) => (rows.some((r) => r.id === row.id) ? rows : [...rows, row]));
           } else if (event === "ticket_done") {
             setProgress((p) => ({
               ...p,
@@ -417,14 +506,7 @@ export function SitTestingViewV2({
             const rows = Array.isArray(d.rows) ? (d.rows as SitSheetRow[]) : [];
             if (rows.length) {
               const byId = new Map(rows.map((r) => [r.id, r]));
-              setWorkbook((prev) => {
-                if (!prev) return prev;
-                const sheets = prev.sheets.map((s) => {
-                  if (s.kind !== "test-cases") return s;
-                  return { ...s, rows: s.rows.map((r) => byId.get(r.id) || r) };
-                });
-                return { ...prev, sheets };
-              });
+              patchStreamRows((prevRows) => prevRows.map((r) => byId.get(r.id) || r));
             }
           } else if (event === "ticket_error") {
             setProgress((p) => ({
@@ -432,7 +514,8 @@ export function SitTestingViewV2({
               [String(d.issueKey)]: { status: "error", count: 0, message: String(d.message || "error") },
             }));
           } else if (event === "workbook") {
-            setWorkbook(d as unknown as SitWorkbook);
+            // Keep as stream state only; mergeStreamIntoScope filters to generating keys.
+            flushStreamWorkbook(d as unknown as SitWorkbook);
           } else if (event === "error") {
             setError(String(d.message || "Generation failed"));
           } else if (event === "done") {
@@ -442,10 +525,13 @@ export function SitTestingViewV2({
         },
         ac.signal,
       );
-      await load();
+      await realignAfterStream();
     } catch (err) {
-      if ((err as Error)?.name !== "AbortError") {
+      if ((err as Error)?.name === "AbortError") {
+        await realignAfterStream();
+      } else {
         setError(err instanceof Error ? err.message : "Generation failed");
+        await realignAfterStream();
       }
     } finally {
       setGenerating(false);
@@ -499,7 +585,8 @@ export function SitTestingViewV2({
     opts?: { label?: string },
   ) => {
     if (!workbook || workbook.id === "pending") return;
-    const wbId = rowWorkbookId[rowId] || workbook.id;
+    const wbId = ownerWorkbookId(rowId, workbook.id);
+    if (!wbId || wbId === "pending") return;
     setSaveState("saving");
     const label =
       opts?.label ||
@@ -541,15 +628,19 @@ export function SitTestingViewV2({
 
   const softDelete = async (rowId: string) => {
     if (!workbook) return;
-    const wbId = rowWorkbookId[rowId] || workbook.id;
+    const wbId = ownerWorkbookId(rowId, workbook.id);
     await patchRow(rowId, { softDelete: true });
-    setUndoRow({ workbookId: wbId, rowIds: [rowId] });
+    setUndoRow({ workbookId: wbId, rowIds: [rowId], byRow: { [rowId]: wbId } });
   };
 
   const softDeleteMany = async (rowIds: string[]) => {
     if (!workbook || !rowIds.length) return;
-    const wbId = workbook.id;
-    setUndoRow({ workbookId: wbId, rowIds: [...rowIds] });
+    const byRow: Record<string, string> = {};
+    for (const id of rowIds) {
+      byRow[id] = ownerWorkbookId(id, workbook.id);
+    }
+    const firstWb = byRow[rowIds[0]!] || workbook.id;
+    setUndoRow({ workbookId: firstWb, rowIds: [...rowIds], byRow });
     for (const id of rowIds) {
       await patchRow(id, { softDelete: true });
     }
@@ -559,7 +650,8 @@ export function SitTestingViewV2({
     if (!undoRow) return;
     let wb = workbook;
     for (const id of undoRow.rowIds) {
-      wb = await client.patchSitCase(undoRow.workbookId, id, { undelete: true });
+      const wbId = undoRow.byRow?.[id] || undoRow.workbookId;
+      wb = await client.patchSitCase(wbId, id, { undelete: true });
     }
     if (wb) commitWorkbook(wb);
     setUndoRow(null);
@@ -577,7 +669,13 @@ export function SitTestingViewV2({
 
   const createCaseForTicket = async (ticketKey: string) => {
     if (!workbook || workbook.id === "pending") return;
-    const res = await client.addSitCase(workbook.id, ticketKey);
+    const want = normalizeTicketKey(ticketKey);
+    const peer = (
+      workbook.sheets.find((s) => s.kind === "test-cases")?.rows || []
+    ).find((r) => ticketKeyOf(r) === want && r.cells.deleted !== "1");
+    const wbId = peer ? ownerWorkbookId(peer.id, workbook.id) : workbook.id;
+    if (!wbId || wbId === "pending") return;
+    const res = await client.addSitCase(wbId, ticketKey);
     commitWorkbook(res.workbook);
     const newId = res.row?.id || null;
     if (newId) {
@@ -616,17 +714,21 @@ export function SitTestingViewV2({
 
   const duplicateRow = async (rowId: string) => {
     if (!workbook || workbook.id === "pending") return;
-    const src = workbook.sheets
+    const baseSrc = workbook.sheets.find((s) => s.kind === "test-cases")?.rows.find((r) => r.id === rowId);
+    const streamSrc = streamWorkbook?.sheets
       .find((s) => s.kind === "test-cases")
       ?.rows.find((r) => r.id === rowId);
+    const src = streamSrc || baseSrc;
     if (!src) return;
     const ticketKey = ticketKeyOf(src);
     if (!ticketKey) {
       setError("Cannot duplicate: row has no ticket key.");
       return;
     }
+    const wbId = ownerWorkbookId(rowId, workbook.id);
+    if (!wbId || wbId === "pending") return;
     try {
-      const res = await client.addSitCase(workbook.id, ticketKey);
+      const res = await client.addSitCase(wbId, ticketKey);
       const newId = res.row?.id;
       if (!newId) {
         commitWorkbook(res.workbook);
@@ -640,21 +742,14 @@ export function SitTestingViewV2({
         if (typeof v === "string") copyCells[k] = v;
       }
       copyCells.scenario = `${src.cells.scenario || "Scenario"} (copy)`;
-      const next = await client.patchSitCase(workbook.id, newId, { cells: copyCells });
+      const next = await client.patchSitCase(wbId, newId, { cells: copyCells });
       commitWorkbook(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Duplicate failed");
     }
   };
 
-  /** All non-deleted rows in the merged workbook (working set). */
-  const allWorkingRows = useMemo(() => {
-    return (
-      workbook?.sheets.find((s) => s.kind === "test-cases")?.rows.filter((r) => r.cells.deleted !== "1") || []
-    );
-  }, [workbook]);
-
-  const workingKeys = useMemo(
+  const baseWorkingKeys = useMemo(
     () =>
       workingSetKeys(
         selected.map((t) => t.key),
@@ -662,6 +757,60 @@ export function SitTestingViewV2({
       ),
     [selected, workbook, history],
   );
+
+  const baseWorkingRows = useMemo(() => {
+    return (
+      workbook?.sheets.find((s) => s.kind === "test-cases")?.rows.filter((r) => r.cells.deleted !== "1") || []
+    );
+  }, [workbook]);
+
+  const streamMerge = useMemo(() => {
+    const frozenBaseKeys = generatingKeys.length
+      ? baseKeysAtStreamRef.current.length
+        ? baseKeysAtStreamRef.current
+        : baseWorkingKeys
+      : baseWorkingKeys;
+    return mergeStreamIntoScope(baseWorkingRows, frozenBaseKeys, streamWorkbook, generatingKeys);
+  }, [baseWorkingRows, baseWorkingKeys, streamWorkbook, generatingKeys]);
+
+  /** All non-deleted rows in the working set (base ∪ filtered stream). */
+  const allWorkingRows = streamMerge.rows;
+
+  const workingKeys = streamMerge.workingKeys;
+
+  /** Display shell: base workbook metadata with merged rows for grid/export. */
+  const scopedWorkbook = useMemo(() => {
+    if (!workbook) return workbook;
+    const tc = workbook.sheets.find((s) => s.kind === "test-cases");
+    const other = workbook.sheets.filter((s) => s.kind !== "test-cases");
+    return {
+      ...workbook,
+      sourceIssueKeys: workingKeys.length ? workingKeys : workbook.sourceIssueKeys,
+      sheets: [
+        {
+          id: tc?.id || "tc",
+          name: tc?.name || "Test Cases",
+          kind: "test-cases" as const,
+          columns: tc?.columns || [],
+          rows: allWorkingRows,
+        },
+        ...other,
+      ],
+    };
+  }, [workbook, workingKeys, allWorkingRows]);
+
+  useEffect(() => {
+    if (!streamWorkbook?.id || streamWorkbook.id === "pending" || !generatingKeys.length) {
+      return;
+    }
+    const gen = new Set(generatingKeys.map(normalizeTicketKey));
+    const rows = streamWorkbook.sheets.find((s) => s.kind === "test-cases")?.rows || [];
+    const next: Record<string, string> = {};
+    for (const r of rows) {
+      if (gen.has(ticketKeyOf(r))) next[r.id] = streamWorkbook.id;
+    }
+    setStreamRowOwners(next);
+  }, [streamWorkbook, generatingKeys]);
 
   /** R14-01: single summary for All tickets, pills, Unassigned, popup loaded counts. */
   const workingSummary = useMemo(() => buildScopeSummary(allWorkingRows, workingKeys), [allWorkingRows, workingKeys]);
@@ -702,24 +851,24 @@ export function SitTestingViewV2({
   }, [deadFlag]);
 
   const displayWorkbook = useMemo(() => {
-    if (!workbook) return workbook;
+    if (!scopedWorkbook) return scopedWorkbook;
     if (selectedIssueIds?.length) {
       const set = new Set(selectedIssueIds);
       return {
-        ...workbook,
-        sheets: workbook.sheets.map((s) =>
+        ...scopedWorkbook,
+        sheets: scopedWorkbook.sheets.map((s) =>
           s.kind !== "test-cases" ? s : { ...s, rows: s.rows.filter((r) => set.has(r.id)) },
         ),
       };
     }
     const flagged = migrateFlaggedFilter(deadFlag);
-    if (!flagged) return workbook;
+    if (!flagged) return scopedWorkbook;
     const filtered = filterRowsByCaseFlags(
-      workbook.sheets.find((s) => s.kind === "test-cases")?.rows || [],
+      scopedWorkbook.sheets.find((s) => s.kind === "test-cases")?.rows || [],
       // Filter against full workbook flags so All-pill scope still filters correctly;
       // counts use flagSummary (ticket scope). Rebuild lightly for all rows.
       summarizeCaseFlags(
-        workbook.sheets.find((s) => s.kind === "test-cases")?.rows.filter((r) => r.cells.deleted !== "1") || [],
+        scopedWorkbook.sheets.find((s) => s.kind === "test-cases")?.rows.filter((r) => r.cells.deleted !== "1") || [],
         null,
       ),
       flagged,
@@ -742,12 +891,12 @@ export function SitTestingViewV2({
       warnFlagCountMismatch(flagged, badge, scopedFiltered.length);
     }
     return {
-      ...workbook,
-      sheets: workbook.sheets.map((s) =>
+      ...scopedWorkbook,
+      sheets: scopedWorkbook.sheets.map((s) =>
         s.kind !== "test-cases" ? s : { ...s, rows: filtered },
       ),
     };
-  }, [workbook, deadFlag, selectedIssueIds, flagSummary, ticketFilter]);
+  }, [scopedWorkbook, deadFlag, selectedIssueIds, flagSummary, ticketFilter]);
 
   /** R7-03 / R12-01: Y in "Showing X of Y" is the current ticket scope (All or DW-x). */
   const toolbarTotalCount = useMemo(() => scopeRows.length, [scopeRows]);
@@ -842,14 +991,12 @@ export function SitTestingViewV2({
   }, [epics]);
 
   const activeRows = useMemo(() => {
-    const rows =
-      workbook?.sheets.find((s) => s.kind === "test-cases")?.rows.filter((r) => r.cells.deleted !== "1") || [];
-    if (!activeTicketKey) return rows;
-    return rows.filter((r) => r.cells.requirementId === activeTicketKey);
-  }, [workbook, activeTicketKey]);
+    if (!activeTicketKey) return allWorkingRows;
+    return allWorkingRows.filter((r) => ticketKeyOf(r) === activeTicketKey);
+  }, [allWorkingRows, activeTicketKey]);
 
   const runExport = async (kind: "xlsx" | "csv" | "copy", scope: ExportScope) => {
-    if (!workbook || workbook.id === "pending") return;
+    if (!scopedWorkbook || scopedWorkbook.id === "pending") return;
     setExportOpen(false);
     const acByTicket: Record<string, string[]> = {};
     for (const t of epics.flatMap((e) => e.tickets)) {
@@ -860,7 +1007,7 @@ export function SitTestingViewV2({
       [];
     try {
       if (kind === "xlsx") {
-        const { blob, filename } = await buildXlsxBlob(workbook, {
+        const { blob, filename } = await buildXlsxBlob(scopedWorkbook, {
           scope,
           viewRows,
           selectedKeys: selected.map((s) => s.key),
@@ -871,7 +1018,7 @@ export function SitTestingViewV2({
         downloadBlob(blob, filename);
       } else if (kind === "csv") {
         const { casesForExport } = await import("@/app/lib/sit-export");
-        const rows = casesForExport(workbook, {
+        const rows = casesForExport(scopedWorkbook, {
           scope,
           viewRows,
           selectedKeys: selected.map((s) => s.key),
@@ -880,7 +1027,7 @@ export function SitTestingViewV2({
         downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), `SIT_${metaProject}_${metaModule}.csv`);
       } else {
         const { casesForExport } = await import("@/app/lib/sit-export");
-        const rows = casesForExport(workbook, {
+        const rows = casesForExport(scopedWorkbook, {
           scope,
           viewRows,
           selectedKeys: selected.map((s) => s.key),
@@ -1690,10 +1837,7 @@ export function SitTestingViewV2({
               }}
               deadAudit={deadAudit}
               acTexts={acTextsById}
-              totalCaseCount={
-                workbook?.sheets.find((s) => s.kind === "test-cases")?.rows.filter((r) => r.cells.deleted !== "1")
-                  .length
-              }
+              totalCaseCount={allWorkingRows.length}
               onPatch={(rowId, body) => {
                 if (!canEdit) return;
                 void patchRow(rowId, body);

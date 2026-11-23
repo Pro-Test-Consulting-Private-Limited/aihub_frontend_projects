@@ -7,8 +7,11 @@ import type { SitSheetRow } from "@/app/interfaces/appatlas";
 import {
   buildScopeSummary,
   checkScopeInvariants,
+  mergeStreamIntoScope,
   ticketKeyOf,
+  workingSetKeys,
 } from "./sit-scope";
+import type { SitWorkbook } from "@/app/interfaces/appatlas";
 import { legacyAllVsPillSum } from "./sit-scope-r14-legacy";
 
 function mk(
@@ -164,5 +167,115 @@ describe("R14 state machine invariants", () => {
       expect(breaks, `step ${step} op ${op}: ${JSON.stringify(breaks)}`).toEqual([]);
       expect(summary.bySource.total).toBe(summary.total);
     }
+  });
+
+  it("R16 stream events never shrink working keys and keep invariants", () => {
+    const keys = ["DW-6", "DW-7", "DW-9"];
+    let baseRows: SitSheetRow[] = [
+      ...Array.from({ length: 11 }, (_, i) => mk(`DW-7-${i}`, { ticket: "DW-7" })),
+      ...Array.from({ length: 8 }, (_, i) => mk(`DW-9-${i}`, { ticket: "DW-9" })),
+    ];
+    let streamWb: SitWorkbook | null = null;
+    let genKeys: string[] = [];
+    let workingKeys = workingSetKeys(keys, []);
+
+    const assertStep = (label: string) => {
+      const merged = mergeStreamIntoScope(baseRows, keys, streamWb, genKeys);
+      for (const k of workingKeys) {
+        expect(merged.workingKeys, label).toContain(k);
+      }
+      workingKeys = merged.workingKeys;
+      const summary = buildScopeSummary(merged.rows, merged.workingKeys);
+      expect(checkScopeInvariants(summary), label).toEqual([]);
+      expect(summary.byTicket["DW-7"]).toBe(11);
+      expect(summary.byTicket["DW-9"]).toBe(8);
+    };
+
+    // stream-start
+    genKeys = ["DW-6"];
+    streamWb = {
+      id: "pending",
+      canvasId: "c",
+      confirmedId: "",
+      sourceIssueKeys: ["DW-6"],
+      sourceSummaries: {},
+      status: "running",
+      error: null,
+      generator: "huggingface",
+      sheets: [{ id: "tc", name: "Test Cases", kind: "test-cases", columns: [], rows: [] }],
+      createdBy: { id: "u", name: "u" },
+      createdAt: 1,
+      updatedAt: 1,
+    } as SitWorkbook;
+    assertStep("stream-start");
+
+    // stream-row
+    streamWb = {
+      ...streamWb,
+      sheets: [
+        {
+          id: "tc",
+          name: "Test Cases",
+          kind: "test-cases",
+          columns: [],
+          rows: [mk("DW-6-01", { ticket: "DW-6" })],
+        },
+      ],
+    };
+    assertStep("stream-row");
+
+    // stream-workbook (append seed with foreign tickets must not steal DW-7/9)
+    streamWb = {
+      ...streamWb,
+      id: "stream-final",
+      sourceIssueKeys: ["DW-6"],
+      sheets: [
+        {
+          id: "tc",
+          name: "Test Cases",
+          kind: "test-cases",
+          columns: [],
+          rows: [
+            ...baseRows,
+            mk("DW-6-01", { ticket: "DW-6" }),
+            mk("DW-6-02", { ticket: "DW-6" }),
+          ],
+        },
+      ],
+    };
+    assertStep("stream-workbook");
+
+    // stream-done / cancel / error: clear stream
+    streamWb = null;
+    genKeys = [];
+    assertStep("stream-done");
+    workingKeys = workingSetKeys(keys, []);
+    streamWb = {
+      id: "partial",
+      canvasId: "c",
+      confirmedId: "",
+      sourceIssueKeys: ["DW-6"],
+      sourceSummaries: {},
+      status: "running",
+      error: null,
+      generator: "huggingface",
+      sheets: [
+        {
+          id: "tc",
+          name: "Test Cases",
+          kind: "test-cases",
+          columns: [],
+          rows: [mk("DW-6-x", { ticket: "DW-6" })],
+        },
+      ],
+      createdBy: { id: "u", name: "u" },
+      createdAt: 1,
+      updatedAt: 1,
+    } as SitWorkbook;
+    genKeys = ["DW-6"];
+    assertStep("stream-error-mid");
+    streamWb = null;
+    genKeys = [];
+    assertStep("stream-cancel");
   });
 });
