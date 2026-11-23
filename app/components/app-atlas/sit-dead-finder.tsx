@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { DeadFlag, DeadFlagHit, SitDeadAudit } from "@/app/interfaces/appatlas";
+import { placePopover } from "./sit-v2/sit-popover-place";
 
 /** Plain-words labels for Quality groups (Round 5 A3 / Round 6 A1). */
 export const QUALITY_GROUP_LABEL: Partial<Record<DeadFlag, string>> = {
@@ -238,7 +239,11 @@ export function DeadTestFinderToolbar({
   const [focusIdx, setFocusIdx] = useState(0);
   const btnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+  const [pos, setPos] = useState<{ top: number; left: number; maxHeight: number }>({
+    top: 0,
+    left: 0,
+    maxHeight: 480,
+  });
   const flagged = qualityCount(audit);
   const issues = qualityIssueCount(audit);
   const needsReview = audit?.needsReviewRows ?? audit?.summary?.needs_review ?? audit?.summary?.not_assessed ?? 0;
@@ -266,7 +271,12 @@ export function DeadTestFinderToolbar({
   const placeMenu = () => {
     const r = btnRef.current?.getBoundingClientRect();
     if (!r) return;
-    setPos({ top: r.bottom + 4, left: Math.min(r.left, window.innerWidth - 380) });
+    const placed = placePopover({
+      trigger: r,
+      popWidth: 360,
+      popHeight: Math.min(window.innerHeight * 0.6, 520),
+    });
+    setPos({ top: placed.top, left: placed.left, maxHeight: placed.maxHeight });
   };
 
   useEffect(() => {
@@ -362,8 +372,8 @@ export function DeadTestFinderToolbar({
         createPortal(
           <div
             ref={menuRef}
-            className="fixed z-[80] flex max-h-[60vh] w-[360px] flex-col overflow-hidden rounded-[10px] border border-[#e2e6ef] bg-white shadow-xl dark:border-[#2a2a2a] dark:bg-[#151515]"
-            style={{ top: pos.top, left: pos.left }}
+            className="fixed z-[80] flex w-[360px] flex-col overflow-hidden rounded-[10px] border border-[#e2e6ef] bg-white shadow-xl dark:border-[#2a2a2a] dark:bg-[#151515]"
+            style={{ top: pos.top, left: pos.left, maxHeight: pos.maxHeight }}
             data-testid="sit-quality-dropdown"
             role="listbox"
             aria-label="Quality filter"

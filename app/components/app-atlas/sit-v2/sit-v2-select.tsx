@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { TbChevronDown } from "react-icons/tb";
+import { placePopover } from "./sit-popover-place";
 
 export type SitSelectOption = {
   value: string;
@@ -45,7 +46,9 @@ export function SitV2Select({
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [pos, setPos] = useState<{ top: number; left: number; minWidth: number } | null>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; minWidth: number; maxHeight: number } | null>(
+    null,
+  );
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const popRef = useRef<HTMLDivElement | null>(null);
   const selected = options.find((o) => o.value === value);
@@ -56,12 +59,15 @@ export function SitV2Select({
       return;
     }
     const r = triggerRef.current.getBoundingClientRect();
-    setPos({
-      top: r.bottom + 4,
-      left: r.left,
-      minWidth: Math.max(r.width, 140),
-    });
-  }, [open]);
+    const approxH = Math.min(224, options.length * 32 + 48);
+    setPos(
+      placePopover({
+        trigger: r,
+        popWidth: Math.max(r.width, 140),
+        popHeight: approxH,
+      }),
+    );
+  }, [open, options.length]);
 
   useEffect(() => {
     if (!open) return;
@@ -114,10 +120,15 @@ export function SitV2Select({
             role="listbox"
             data-sit-select-popover="1"
             data-testid={testId ? `${testId}-popover` : "sit-select-popover"}
-            className={`fixed z-[80] rounded-[8px] border border-[#e2e6ef] bg-white py-1 text-[12px] font-[inherit] shadow-lg dark:border-[#2a2a2a] dark:bg-[#151515] ${
-              listClassName || "max-h-56 overflow-auto"
+            className={`fixed z-[80] overflow-auto rounded-[8px] border border-[#e2e6ef] bg-white py-1 text-[12px] font-[inherit] shadow-lg dark:border-[#2a2a2a] dark:bg-[#151515] ${
+              listClassName || ""
             }`}
-            style={{ top: pos.top, left: pos.left, minWidth: pos.minWidth }}
+            style={{
+              top: pos.top,
+              left: pos.left,
+              minWidth: pos.minWidth,
+              maxHeight: pos.maxHeight,
+            }}
             onMouseDown={(e) => {
               // Keep parent editors from blurring before the option click.
               e.preventDefault();
