@@ -31,14 +31,17 @@ import {
   type FlaggedFilter,
 } from "@/app/lib/sit-case-flags";
 import {
-  liveCaseCount,
+  buildScopeSummary,
   loadPersistedMode,
   loadPersistedScope,
   loadPersistedSelectedKeys,
   mergeWorkbooksForKeys,
+  reportScopeInvariantBreaks,
+  rowsForTicket,
   savePersistedMode,
   savePersistedScope,
   savePersistedSelectedKeys,
+  ticketKeyOf,
   ticketsFromKeys,
   workbookWithMergedRows,
   workingSetKeys,
@@ -46,7 +49,6 @@ import {
 import {
   EDITED_TOGGLE_TOOLTIP,
   SOURCE_GROUP_LABEL,
-  countProvenance,
   getCaseProvenance,
   migrateOriginFilterPersist,
   type CaseOrigin,
@@ -101,8 +103,10 @@ export function SitTestingViewV2({
   const [workbook, setWorkbook] = useState<SitWorkbook | null>(null);
   const [history, setHistory] = useState<SitWorkbook[]>([]);
   const [rowWorkbookId, setRowWorkbookId] = useState<Record<string, string>>({});
-  const [liveCounts, setLiveCounts] = useState<Record<string, number>>({});
   const [pageError, setPageError] = useState<string | null>(null);
+  /** R14-04: when All tickets is active, pick a key before Add. */
+  const [addTicketPickerOpen, setAddTicketPickerOpen] = useState(false);
+  const [highlightRowId, setHighlightRowId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -110,7 +114,7 @@ export function SitTestingViewV2({
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [genDialog, setGenDialog] = useState<TicketGenChoice[] | null>(null);
   const [clarifications, setClarifications] = useState<CanvasClarification[]>([]);
-  const [ticketFilter, setTicketFilter] = useState<string | "all">("all");
+  const [ticketFilter, setTicketFilter] = useState<string | "all" | "__unassigned__">("all");
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [originFilter, setOriginFilter] = useState<CaseOrigin | "all">(() => {
@@ -193,7 +197,6 @@ export function SitTestingViewV2({
       const next = workbookWithMergedRows(seed, merged);
       setWorkbook(next);
       setRowWorkbookId(merged.rowWorkbookId);
-      setLiveCounts(merged.countsByTicket);
       return merged;
     },
     [],
@@ -455,9 +458,16 @@ export function SitTestingViewV2({
       setError(modelStatusPresentation(modelMapped.ui).tooltip);
       return;
     }
+    const genRows =
+      workbook?.sheets.find((s) => s.kind === "test-cases")?.rows.filter((r) => r.cells.deleted !== "1") || [];
+    const genKeys = workingSetKeys(
+      selected.map((t) => t.key),
+      workbook?.sourceIssueKeys || history.flatMap((h) => h.sourceIssueKeys || []),
+    );
+    const genByTicket = buildScopeSummary(genRows, genKeys).byTicket;
     const choices: TicketGenChoice[] = selected.map((t) => {
       const gen = t.generation;
-      const live = liveCounts[t.key] ?? 0;
+      const live = genByTicket[t.key] ?? 0;
       const existing = live > 0 || (gen && gen.caseCount > 0);
       if (existing) {
         return {
@@ -551,20 +561,57 @@ export function SitTestingViewV2({
     for (const id of undoRow.rowIds) {
       wb = await client.patchSitCase(undoRow.workbookId, id, { undelete: true });
     }
-    if (wb) setWorkbook(wb);
+    if (wb) commitWorkbook(wb);
     setUndoRow(null);
+  };
+
+  const commitWorkbook = (next: SitWorkbook) => {
+    setWorkbook(next);
+    setHistory((prev) => {
+      const hist = prev.some((h) => h.id === next.id)
+        ? prev.map((h) => (h.id === next.id ? next : h))
+        : [next, ...prev];
+      return hist;
+    });
+  };
+
+  const createCaseForTicket = async (ticketKey: string) => {
+    if (!workbook || workbook.id === "pending") return;
+    const res = await client.addSitCase(workbook.id, ticketKey);
+    commitWorkbook(res.workbook);
+    const newId = res.row?.id || null;
+    if (newId) {
+      setHighlightRowId(newId);
+      setTimeout(() => {
+        try {
+          document.querySelector(`[data-row-id="${newId}"]`)?.scrollIntoView({ block: "nearest" });
+        } catch {
+          /* ignore */
+        }
+      }, 50);
+      setTimeout(() => setHighlightRowId(null), 2500);
+    }
   };
 
   const addRow = async () => {
     if (!workbook || workbook.id === "pending") return;
-    const ticketKey =
-      ticketFilter !== "all" ? ticketFilter : workbook.sourceIssueKeys[0] || selected[0]?.key;
-    if (!ticketKey) {
-      setError("Select a ticket filter (or tickets) before adding a row.");
+    if (ticketFilter !== "all" && ticketFilter !== "__unassigned__") {
+      await createCaseForTicket(ticketFilter);
       return;
     }
-    const res = await client.addSitCase(workbook.id, ticketKey);
-    setWorkbook(res.workbook);
+    const keys = workingSetKeys(
+      selected.map((t) => t.key),
+      workbook.sourceIssueKeys || [],
+    );
+    if (!keys.length) {
+      setError("Select tickets before adding a row.");
+      return;
+    }
+    if (keys.length === 1) {
+      await createCaseForTicket(keys[0]!);
+      return;
+    }
+    setAddTicketPickerOpen(true);
   };
 
   const duplicateRow = async (rowId: string) => {
@@ -573,7 +620,7 @@ export function SitTestingViewV2({
       .find((s) => s.kind === "test-cases")
       ?.rows.find((r) => r.id === rowId);
     if (!src) return;
-    const ticketKey = src.cells.requirementId || src.cells.issueKey;
+    const ticketKey = ticketKeyOf(src);
     if (!ticketKey) {
       setError("Cannot duplicate: row has no ticket key.");
       return;
@@ -582,7 +629,7 @@ export function SitTestingViewV2({
       const res = await client.addSitCase(workbook.id, ticketKey);
       const newId = res.row?.id;
       if (!newId) {
-        setWorkbook(res.workbook);
+        commitWorkbook(res.workbook);
         return;
       }
       const copyCells: Record<string, string> = {};
@@ -594,7 +641,7 @@ export function SitTestingViewV2({
       }
       copyCells.scenario = `${src.cells.scenario || "Scenario"} (copy)`;
       const next = await client.patchSitCase(workbook.id, newId, { cells: copyCells });
-      setWorkbook(next);
+      commitWorkbook(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Duplicate failed");
     }
@@ -607,13 +654,38 @@ export function SitTestingViewV2({
     );
   }, [workbook]);
 
-  /** Ticket-scope rows for flag counts (pills only; never search/type/status). */
+  const workingKeys = useMemo(
+    () =>
+      workingSetKeys(
+        selected.map((t) => t.key),
+        workbook?.sourceIssueKeys || history.flatMap((h) => h.sourceIssueKeys || []),
+      ),
+    [selected, workbook, history],
+  );
+
+  /** R14-01: single summary for All tickets, pills, Unassigned, popup loaded counts. */
+  const workingSummary = useMemo(() => buildScopeSummary(allWorkingRows, workingKeys), [allWorkingRows, workingKeys]);
+
+  /** Ticket-scope rows for flag / source / status counts (never search/type). */
   const scopeRows = useMemo(() => {
     if (ticketFilter === "all") return allWorkingRows;
-    return allWorkingRows.filter(
-      (r) => r.cells.requirementId === ticketFilter || r.cells.issueKey === ticketFilter,
-    );
-  }, [allWorkingRows, ticketFilter]);
+    if (ticketFilter === "__unassigned__") {
+      const keySet = new Set(workingKeys);
+      return allWorkingRows.filter((r) => {
+        const k = ticketKeyOf(r);
+        return !k || !keySet.has(k);
+      });
+    }
+    return rowsForTicket(allWorkingRows, ticketFilter);
+  }, [allWorkingRows, ticketFilter, workingKeys]);
+
+  const scopeSummary = useMemo(() => buildScopeSummary(scopeRows, workingKeys), [scopeRows, workingKeys]);
+
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") return;
+    reportScopeInvariantBreaks(workingSummary, "sit-working");
+    reportScopeInvariantBreaks(scopeSummary, "sit-scope");
+  }, [workingSummary, scopeSummary]);
 
   const flagSummary = useMemo(() => summarizeCaseFlags(scopeRows, null), [scopeRows]);
 
@@ -683,8 +755,14 @@ export function SitTestingViewV2({
     let list =
       displayWorkbook?.sheets.find((s) => s.kind === "test-cases")?.rows.filter((r) => r.cells.deleted !== "1") ||
       [];
-    if (ticketFilter !== "all") {
-      list = list.filter((r) => r.cells.requirementId === ticketFilter || r.cells.issueKey === ticketFilter);
+    if (ticketFilter === "__unassigned__") {
+      const keySet = new Set(workingKeys);
+      list = list.filter((r) => {
+        const k = ticketKeyOf(r);
+        return !k || !keySet.has(k);
+      });
+    } else if (ticketFilter !== "all") {
+      list = list.filter((r) => ticketKeyOf(r) === ticketFilter);
     }
     if (typeFilter) list = list.filter((r) => (r.cells.testType || "") === typeFilter);
     if (statusFilter) list = list.filter((r) => (r.cells.executionStatus || "Not run") === statusFilter);
@@ -704,51 +782,40 @@ export function SitTestingViewV2({
       );
     }
     return list.length;
-  }, [displayWorkbook, ticketFilter, typeFilter, statusFilter, originFilter, editedOnly, search]);
+  }, [displayWorkbook, ticketFilter, typeFilter, statusFilter, originFilter, editedOnly, search, workingKeys]);
 
   /** R13: origin chip counts over ticket scope only (not search/type/status/flagged/edited). */
   const counts = useMemo(() => {
-    const rows = scopeRows;
-    const prov = countProvenance(rows);
-    const editedForOrigin = countProvenance(rows, {
-      origin: originFilter === "all" ? "all" : originFilter,
-    }).edited;
-    const byStatus: Record<string, number> = {
-      Draft: 0,
-      "Not run": 0,
-      Passed: 0,
-      Failed: 0,
-      Partial: 0,
-      Blocked: 0,
-      Skipped: 0,
-      Stale: 0,
-    };
-    for (const r of rows) {
-      const st = r.cells.executionStatus || "Not run";
-      if (st in byStatus) byStatus[st]!++;
-      else byStatus["Not run"]!++;
+    const s = scopeSummary;
+    let edited = s.edited;
+    if (originFilter !== "all") {
+      edited = scopeRows.filter((r) => {
+        const p = getCaseProvenance(r.cells);
+        return p.origin === originFilter && p.edited;
+      }).length;
     }
     return {
-      total: prov.total,
-      ai: prov.ai,
-      human: prov.human,
-      edited: editedForOrigin,
+      total: s.bySource.total,
+      ai: s.bySource.ai,
+      human: s.bySource.human,
+      edited,
       template: 0,
-      Draft: byStatus.Draft,
-      Blocked: byStatus.Blocked,
-      Skipped: byStatus.Skipped,
-      Stale: byStatus.Stale,
-      passed: byStatus.Passed,
-      failed: byStatus.Failed,
-      partial: byStatus.Partial,
-      notRun: byStatus["Not run"],
+      Draft: s.byStatus.Draft,
+      Blocked: s.byStatus.Blocked,
+      Skipped: s.byStatus.Skipped,
+      Stale: s.byStatus.Stale,
+      passed: s.byStatus.Passed,
+      failed: s.byStatus.Failed,
+      partial: s.byStatus.Partial,
+      notRun: s.byStatus["Not run"],
     };
-  }, [scopeRows, originFilter]);
+  }, [scopeSummary, scopeRows, originFilter]);
 
   const metaProject = projectName || projectKey || ", ";
   const metaModule = canvasName || ", ";
-  // R12-01: Active tab only when a single pill is active, never when All is selected.
-  const activeTicketKey = ticketFilter !== "all" ? ticketFilter : null;
+  // R12-01: Active tab only when a single pill is active, never when All / Unassigned.
+  const activeTicketKey =
+    ticketFilter !== "all" && ticketFilter !== "__unassigned__" ? ticketFilter : null;
 
   const activeAcs = useMemo(() => {
     if (!activeTicketKey) return [] as string[];
@@ -841,7 +908,11 @@ export function SitTestingViewV2({
               className="rounded-[8px] border border-[#e2e6ef] bg-white px-3 py-1.5 text-[12.5px] font-medium text-[#1F1F1F] transition hover:bg-[#fafafa] dark:border-[#2a2a2a] dark:bg-[#141414] dark:text-[#ededed]"
             >
               Jira Tickets
-              {selected.length ? ` (${selected.length})` : ""}
+              {workingKeys.length
+                ? ` (${selected.length} of ${workingKeys.length})`
+                : selected.length
+                  ? ` (${selected.length})`
+                  : ""}
             </button>
             {!canEdit && (
               <span
@@ -859,7 +930,6 @@ export function SitTestingViewV2({
                 setSelected([]);
                 setWorkbook(null);
                 setRowWorkbookId({});
-                setLiveCounts({});
                 setTicketFilter("all");
                 savePersistedSelectedKeys([]);
                 savePersistedScope("all");
@@ -945,7 +1015,7 @@ export function SitTestingViewV2({
                       savePersistedMode("issues");
                     }}
                   >
-                    Issues {flagSummary.attentionCases}
+                    <span title="in this ticket scope">Issues {flagSummary.attentionCases}</span>
                   </button>
                 </div>
               </>
@@ -967,7 +1037,7 @@ export function SitTestingViewV2({
                   ? "Select tickets first"
                   : modelMapped.generateDisabled
                     ? modelStatusPresentation(modelMapped.ui).tooltip
-                    : selected.map((t) => t.key).join(", ")
+                    : `Generate for: ${selected.map((t) => t.key).join(", ")}`
               }
               onClick={() => onClickGenerate()}
               className="rounded-[8px] bg-[#8664F2] px-4 py-2 text-[13px] font-medium text-white disabled:opacity-40"
@@ -1077,10 +1147,11 @@ export function SitTestingViewV2({
           </div>
         ) : displayWorkbook && allWorkingRows.length > 0 ? (
           <div className="flex min-h-0 flex-1 flex-col gap-2">
-            {/* Compact in-grid chrome: ticket chips + filters (not a Saved-runs list) */}
-            <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+            {/* R14-06: deliberate two-row filter chrome */}
+            <div className="flex shrink-0 flex-col gap-1.5" data-testid="sit-filter-chrome">
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5" data-testid="sit-filter-row-a">
               <div
-                className="inline-flex flex-wrap items-center gap-1"
+                className="inline-flex max-w-full flex-nowrap items-center gap-1 overflow-x-auto"
                 role="group"
                 aria-label="Ticket scope"
                 data-testid="sit-ticket-scope-group"
@@ -1093,16 +1164,13 @@ export function SitTestingViewV2({
                     setTicketFilter("all");
                     savePersistedScope("all");
                   }}
-                  className={`rounded-full px-2.5 py-0.5 text-[12px] font-medium ${
+                  className={`shrink-0 rounded-full px-2.5 py-0.5 text-[12px] font-medium ${
                     ticketFilter === "all" ? "bg-[#8664F2] text-white" : "border border-[#e2e6ef] bg-white"
                   }`}
                 >
-                  All tickets {liveCaseCount(allWorkingRows)}
+                  All tickets {workingSummary.total}
                 </button>
-                {workingSetKeys(
-                  selected.map((t) => t.key),
-                  displayWorkbook.sourceIssueKeys || [],
-                ).map((k) => (
+                {workingKeys.map((k) => (
                   <button
                     key={k}
                     type="button"
@@ -1111,13 +1179,31 @@ export function SitTestingViewV2({
                       setTicketFilter(k);
                       savePersistedScope(k);
                     }}
-                    className={`rounded-full px-2.5 py-0.5 text-[12px] font-medium ${
+                    className={`shrink-0 rounded-full px-2.5 py-0.5 text-[12px] font-medium ${
                       ticketFilter === k ? "bg-[#8664F2] text-white" : "border border-[#e2e6ef] bg-white"
                     }`}
                   >
-                    {k} {liveCounts[k] ?? liveCaseCount(allWorkingRows, k)}
+                    {k} {workingSummary.byTicket[k] ?? 0}
                   </button>
                 ))}
+                {workingSummary.unassigned > 0 ? (
+                  <button
+                    type="button"
+                    data-testid="sit-scope-pill-unassigned"
+                    title="Cases not linked to a Jira ticket"
+                    onClick={() => {
+                      setTicketFilter("__unassigned__");
+                      savePersistedScope("all");
+                    }}
+                    className={`shrink-0 rounded-full px-2.5 py-0.5 text-[12px] font-medium ${
+                      ticketFilter === "__unassigned__"
+                        ? "bg-[#8664F2] text-white"
+                        : "border border-[#fde68a] bg-[#fffbeb] text-[#92400e]"
+                    }`}
+                  >
+                    Unassigned {workingSummary.unassigned}
+                  </button>
+                ) : null}
               </div>
               <QualityActiveChip
                 audit={deadAudit}
@@ -1287,8 +1373,14 @@ export function SitTestingViewV2({
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search..."
-                className="w-28 rounded-[6px] border border-[#e2e6ef] bg-white px-2 py-0.5 text-[11px] dark:border-[#2a2a2a] dark:bg-[#141414]"
+                className="w-28 rounded-[6px] border border-[#e2e6ef] bg-white px-2 py-0.5 text-[12px] dark:border-[#2a2a2a] dark:bg-[#141414]"
               />
+              </>
+              ) : null}
+            </div>
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5" data-testid="sit-filter-row-b">
+              {sitMode === "cases" ? (
+              <>
               {activeTicketKey && activeAcs.length > 0 && (
                 <SitV2AcChip
                   acs={activeAcs}
@@ -1503,13 +1595,14 @@ export function SitTestingViewV2({
                   type="button"
                   onClick={() => void addRow()}
                   data-testid="sit-add-test-case"
-                  className="ml-auto inline-flex items-center gap-1 rounded-[8px] border border-[#e2e6ef] px-2 py-0.5 text-[11px] dark:border-[#2a2a2a]"
+                  className="ml-auto inline-flex items-center gap-1 rounded-[8px] border border-[#e2e6ef] px-2 py-0.5 text-[12px] dark:border-[#2a2a2a]"
                 >
                   <TbPlus size={12} /> Add test case
                 </button>
               )}
               </>
               ) : null}
+            </div>
             </div>
 
             <div className="flex min-h-0 flex-1 flex-col" data-testid="sit-grid-quality-shell">
@@ -1670,13 +1763,51 @@ export function SitTestingViewV2({
         </div>
       )}
 
+      {addTicketPickerOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
+          data-testid="sit-add-ticket-picker"
+          role="dialog"
+          aria-label="Choose ticket for new case"
+        >
+          <div className="w-full max-w-sm rounded-[12px] border border-[#e2e6ef] bg-white p-4 shadow-xl dark:border-[#2a2a2a] dark:bg-[#151515]">
+            <p className="text-[13px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">Add test case to which ticket?</p>
+            <p className="mt-1 text-[12px] text-[#5b647a]">Pick a ticket in the working set. Cases are never created without a key.</p>
+            <ul className="mt-3 max-h-64 space-y-1 overflow-y-auto">
+              {workingKeys.map((k) => (
+                <li key={k}>
+                  <button
+                    type="button"
+                    data-testid={`sit-add-ticket-option-${k}`}
+                    className="w-full rounded-[8px] border border-[#e2e6ef] px-3 py-2 text-left text-[12px] hover:bg-[#f3f0ff] dark:border-[#2a2a2a]"
+                    onClick={() => {
+                      setAddTicketPickerOpen(false);
+                      void createCaseForTicket(k);
+                    }}
+                  >
+                    {k} ({workingSummary.byTicket[k] ?? 0} cases)
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <button
+              type="button"
+              className="mt-3 w-full rounded-[8px] border border-[#e2e6ef] px-3 py-1.5 text-[12px] text-[#5b647a]"
+              onClick={() => setAddTicketPickerOpen(false)}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       {pickerOpen && (
         <SitV2Picker
           epics={epics}
           selected={selected}
           clarifications={clarifications}
           activeTicketKey={activeTicketKey}
-          liveCounts={liveCounts}
+          loadedCounts={workingSummary.byTicket}
           onChange={(tickets) => {
             setSelected(tickets);
             savePersistedSelectedKeys(tickets.map((t) => t.key));

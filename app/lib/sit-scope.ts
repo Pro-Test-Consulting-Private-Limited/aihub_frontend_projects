@@ -1,8 +1,11 @@
 /**
- * Round 12: working-set scope helpers (All vs single ticket, pill order, merge).
+ * Round 12/14: working-set scope helpers.
+ * Round 14: every displayed count comes from buildScopeSummary over a rows array.
+ * No separate liveCounts cache.
  */
 
 import type { SitSheetRow, SitTicket, SitWorkbook } from "@/app/interfaces/appatlas";
+import { getCaseProvenance } from "@/app/lib/sit-case-provenance";
 
 /** Natural ticket key order: DW-7 before DW-10 before DW-11 (numeric segment aware). */
 export function compareTicketKeys(a: string, b: string): number {
@@ -22,47 +25,194 @@ export function sortTicketKeys(keys: string[]): string[] {
 
 /** Working set keys: selected tickets union keys that already have cases (workbook keys). */
 export function workingSetKeys(selectedKeys: string[], workbookKeys: string[] = []): string[] {
-  return sortTicketKeys(Array.from(new Set([...selectedKeys, ...workbookKeys])));
+  return sortTicketKeys(Array.from(new Set([...selectedKeys, ...workbookKeys].map(normalizeTicketKey).filter(Boolean))));
+}
+
+/** Trim + uppercase. Empty string if missing. */
+export function normalizeTicketKey(raw: string | null | undefined): string {
+  return String(raw ?? "").trim().toUpperCase();
+}
+
+/**
+ * Single ticket key for a row: trimmed uppercase requirementId, else issueKey.
+ * Used by pills, merge, filters, export, flags, provenance grouping.
+ */
+export function ticketKeyOf(row: { cells?: Record<string, string | undefined> } | null | undefined): string {
+  const cells = row?.cells || {};
+  const req = normalizeTicketKey(cells.requirementId);
+  if (req) return req;
+  return normalizeTicketKey(cells.issueKey);
+}
+
+export function liveRows(rows: SitSheetRow[]): SitSheetRow[] {
+  return rows.filter((r) => r.cells.deleted !== "1");
 }
 
 export function rowsForTicket(rows: SitSheetRow[], ticketKey: string): SitSheetRow[] {
-  return rows.filter(
-    (r) =>
-      r.cells.deleted !== "1" &&
-      (r.cells.requirementId === ticketKey || r.cells.issueKey === ticketKey),
-  );
+  const want = normalizeTicketKey(ticketKey);
+  return liveRows(rows).filter((r) => ticketKeyOf(r) === want);
 }
 
+/** @deprecated Prefer buildScopeSummary. Kept as thin wrapper for older call sites. */
 export function liveCaseCount(rows: SitSheetRow[], ticketKey?: string): number {
-  const list = ticketKey ? rowsForTicket(rows, ticketKey) : rows.filter((r) => r.cells.deleted !== "1");
-  return list.length;
+  if (ticketKey) return rowsForTicket(rows, ticketKey).length;
+  return liveRows(rows).length;
+}
+
+export type ScopeStatusCounts = {
+  Draft: number;
+  "Not run": number;
+  Passed: number;
+  Failed: number;
+  Partial: number;
+  Blocked: number;
+  Skipped: number;
+  Stale: number;
+};
+
+export type ScopeSummary = {
+  /** Non-deleted rows in the input array. */
+  total: number;
+  /** Counts for each working-set key (0 if none). */
+  byTicket: Record<string, number>;
+  /** Rows whose ticketKeyOf is empty or not in workingKeys. */
+  unassigned: number;
+  bySource: { total: number; ai: number; human: number };
+  edited: number;
+  byStatus: ScopeStatusCounts;
+  workingKeys: string[];
+  /** Sum of byTicket values. */
+  ticketPillSum: number;
+};
+
+const EMPTY_STATUS = (): ScopeStatusCounts => ({
+  Draft: 0,
+  "Not run": 0,
+  Passed: 0,
+  Failed: 0,
+  Partial: 0,
+  Blocked: 0,
+  Skipped: 0,
+  Stale: 0,
+});
+
+/**
+ * One-pass summary over a rows array. All UI counts for that scope must come from here.
+ */
+export function buildScopeSummary(rows: SitSheetRow[], workingKeys: string[] = []): ScopeSummary {
+  const keys = sortTicketKeys(workingKeys.map(normalizeTicketKey).filter(Boolean));
+  const keySet = new Set(keys);
+  const byTicket: Record<string, number> = {};
+  for (const k of keys) byTicket[k] = 0;
+
+  let unassigned = 0;
+  let ai = 0;
+  let human = 0;
+  let edited = 0;
+  const byStatus = EMPTY_STATUS();
+  let total = 0;
+
+  for (const r of rows) {
+    if (r.cells.deleted === "1") continue;
+    total++;
+    const key = ticketKeyOf(r);
+    if (!key || !keySet.has(key)) unassigned++;
+    else byTicket[key] = (byTicket[key] || 0) + 1;
+
+    const prov = getCaseProvenance(r.cells);
+    if (prov.origin === "human") human++;
+    else ai++;
+    if (prov.edited) edited++;
+
+    const st = r.cells.executionStatus || "Not run";
+    if (st in byStatus) byStatus[st as keyof ScopeStatusCounts]++;
+    else byStatus["Not run"]++;
+  }
+
+  const ticketPillSum = keys.reduce((n, k) => n + (byTicket[k] || 0), 0);
+  return {
+    total,
+    byTicket,
+    unassigned,
+    bySource: { total: ai + human, ai, human },
+    edited,
+    byStatus,
+    workingKeys: keys,
+    ticketPillSum,
+  };
+}
+
+export type ScopeInvariantBreak = { id: string; detail: string };
+
+/** I-a, I-b, I-c for a summary. Showing X/Y and DOM asserts live in Playwright. */
+export function checkScopeInvariants(summary: ScopeSummary): ScopeInvariantBreak[] {
+  const breaks: ScopeInvariantBreak[] = [];
+  if (summary.total !== summary.ticketPillSum + summary.unassigned) {
+    breaks.push({
+      id: "I-a",
+      detail: `All ${summary.total} != pills ${summary.ticketPillSum} + unassigned ${summary.unassigned}`,
+    });
+  }
+  if (summary.bySource.total !== summary.bySource.ai + summary.bySource.human) {
+    breaks.push({
+      id: "I-b",
+      detail: `sources ${summary.bySource.total} != ai ${summary.bySource.ai} + human ${summary.bySource.human}`,
+    });
+  }
+  if (summary.bySource.total !== summary.total) {
+    breaks.push({
+      id: "I-b-total",
+      detail: `source total ${summary.bySource.total} != All ${summary.total}`,
+    });
+  }
+  const statusSum = Object.values(summary.byStatus).reduce((a, b) => a + b, 0);
+  if (statusSum !== summary.total) {
+    breaks.push({
+      id: "I-c",
+      detail: `status sum ${statusSum} != All ${summary.total}`,
+    });
+  }
+  return breaks;
+}
+
+/**
+ * Dev-only: console.error when invariants break. Returns breaks for Playwright hooks.
+ */
+export function reportScopeInvariantBreaks(summary: ScopeSummary, label = "sit-scope"): ScopeInvariantBreak[] {
+  const breaks = checkScopeInvariants(summary);
+  if (breaks.length && typeof console !== "undefined") {
+    for (const b of breaks) {
+      console.error(`[${label}] invariant ${b.id}: ${b.detail}`);
+    }
+  }
+  return breaks;
 }
 
 export type MergedScope = {
   rows: SitSheetRow[];
   sourceIssueKeys: string[];
   workbookIds: string[];
-  /** row id → owning workbook id (for patch/delete). */
+  /** row id to owning workbook id (for patch/delete). */
   rowWorkbookId: Record<string, string>;
-  /** ticket key → live case count from merged rows. */
-  countsByTicket: Record<string, number>;
 };
 
 /**
  * Merge workbooks for the working set: for each ticket key, take rows from the
  * newest workbook that contains that key (by updatedAt/createdAt). Dedupe by row id.
+ * Does not produce display counts: use buildScopeSummary(merged.rows, keys).
  */
 export function mergeWorkbooksForKeys(workbooks: SitWorkbook[], keys: string[]): MergedScope {
-  if (!keys.length) {
-    return { rows: [], sourceIssueKeys: [], workbookIds: [], rowWorkbookId: {}, countsByTicket: {} };
+  const normKeys = sortTicketKeys(keys.map(normalizeTicketKey).filter(Boolean));
+  if (!normKeys.length) {
+    return { rows: [], sourceIssueKeys: [], workbookIds: [], rowWorkbookId: {} };
   }
-  const keySet = new Set(keys);
+  const keySet = new Set(normKeys);
   const sorted = [...workbooks].sort((a, b) => {
     const ta = a.updatedAt || a.createdAt || 0;
     const tb = b.updatedAt || b.createdAt || 0;
     return tb - ta;
   });
-  const chosen = new Map<string, SitWorkbook>(); // ticket -> workbook
+  const chosen = new Map<string, SitWorkbook>();
   for (const wb of sorted) {
     const rows = wb.sheets.find((s) => s.kind === "test-cases")?.rows || [];
     for (const key of keySet) {
@@ -70,37 +220,54 @@ export function mergeWorkbooksForKeys(workbooks: SitWorkbook[], keys: string[]):
       if (rowsForTicket(rows, key).length) chosen.set(key, wb);
     }
   }
+  // Also pick newest workbook that may hold unassigned / foreign keys when present in any wb
+  // that is already chosen, or newest multi-key wb: unassigned rows come along with chosen wbs.
   const rowById = new Map<string, SitSheetRow>();
   const rowWorkbookId: Record<string, string> = {};
   const workbookIds = new Set<string>();
-  const countsByTicket: Record<string, number> = {};
   for (const key of sortTicketKeys([...chosen.keys()])) {
     const wb = chosen.get(key)!;
     workbookIds.add(wb.id);
-    const ticketRows = rowsForTicket(wb.sheets.find((s) => s.kind === "test-cases")?.rows || [], key);
-    countsByTicket[key] = ticketRows.length;
-    for (const row of ticketRows) {
-      if (!rowById.has(row.id)) {
-        rowById.set(row.id, row);
-        rowWorkbookId[row.id] = wb.id;
+    const all = wb.sheets.find((s) => s.kind === "test-cases")?.rows || [];
+    for (const row of liveRows(all)) {
+      const rk = ticketKeyOf(row);
+      // Include rows for this key, and unassigned / foreign rows only from the newest chosen workbook overall
+      if (rk === key) {
+        if (!rowById.has(row.id)) {
+          rowById.set(row.id, row);
+          rowWorkbookId[row.id] = wb.id;
+        }
       }
     }
   }
-  // Tickets in the working set with zero cases still appear with count 0.
-  for (const key of keys) {
-    if (countsByTicket[key] == null) countsByTicket[key] = 0;
+  // Unassigned / foreign: from newest workbook among chosen (or newest hist) so legacy orphans surface
+  const newestChosen =
+    sorted.find((w) => workbookIds.has(w.id)) ||
+    sorted[0] ||
+    null;
+  if (newestChosen) {
+    workbookIds.add(newestChosen.id);
+    const all = newestChosen.sheets.find((s) => s.kind === "test-cases")?.rows || [];
+    for (const row of liveRows(all)) {
+      const rk = ticketKeyOf(row);
+      if (!rk || !keySet.has(rk)) {
+        if (!rowById.has(row.id)) {
+          rowById.set(row.id, row);
+          rowWorkbookId[row.id] = newestChosen.id;
+        }
+      }
+    }
   }
   return {
     rows: [...rowById.values()],
     sourceIssueKeys: sortTicketKeys([...chosen.keys()]),
     workbookIds: [...workbookIds],
     rowWorkbookId,
-    countsByTicket,
   };
 }
 
 /** Build a display workbook shell from a seed workbook + merged rows. */
-export function workbookWithMergedRows(seed: SitWorkbook | null, merged: ReturnType<typeof mergeWorkbooksForKeys>): SitWorkbook | null {
+export function workbookWithMergedRows(seed: SitWorkbook | null, merged: MergedScope): SitWorkbook | null {
   if (!merged.rows.length && !seed) return null;
   const base: SitWorkbook =
     seed ||
@@ -138,8 +305,8 @@ export function workbookWithMergedRows(seed: SitWorkbook | null, merged: ReturnT
 }
 
 export function ticketsFromKeys(epicsTickets: SitTicket[], keys: string[]): SitTicket[] {
-  const map = new Map(epicsTickets.map((t) => [t.key, t]));
-  return keys.map((k) => map.get(k)).filter(Boolean) as SitTicket[];
+  const map = new Map(epicsTickets.map((t) => [normalizeTicketKey(t.key), t]));
+  return keys.map((k) => map.get(normalizeTicketKey(k))).filter(Boolean) as SitTicket[];
 }
 
 /** Persist helpers */
@@ -152,7 +319,7 @@ export function loadPersistedSelectedKeys(): string[] {
     const raw = localStorage.getItem(SIT_SELECTED_KEYS);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.map(String) : [];
+    return Array.isArray(parsed) ? parsed.map(String).map(normalizeTicketKey).filter(Boolean) : [];
   } catch {
     return [];
   }
@@ -160,7 +327,7 @@ export function loadPersistedSelectedKeys(): string[] {
 
 export function savePersistedSelectedKeys(keys: string[]) {
   try {
-    localStorage.setItem(SIT_SELECTED_KEYS, JSON.stringify(keys));
+    localStorage.setItem(SIT_SELECTED_KEYS, JSON.stringify(keys.map(normalizeTicketKey)));
   } catch {
     /* ignore */
   }
@@ -170,7 +337,8 @@ export function loadPersistedScope(validKeys: string[]): string | "all" {
   try {
     const raw = localStorage.getItem(SIT_SCOPE_PILL) || "all";
     if (raw === "all") return "all";
-    if (validKeys.includes(raw)) return raw;
+    const n = normalizeTicketKey(raw);
+    if (validKeys.map(normalizeTicketKey).includes(n)) return n;
     return "all";
   } catch {
     return "all";
@@ -179,7 +347,7 @@ export function loadPersistedScope(validKeys: string[]): string | "all" {
 
 export function savePersistedScope(scope: string | "all") {
   try {
-    localStorage.setItem(SIT_SCOPE_PILL, scope);
+    localStorage.setItem(SIT_SCOPE_PILL, scope === "all" ? "all" : normalizeTicketKey(scope));
   } catch {
     /* ignore */
   }

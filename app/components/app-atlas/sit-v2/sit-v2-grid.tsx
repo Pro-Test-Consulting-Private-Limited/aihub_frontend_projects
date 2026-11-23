@@ -13,6 +13,7 @@ import type { SitDeadAudit, SitEpic, SitSheetRow, SitWorkbook } from "@/app/inte
 import { displayModuleFeature } from "@/app/lib/sit-module-feature";
 import { OriginGlyph, provenanceTooltip } from "./sit-v2-bits";
 import { getCaseProvenance } from "@/app/lib/sit-case-provenance";
+import { ticketKeyOf } from "@/app/lib/sit-scope";
 import { SitV2EditableCell, type CellCoord } from "./sit-v2-editable-cell";
 import { SitV2ListEditor } from "./sit-v2-list-editor";
 import { SitV2Select } from "./sit-v2-select";
@@ -478,8 +479,14 @@ export function SitV2Grid({
   const rows = useMemo(() => {
     const tc = workbook.sheets.find((s) => s.kind === "test-cases");
     let list = (tc?.rows || []).filter((r) => r.cells.deleted !== "1");
-    if (ticketFilter !== "all") {
-      list = list.filter((r) => r.cells.requirementId === ticketFilter || r.cells.issueKey === ticketFilter);
+    if (ticketFilter === "__unassigned__") {
+      const keys = new Set((workbook.sourceIssueKeys || []).map((k) => ticketKeyOf({ cells: { requirementId: k } })));
+      list = list.filter((r) => {
+        const k = ticketKeyOf(r);
+        return !k || !keys.has(k);
+      });
+    } else if (ticketFilter !== "all") {
+      list = list.filter((r) => ticketKeyOf(r) === ticketKeyOf({ cells: { requirementId: ticketFilter } }));
     }
     if (typeFilter) list = list.filter((r) => (r.cells.testType || "") === typeFilter);
     if (statusFilter) list = list.filter((r) => (r.cells.executionStatus || "Not run") === statusFilter);

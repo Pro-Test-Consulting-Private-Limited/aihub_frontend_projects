@@ -16,7 +16,7 @@ export function SitV2Picker({
   selected,
   clarifications,
   activeTicketKey,
-  liveCounts,
+  loadedCounts,
   onChange,
   onClose,
   onActivateTicket,
@@ -27,8 +27,8 @@ export function SitV2Picker({
   clarifications: CanvasClarification[];
   /** Ticket whose scope pill is active. Null when All is selected. */
   activeTicketKey?: string | null;
-  /** Live non-deleted case counts by ticket key (preferred over generation.caseCount). */
-  liveCounts?: Record<string, number>;
+  /** Counts from loaded working rows (buildScopeSummary). Missing key = not loaded. */
+  loadedCounts?: Record<string, number>;
   onChange: (tickets: SitTicket[]) => void;
   onClose: () => void;
   onActivateTicket?: (key: string) => void;
@@ -219,12 +219,29 @@ export function SitV2Picker({
                                   >
                                     {t.hasNotes ? "Has notes" : "No notes"}
                                   </span>
+                                  {selectedSet.has(t.key) ? (
+                                    <span className="rounded-full bg-[#ede9fe] px-2 py-0.5 text-[10px] font-medium text-[#5b21b6]">
+                                      Selected for generation
+                                    </span>
+                                  ) : null}
+                                  {loadedCounts && (loadedCounts[t.key] ?? 0) > 0 ? (
+                                    <span className="rounded-full bg-[#f0fdf4] px-2 py-0.5 text-[10px] font-medium text-[#166534]">
+                                      Has cases
+                                    </span>
+                                  ) : null}
                                   <span
                                     className="rounded-full bg-[#f3f4f6] px-2 py-0.5 text-[12px] text-[#4b5563]"
                                     data-testid={`sit-jira-case-count-${t.key}`}
+                                    title={
+                                      loadedCounts && loadedCounts[t.key] != null
+                                        ? undefined
+                                        : gen
+                                          ? "from last generation, not loaded"
+                                          : undefined
+                                    }
                                   >
-                                    {liveCounts && liveCounts[t.key] != null
-                                      ? `${liveCounts[t.key]} cases${
+                                    {loadedCounts && loadedCounts[t.key] != null
+                                      ? `${loadedCounts[t.key]} cases${
                                           gen
                                             ? ` · ${gen.generator === "huggingface" ? "AI" : "Template"} · ${ago(gen.at)}${
                                                 gen.versions > 1 ? ` · v${gen.versions} generated ${gen.caseCount}` : ""
@@ -232,9 +249,11 @@ export function SitV2Picker({
                                             : ""
                                         }`
                                       : gen
-                                        ? `${gen.caseCount} cases · ${gen.generator === "huggingface" ? "AI" : "Template"} · ${ago(gen.at)}${
-                                            gen.edited ? " · edited" : ""
-                                          }${gen.versions > 1 ? ` · v${gen.versions}` : ""}`
+                                        ? `${gen.caseCount} cases (from last generation, not loaded) · ${
+                                            gen.generator === "huggingface" ? "AI" : "Template"
+                                          } · ${ago(gen.at)}${gen.edited ? " · edited" : ""}${
+                                            gen.versions > 1 ? ` · v${gen.versions}` : ""
+                                          }`
                                         : "Not generated"}
                                   </span>
                                   {activeTicketKey && activeTicketKey === t.key && (
