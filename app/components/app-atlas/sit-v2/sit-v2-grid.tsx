@@ -718,18 +718,27 @@ export function SitV2Grid({
             </div>
           )}
           display={
-            <div className="flex min-w-0 items-start gap-1.5">
-              <SitV2Select
-                value={row.cells.testType || "Positive"}
-                aria-label="Scenario type"
-                data-testid="sit-scenario-type-chip"
-                disabled={!canEdit}
-                options={Object.keys(TYPE_STYLE).map((t) => ({ value: t, label: t }))}
-                onChange={patchType}
-                buttonClassName={typeBtn}
-              />
-              <SitQualityFlagChip hits={deadAudit?.flagsByRowId?.[row.id]} />
-              <span className="min-w-0 flex-1 whitespace-pre-wrap text-[12px]">
+            <div className="flex min-w-0 flex-col gap-0.5" data-testid="sit-scenario-cell">
+              <div className="flex min-w-0 items-start gap-1.5">
+                <SitV2Select
+                  value={row.cells.testType || "Positive"}
+                  aria-label="Scenario type"
+                  data-testid="sit-scenario-type-chip"
+                  disabled={!canEdit}
+                  options={Object.keys(TYPE_STYLE).map((t) => ({ value: t, label: t }))}
+                  onChange={patchType}
+                  buttonClassName={typeBtn}
+                />
+              </div>
+              {(deadAudit?.flagsByRowId?.[row.id]?.length ?? 0) > 0 ? (
+                <div className="flex max-w-full flex-wrap gap-1" data-testid="sit-scenario-flag-row">
+                  <SitQualityFlagChip hits={deadAudit?.flagsByRowId?.[row.id]} />
+                </div>
+              ) : null}
+              <span
+                className="min-w-0 w-full whitespace-pre-wrap break-words text-[12px]"
+                data-testid="sit-scenario-title"
+              >
                 {row.cells.scenario}
                 <SitV2EditDot row={row} field="scenario" />
                 <SitV2EditDot row={row} field="testType" />

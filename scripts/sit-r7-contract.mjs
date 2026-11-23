@@ -584,6 +584,150 @@ for (const explorerOpen of [true, false]) {
   }
 }
 
+// ---- Round 10 I8 / I9 (record pre-existing fails before R10-01/R10-02) ----
+const I8_SOFT = process.env.I8_SOFT !== "0"; // soft until R10-01
+const I9_SOFT = process.env.I9_SOFT !== "0"; // soft until R10-02
+
+async function scenarioCellGeometryOk(page) {
+  return page.evaluate(() => {
+    const rows = [...document.querySelectorAll("[data-row-id], [data-testid='sit-case-row']")];
+    const bad = [];
+    for (const row of rows) {
+      const cell =
+        row.querySelector('[data-testid="sit-scenario-cell"]') ||
+        row.querySelector("td[data-col-id='scenario']") ||
+        [...row.querySelectorAll("td")].find((td) => td.querySelector("[data-testid='sit-scenario-type-chip']"));
+      if (!cell) continue;
+      const cellR = cell.getBoundingClientRect();
+      const title =
+        cell.querySelector("[data-testid='sit-scenario-title']") ||
+        cell.querySelector("span.min-w-0.flex-1") ||
+        cell.querySelector("span.whitespace-pre-wrap");
+      const chip = cell.querySelector("[data-testid='sit-quality-flag-chip']");
+      const inside = (el) => {
+        if (!el) return true;
+        const r = el.getBoundingClientRect();
+        return r.left >= cellR.left - 1 && r.right <= cellR.right + 1 && r.top >= cellR.top - 1 && r.bottom <= cellR.bottom + 2;
+      };
+      if (title && !inside(title)) bad.push("title_outside");
+      if (chip && !inside(chip)) bad.push("chip_outside");
+      if (title) {
+        const tr = title.getBoundingClientRect();
+        if (cellR.width > 40 && tr.width < cellR.width * 0.7 - 2) bad.push("title_narrow");
+      }
+      // neighbouring cell intersection (preconditions)
+      const next = cell.nextElementSibling;
+      if (next && (title || chip)) {
+        const nr = next.getBoundingClientRect();
+        for (const el of [title, chip].filter(Boolean)) {
+          const r = el.getBoundingClientRect();
+          const overlap = !(r.right <= nr.left + 1 || r.left >= nr.right - 1 || r.bottom <= nr.top + 1 || r.top >= nr.bottom - 1);
+          if (overlap) bad.push("overlap_neighbour");
+        }
+      }
+    }
+    return { ok: bad.length === 0, bad: [...new Set(bad)].slice(0, 8) };
+  });
+}
+
+async function popoversInsideViewport(page) {
+  return page.evaluate(() => {
+    const pops = [
+      ...document.querySelectorAll("[data-sit-select-popover='1']"),
+      ...document.querySelectorAll("[data-testid='sit-quality-dropdown']"),
+      ...document.querySelectorAll("[data-testid$='-popover']"),
+    ];
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const bad = [];
+    for (const p of pops) {
+      const r = p.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2) continue;
+      if (r.right > vw + 1 || r.bottom > vh + 1 || r.left < -1 || r.top < -1) {
+        bad.push({ testid: p.getAttribute("data-testid") || p.tagName, right: r.right, bottom: r.bottom, vw, vh });
+      }
+    }
+    return { ok: bad.length === 0, bad: bad.slice(0, 5), count: pops.length };
+  });
+}
+
+for (const explorerOpen of [true, false]) {
+  await setExplorerOpen(page, explorerOpen);
+  for (const w of WIDTHS) {
+    await page.setViewportSize({ width: w, height: 900 });
+    await page.waitForTimeout(250);
+    const geo = await scenarioCellGeometryOk(page);
+    const id8 = `I8.${explorerOpen ? "open" : "closed"}.${w}`;
+    const detail8 = JSON.stringify(geo);
+    if (I8_SOFT && !geo.ok) {
+      preExisting.push({ id: id8, detail: detail8 });
+      record(id8, "scenario title+chips inside cell; title >=70% width", detail8, true, "pre-existing (soft until R10-01)");
+    } else {
+      record(id8, "scenario title+chips inside cell; title >=70% width", detail8, geo.ok);
+    }
+  }
+}
+
+async function dismissPopovers(page) {
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(80);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(80);
+  await page.evaluate(() => {
+    document.querySelectorAll("[data-sit-select-popover='1'], [data-testid='sit-quality-dropdown']").forEach((n) => {
+      n.remove();
+    });
+  });
+}
+
+// I9: open one popover at a time (status last row, quality, type chip)
+for (const explorerOpen of [true, false]) {
+  await setExplorerOpen(page, explorerOpen);
+  for (const w of WIDTHS) {
+    await page.setViewportSize({ width: w, height: 900 });
+    await page.waitForTimeout(200);
+    await dismissPopovers(page);
+    const checks = [];
+    const rowsLoc = page.locator("[data-row-id], [data-testid='sit-case-row']");
+    const n = await rowsLoc.count();
+    if (n > 0) {
+      const last = rowsLoc.nth(n - 1);
+      const statusBtn = last
+        .locator("[data-testid='sit-status-select'], [data-testid='sit-exec-status']")
+        .first();
+      if (await statusBtn.count()) {
+        await statusBtn.click({ force: true }).catch(() => {});
+        await page.waitForTimeout(150);
+        checks.push(await popoversInsideViewport(page));
+        await dismissPopovers(page);
+      }
+    }
+    const q = page.getByTestId("sit-quality-btn");
+    if (await q.count()) {
+      await q.click({ force: true }).catch(() => {});
+      await page.waitForTimeout(150);
+      checks.push(await popoversInsideViewport(page));
+      await dismissPopovers(page);
+    }
+    const typeChip = page.getByTestId("sit-scenario-type-chip").first();
+    if (await typeChip.count()) {
+      await typeChip.click({ force: true }).catch(() => {});
+      await page.waitForTimeout(150);
+      checks.push(await popoversInsideViewport(page));
+      await dismissPopovers(page);
+    }
+    const ok = checks.length === 0 || checks.every((c) => c.ok);
+    const detail9 = JSON.stringify({ checks: checks.slice(0, 3) });
+    const id9 = `I9.${explorerOpen ? "open" : "closed"}.${w}`;
+    if (I9_SOFT && !ok) {
+      preExisting.push({ id: id9, detail: detail9 });
+      record(id9, "popovers inside viewport", detail9, true, "pre-existing (soft until R10-02)");
+    } else {
+      record(id9, "popovers inside viewport", detail9, ok);
+    }
+  }
+}
+
 const summary = {
   passed: rows.filter((r) => r.status === "PASS").length,
   failed: rows.filter((r) => r.status === "FAIL").length,

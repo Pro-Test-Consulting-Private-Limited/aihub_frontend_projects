@@ -1,11 +1,20 @@
 "use client";
 
 import type { DeadFlagHit } from "@/app/interfaces/appatlas";
-import { QUALITY_GROUP_LABEL, QUALITY_GROUP_ORDER, highlightQualityRow } from "../sit-dead-finder";
+import {
+  QUALITY_CHIP_SHORT_LABEL,
+  QUALITY_GROUP_LABEL,
+  QUALITY_GROUP_ORDER,
+  highlightQualityRow,
+} from "../sit-dead-finder";
 
 const QUALITY_SET = new Set(QUALITY_GROUP_ORDER);
 
-/** R7-05: unified amber flag chip (first category +N) with full reason tooltip. */
+function chipShortLabel(flag: DeadFlagHit["flag"]): string {
+  return QUALITY_CHIP_SHORT_LABEL[flag] || QUALITY_GROUP_LABEL[flag] || flag;
+}
+
+/** R7-05 / R10-01: amber flag chip with SHORT labels; tooltip keeps full plain-words reasons. */
 export function SitQualityFlagChip({
   hits,
   onJumpToCase,
@@ -15,13 +24,12 @@ export function SitQualityFlagChip({
 }) {
   const quality = (hits || []).filter((h) => QUALITY_SET.has(h.flag));
   if (!quality.length) return null;
-  const first = QUALITY_GROUP_LABEL[quality[0]!.flag] || quality[0]!.flag;
-  const short = first.replace(/ \(fewer than 4 steps\)/, "");
+  const short = chipShortLabel(quality[0]!.flag);
   const extra = quality.length > 1 ? ` +${quality.length - 1}` : "";
   const tip = quality.map((h) => h.reason).join("\n");
   return (
     <span
-      className="shrink-0 rounded-full border border-[#fde68a] bg-[#fffbeb] px-1.5 py-0.5 text-[12px] font-semibold text-[#92400e]"
+      className="inline-block max-w-full shrink-0 truncate rounded-full border border-[#fde68a] bg-[#fffbeb] px-1.5 py-0.5 text-[12px] font-semibold text-[#92400e]"
       title={tip}
       data-testid="sit-quality-flag-chip"
     >

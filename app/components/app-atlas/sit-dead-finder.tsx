@@ -17,6 +17,15 @@ export const QUALITY_GROUP_LABEL: Partial<Record<DeadFlag, string>> = {
   not_assessed: "Needs review",
 };
 
+/** R10-01: short chip labels for the Scenario cell (long wording stays in QUALITY_GROUP_LABEL / tooltips / Issues). */
+export const QUALITY_CHIP_SHORT_LABEL: Partial<Record<DeadFlag, string>> = {
+  duplicate_case: "Duplicate",
+  empty_oracle: "No expected",
+  orphan_ticket: "No AC",
+  thin_case: "Thin",
+  contradiction: "Conflict",
+};
+
 export const QUALITY_GROUP_ORDER: DeadFlag[] = [
   "duplicate_case",
   "empty_oracle",
