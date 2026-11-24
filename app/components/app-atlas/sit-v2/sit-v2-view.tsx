@@ -1101,10 +1101,10 @@ export function SitTestingViewV2({
             <button
               type="button"
               onClick={() => setPickerOpen(true)}
-              title="Generate selection: which Jira tickets Generate will run for. Use the purple pills below to filter the case grid."
+              title="Jira ticket selection for Generate. Use the purple pills below to filter which cases you see."
               className="rounded-[8px] border border-[#e2e6ef] bg-white px-3 py-1.5 text-[12.5px] font-medium text-[#1F1F1F] transition hover:bg-[#fafafa] dark:border-[#2a2a2a] dark:bg-[#141414] dark:text-[#ededed]"
             >
-              Generate for
+              Jira Tickets
               {workingKeys.length
                 ? ` (${selected.length} of ${workingKeys.length})`
                 : selected.length
