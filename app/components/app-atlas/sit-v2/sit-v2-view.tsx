@@ -668,11 +668,12 @@ export function SitTestingViewV2({
   };
 
   const commitWorkbook = (next: SitWorkbook) => {
-    setWorkbook(next);
     setHistory((prev) => {
       const hist = prev.some((h) => h.id === next.id)
         ? prev.map((h) => (h.id === next.id ? next : h))
         : [next, ...prev];
+      // Keep grid on the merged live∪selected view (not a single raw workbook).
+      queueMicrotask(() => applyMergedScope(hist, selected));
       return hist;
     });
   };
@@ -745,10 +746,25 @@ export function SitTestingViewV2({
         return;
       }
       const copyCells: Record<string, string> = {};
+      const skip = new Set([
+        "caseId",
+        "tcId",
+        "origin",
+        "edited",
+        "deleted",
+        "executionStatus",
+        "statusBy",
+        "statusAt",
+        "createdAt",
+        "createdBy",
+        "editedBy",
+        "editedAt",
+        "editedFields",
+        "aiOriginal",
+        "generationId",
+      ]);
       for (const [k, v] of Object.entries(src.cells)) {
-        if (["caseId", "tcId", "origin", "edited", "deleted", "executionStatus", "statusBy", "statusAt"].includes(k)) {
-          continue;
-        }
+        if (skip.has(k)) continue;
         if (typeof v === "string") copyCells[k] = v;
       }
       copyCells.scenario = `${src.cells.scenario || "Scenario"} (copy)`;

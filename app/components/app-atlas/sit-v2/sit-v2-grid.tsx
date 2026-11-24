@@ -1221,7 +1221,13 @@ export function SitV2Grid({
                         >
                           {open ? <TbChevronDown size={12} /> : <TbChevronRight size={12} />}
                           <OriginGlyph origin={prov.origin} edited={edited} title={tip} />
-                          <span className="whitespace-nowrap">{row.cells.caseId || row.cells.tcId}</span>
+                          <span className="whitespace-nowrap">
+                            {row.cells.caseId || row.cells.tcId || (
+                              <span className="text-[#9ca3af]" title="ID pending">
+                                —
+                              </span>
+                            )}
+                          </span>
                         </button>
                         <RowMenu
                           canEdit={canEdit}
