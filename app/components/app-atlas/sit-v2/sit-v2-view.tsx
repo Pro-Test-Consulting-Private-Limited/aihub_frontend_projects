@@ -1061,6 +1061,7 @@ export function SitTestingViewV2({
             <button
               type="button"
               onClick={() => setPickerOpen(true)}
+              title="Tickets selected for Generate. The purple pills below filter which cases you see."
               className="rounded-[8px] border border-[#e2e6ef] bg-white px-3 py-1.5 text-[12.5px] font-medium text-[#1F1F1F] transition hover:bg-[#fafafa] dark:border-[#2a2a2a] dark:bg-[#141414] dark:text-[#ededed]"
             >
               Jira Tickets
@@ -1964,13 +1965,15 @@ export function SitTestingViewV2({
           onChange={(tickets) => {
             setSelected(tickets);
             savePersistedSelectedKeys(tickets.map((t) => t.key));
-            // R17: selection drives Generate only; applyMergedScope keeps live∪selected view keys.
+            // R17: pills / M stay live∪selected (no collapse). Grid filter follows a single
+            // selection so one checked ticket shows that ticket's cases — not All 83 —
+            // while other ticket pills remain. Multi-select keeps All (click a pill to focus).
             applyMergedScope(history, tickets);
-            const keys = viewWorkingKeys(
-              tickets.map((t) => t.key),
-              history,
-            );
-            if (ticketFilter !== "all" && ticketFilter !== "__unassigned__" && !keys.includes(ticketFilter)) {
+            if (tickets.length === 1) {
+              const only = tickets[0].key;
+              setTicketFilter(only);
+              savePersistedScope(only);
+            } else {
               setTicketFilter("all");
               savePersistedScope("all");
             }
