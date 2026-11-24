@@ -242,13 +242,24 @@ export function mergeWorkbooksForKeys(workbooks: SitWorkbook[], keys: string[]):
     const tb = b.updatedAt || b.createdAt || 0;
     return tb - ta;
   });
+  // Prefer the workbook with the most live rows for each ticket (tie-break: newest).
   const chosen = new Map<string, SitWorkbook>();
-  for (const wb of sorted) {
-    const rows = wb.sheets.find((s) => s.kind === "test-cases")?.rows || [];
-    for (const key of keySet) {
-      if (chosen.has(key)) continue;
-      if (rowsForTicket(rows, key).length) chosen.set(key, wb);
+  for (const key of keySet) {
+    let best: SitWorkbook | null = null;
+    let bestCount = -1;
+    let bestTs = -1;
+    for (const wb of sorted) {
+      const rows = wb.sheets.find((s) => s.kind === "test-cases")?.rows || [];
+      const n = rowsForTicket(rows, key).length;
+      if (!n) continue;
+      const ts = wb.updatedAt || wb.createdAt || 0;
+      if (n > bestCount || (n === bestCount && ts > bestTs)) {
+        best = wb;
+        bestCount = n;
+        bestTs = ts;
+      }
     }
+    if (best) chosen.set(key, best);
   }
   // Also pick newest workbook that may hold unassigned / foreign keys when present in any wb
   // that is already chosen, or newest multi-key wb: unassigned rows come along with chosen wbs.
@@ -391,14 +402,24 @@ export function mergeStreamIntoScope(
   return { rows: [...byId.values()], workingKeys, streamRowWorkbookId };
 }
 
-/** Persist helpers */
+/** Persist helpers — scoped per canvas when canvasId is provided. */
 export const SIT_SELECTED_KEYS = "sit_v2_selected_keys";
 export const SIT_SCOPE_PILL = "sit_v2_scope_pill";
 export const SIT_MODE_KEY = "sit_v2_mode";
 
-export function loadPersistedSelectedKeys(): string[] {
+function selectedStorageKey(canvasId?: string | null) {
+  return canvasId ? `${SIT_SELECTED_KEYS}:${canvasId}` : SIT_SELECTED_KEYS;
+}
+
+function scopeStorageKey(canvasId?: string | null) {
+  return canvasId ? `${SIT_SCOPE_PILL}:${canvasId}` : SIT_SCOPE_PILL;
+}
+
+export function loadPersistedSelectedKeys(canvasId?: string | null): string[] {
   try {
-    const raw = localStorage.getItem(SIT_SELECTED_KEYS);
+    const raw =
+      localStorage.getItem(selectedStorageKey(canvasId)) ||
+      (!canvasId ? null : localStorage.getItem(SIT_SELECTED_KEYS));
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed.map(String).map(normalizeTicketKey).filter(Boolean) : [];
@@ -407,18 +428,24 @@ export function loadPersistedSelectedKeys(): string[] {
   }
 }
 
-export function savePersistedSelectedKeys(keys: string[]) {
+export function savePersistedSelectedKeys(keys: string[], canvasId?: string | null) {
   try {
-    localStorage.setItem(SIT_SELECTED_KEYS, JSON.stringify(keys.map(normalizeTicketKey)));
+    localStorage.setItem(selectedStorageKey(canvasId), JSON.stringify(keys.map(normalizeTicketKey)));
   } catch {
     /* ignore */
   }
 }
 
-export function loadPersistedScope(validKeys: string[]): string | "all" {
+export function loadPersistedScope(
+  validKeys: string[],
+  canvasId?: string | null,
+): string | "all" | "__selected__" | "__unassigned__" {
   try {
-    const raw = localStorage.getItem(SIT_SCOPE_PILL) || "all";
-    if (raw === "all") return "all";
+    const raw =
+      localStorage.getItem(scopeStorageKey(canvasId)) ||
+      (!canvasId ? "all" : localStorage.getItem(SIT_SCOPE_PILL)) ||
+      "all";
+    if (raw === "all" || raw === "__selected__" || raw === "__unassigned__") return raw;
     const n = normalizeTicketKey(raw);
     if (validKeys.map(normalizeTicketKey).includes(n)) return n;
     return "all";
@@ -427,9 +454,16 @@ export function loadPersistedScope(validKeys: string[]): string | "all" {
   }
 }
 
-export function savePersistedScope(scope: string | "all") {
+export function savePersistedScope(
+  scope: string | "all" | "__selected__" | "__unassigned__",
+  canvasId?: string | null,
+) {
   try {
-    localStorage.setItem(SIT_SCOPE_PILL, scope === "all" ? "all" : normalizeTicketKey(scope));
+    const v =
+      scope === "all" || scope === "__selected__" || scope === "__unassigned__"
+        ? scope
+        : normalizeTicketKey(scope);
+    localStorage.setItem(scopeStorageKey(canvasId), v);
   } catch {
     /* ignore */
   }

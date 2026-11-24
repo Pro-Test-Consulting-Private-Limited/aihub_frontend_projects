@@ -450,10 +450,18 @@ export function atlasClient({ instance, accounts }: Msal) {
         revertField?: string;
       },
     ) => request<SitWorkbook>(`/sit/workbooks/${workbookId}/cases/${rowId}`, json("PATCH", body)),
-    addSitCase: (workbookId: string, ticketKey: string) =>
+    addSitCase: (
+      workbookId: string,
+      ticketKey: string,
+      opts?: { ticketSummary?: string; epicSummary?: string },
+    ) =>
       request<{ workbook: SitWorkbook; row: { id: string; cells: Record<string, string> } }>(
         `/sit/workbooks/${workbookId}/cases`,
-        json("POST", { ticketKey }),
+        json("POST", {
+          ticketKey,
+          ticketSummary: opts?.ticketSummary,
+          epicSummary: opts?.epicSummary,
+        }),
       ),
     /**
      * SIT v2 SSE generate. Calls onEvent for each SSE payload.

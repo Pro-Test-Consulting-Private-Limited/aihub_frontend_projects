@@ -70,6 +70,22 @@ describe("R11-01 getCaseFlags source of truth", () => {
     expect(getCaseFlags(dupB, all, null).defects.map((d) => d.flag)).toContain("duplicate");
   });
 
+  it("does not flag intentional Duplicate-menu copies as duplicate defects", () => {
+    const src = row("S1", {
+      steps: "1. Click Login\n2. Type email\n3. Type password\n4. Click Submit\n5. Verify Dashboard",
+      expected: "- User lands on Dashboard\n- Session cookie is set",
+      scenario: "Login with valid credentials",
+      origin: "ai",
+    });
+    const copy = row("S2", {
+      steps: "1. Click Login\n2. Type email\n3. Type password\n4. Click Submit\n5. Verify Dashboard",
+      expected: "- User lands on Dashboard\n- Session cookie is set",
+      scenario: "Login with valid credentials (copy)",
+      origin: "human",
+    });
+    expect(getCaseFlags(copy, [src, copy], null).defects.map((d) => d.flag)).not.toContain("duplicate");
+  });
+
   it("skips Draft and deleted rows", () => {
     const d = row("D", { executionStatus: "Draft", assessmentSource: "Not assessed", steps: "1. a" });
     expect(getCaseFlags(d, [d], null)).toEqual({ defects: [], needsReview: false });

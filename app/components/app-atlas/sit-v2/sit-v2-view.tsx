@@ -118,7 +118,7 @@ export function SitTestingViewV2({
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [genDialog, setGenDialog] = useState<TicketGenChoice[] | null>(null);
   const [clarifications, setClarifications] = useState<CanvasClarification[]>([]);
-  const [ticketFilter, setTicketFilter] = useState<string | "all" | "__unassigned__">("all");
+  const [ticketFilter, setTicketFilter] = useState<string | "all" | "__unassigned__" | "__selected__">("all");
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [originFilter, setOriginFilter] = useState<CaseOrigin | "all">(() => {
@@ -235,7 +235,7 @@ export function SitTestingViewV2({
       const items = saved.items || [];
       setHistory(items);
       const allTickets = tickets.epics.flatMap((e) => e.tickets);
-      let persisted = loadPersistedSelectedKeys();
+      let persisted = loadPersistedSelectedKeys(canvasId);
       if (!persisted.length) {
         persisted = workingSetKeys(
           [],
@@ -244,14 +244,14 @@ export function SitTestingViewV2({
       }
       const nextSelected = ticketsFromKeys(allTickets, persisted);
       setSelected(nextSelected);
-      savePersistedSelectedKeys(nextSelected.map((t) => t.key));
+      savePersistedSelectedKeys(nextSelected.map((t) => t.key), canvasId);
       const scopeKeys = viewWorkingKeys(
         nextSelected.map((t) => t.key),
         items,
       );
-      const scope = loadPersistedScope(scopeKeys);
+      const scope = loadPersistedScope(scopeKeys, canvasId);
       setTicketFilter(scope);
-      savePersistedScope(scope);
+      savePersistedScope(scope, canvasId);
       applyMergedScope(items, nextSelected);
       if (canvasId) {
         client.getClarifications(canvasId).then((c) => setClarifications(c.items || [])).catch(() => undefined);
@@ -334,14 +334,14 @@ export function SitTestingViewV2({
 
   const activateTicket = (key: string) => {
     setTicketFilter(key);
-    savePersistedScope(key);
+    savePersistedScope(key, canvasId);
     const all = epics.flatMap((e) => e.tickets);
     const t = all.find((x) => x.key === key);
     const nextSelected =
       t && !selected.some((s) => s.key === key) ? [...selected, t] : selected;
     if (t && nextSelected !== selected) {
       setSelected(nextSelected);
-      savePersistedSelectedKeys(nextSelected.map((s) => s.key));
+      savePersistedSelectedKeys(nextSelected.map((s) => s.key), canvasId);
     }
     // R17: changing selection must not rebuild a smaller grid; view keys stay live∪selected.
     applyMergedScope(history, nextSelected);
@@ -686,7 +686,12 @@ export function SitTestingViewV2({
     ).find((r) => ticketKeyOf(r) === want && r.cells.deleted !== "1");
     const wbId = peer ? ownerWorkbookId(peer.id, workbook.id) : workbook.id;
     if (!wbId || wbId === "pending") return;
-    const res = await client.addSitCase(wbId, ticketKey);
+    const epic = epics.find((e) => e.tickets.some((t) => normalizeTicketKey(t.key) === want));
+    const ticket = epic?.tickets.find((t) => normalizeTicketKey(t.key) === want);
+    const res = await client.addSitCase(wbId, ticketKey, {
+      ticketSummary: ticket?.summary,
+      epicSummary: epic?.summary,
+    });
     commitWorkbook(res.workbook);
     const newId = res.row?.id || null;
     if (newId) {
@@ -704,7 +709,11 @@ export function SitTestingViewV2({
 
   const addRow = async () => {
     if (!workbook || workbook.id === "pending") return;
-    if (ticketFilter !== "all" && ticketFilter !== "__unassigned__") {
+    if (
+      ticketFilter !== "all" &&
+      ticketFilter !== "__unassigned__" &&
+      ticketFilter !== "__selected__"
+    ) {
       await createCaseForTicket(ticketFilter);
       return;
     }
@@ -843,6 +852,11 @@ export function SitTestingViewV2({
   /** Ticket-scope rows for flag / source / status counts (never search/type). */
   const scopeRows = useMemo(() => {
     if (ticketFilter === "all") return allWorkingRows;
+    if (ticketFilter === "__selected__") {
+      const set = new Set(selected.map((t) => normalizeTicketKey(t.key)));
+      if (!set.size) return allWorkingRows;
+      return allWorkingRows.filter((r) => set.has(ticketKeyOf(r)));
+    }
     if (ticketFilter === "__unassigned__") {
       const keySet = new Set(workingKeys);
       return allWorkingRows.filter((r) => {
@@ -851,7 +865,7 @@ export function SitTestingViewV2({
       });
     }
     return rowsForTicket(allWorkingRows, ticketFilter);
-  }, [allWorkingRows, ticketFilter, workingKeys]);
+  }, [allWorkingRows, ticketFilter, workingKeys, selected]);
 
   const scopeSummary = useMemo(() => buildScopeSummary(scopeRows, workingKeys), [scopeRows, workingKeys]);
 
@@ -906,13 +920,16 @@ export function SitTestingViewV2({
             ? flagSummary.reviewCases
             : flagSummary.byDefect[flagged] ?? 0;
       // Compare badge (ticket scope) vs filtered count also limited to ticket scope.
-      const scopedFiltered = filtered.filter(
-        (r) =>
-          r.cells.deleted !== "1" &&
-          (ticketFilter === "all" ||
-            r.cells.requirementId === ticketFilter ||
-            r.cells.issueKey === ticketFilter),
-      );
+      const scopedFiltered = filtered.filter((r) => {
+        if (r.cells.deleted === "1") return false;
+        if (ticketFilter === "all") return true;
+        if (ticketFilter === "__selected__") {
+          const set = new Set(selected.map((t) => normalizeTicketKey(t.key)));
+          return set.has(ticketKeyOf(r));
+        }
+        if (ticketFilter === "__unassigned__") return !ticketKeyOf(r);
+        return ticketKeyOf(r) === ticketFilter;
+      });
       warnFlagCountMismatch(flagged, badge, scopedFiltered.length);
     }
     return {
@@ -935,6 +952,9 @@ export function SitTestingViewV2({
         const k = ticketKeyOf(r);
         return !k || !keySet.has(k);
       });
+    } else if (ticketFilter === "__selected__") {
+      const set = new Set(selected.map((t) => normalizeTicketKey(t.key)));
+      list = list.filter((r) => set.has(ticketKeyOf(r)));
     } else if (ticketFilter !== "all") {
       list = list.filter((r) => ticketKeyOf(r) === ticketFilter);
     }
@@ -989,7 +1009,11 @@ export function SitTestingViewV2({
   const metaModule = canvasName || ", ";
   // R12-01: Active tab only when a single pill is active, never when All / Unassigned.
   const activeTicketKey =
-    ticketFilter !== "all" && ticketFilter !== "__unassigned__" ? ticketFilter : null;
+    ticketFilter !== "all" &&
+    ticketFilter !== "__unassigned__" &&
+    ticketFilter !== "__selected__"
+      ? ticketFilter
+      : null;
 
   const activeAcs = useMemo(() => {
     if (!activeTicketKey) return [] as string[];
@@ -1077,10 +1101,10 @@ export function SitTestingViewV2({
             <button
               type="button"
               onClick={() => setPickerOpen(true)}
-              title="Tickets selected for Generate. The purple pills below filter which cases you see."
+              title="Generate selection: which Jira tickets Generate will run for. Use the purple pills below to filter the case grid."
               className="rounded-[8px] border border-[#e2e6ef] bg-white px-3 py-1.5 text-[12.5px] font-medium text-[#1F1F1F] transition hover:bg-[#fafafa] dark:border-[#2a2a2a] dark:bg-[#141414] dark:text-[#ededed]"
             >
-              Jira Tickets
+              Generate for
               {workingKeys.length
                 ? ` (${selected.length} of ${workingKeys.length})`
                 : selected.length
@@ -1098,18 +1122,19 @@ export function SitTestingViewV2({
             )}
             <button
               type="button"
+              title="Clear Generate selection (keeps cases on screen)"
               onClick={() => {
                 if (!selected.length && !workbook) return;
                 setSelected([]);
-                setWorkbook(null);
-                setRowWorkbookId({});
+                savePersistedSelectedKeys([], canvasId);
                 setTicketFilter("all");
-                savePersistedSelectedKeys([]);
-                savePersistedScope("all");
+                savePersistedScope("all", canvasId);
+                // Keep workbook / history — only clear Generate selection.
+                applyMergedScope(history, []);
               }}
               className="rounded-[8px] border border-[#e2e6ef] px-3 py-1.5 text-[12.5px] text-[#5b647a] dark:border-[#2a2a2a]"
             >
-              Clear All
+              Clear selection
             </button>
             {workbook && workbook.id !== "pending" && (
               <div className="relative">
@@ -1332,10 +1357,10 @@ export function SitTestingViewV2({
                 <button
                   type="button"
                   data-testid="sit-scope-pill-all"
-                  title="All tickets in the working set"
+                  title="View filter: show cases for every ticket in the working set"
                   onClick={() => {
                     setTicketFilter("all");
-                    savePersistedScope("all");
+                    savePersistedScope("all", canvasId);
                   }}
                   className={`shrink-0 rounded-full px-2.5 py-0.5 text-[12px] font-medium ${
                     ticketFilter === "all" ? "bg-[#8664F2] text-white" : "border border-[#e2e6ef] bg-white"
@@ -1343,22 +1368,47 @@ export function SitTestingViewV2({
                 >
                   All tickets {workingSummary.total}
                 </button>
-                {workingKeys.map((k) => (
+                {selected.length > 1 ? (
+                  <button
+                    type="button"
+                    data-testid="sit-scope-pill-selected"
+                    title="View filter: only tickets currently selected for Generate"
+                    onClick={() => {
+                      setTicketFilter("__selected__");
+                      savePersistedScope("__selected__", canvasId);
+                    }}
+                    className={`shrink-0 rounded-full px-2.5 py-0.5 text-[12px] font-medium ${
+                      ticketFilter === "__selected__"
+                        ? "bg-[#8664F2] text-white"
+                        : "border border-[#e2e6ef] bg-white"
+                    }`}
+                  >
+                    Selected {scopeRows.length}
+                  </button>
+                ) : null}
+                {workingKeys.map((k) => {
+                  const count = workingSummary.byTicket[k] ?? 0;
+                  const isSel = selected.some((s) => normalizeTicketKey(s.key) === k);
+                  // Hide zero-case pills unless selected for Generate or actively filtered.
+                  if (count === 0 && !isSel && ticketFilter !== k) return null;
+                  return (
                   <button
                     key={k}
                     type="button"
                     data-testid={`sit-scope-pill-${k}`}
+                    title="View filter: show only this ticket's cases"
                     onClick={() => {
                       setTicketFilter(k);
-                      savePersistedScope(k);
+                      savePersistedScope(k, canvasId);
                     }}
                     className={`shrink-0 rounded-full px-2.5 py-0.5 text-[12px] font-medium ${
                       ticketFilter === k ? "bg-[#8664F2] text-white" : "border border-[#e2e6ef] bg-white"
                     }`}
                   >
-                    {k} {workingSummary.byTicket[k] ?? 0}
+                    {k} {count}
                   </button>
-                ))}
+                  );
+                })}
                 {workingSummary.unassigned > 0 ? (
                   <button
                     type="button"
@@ -1366,7 +1416,7 @@ export function SitTestingViewV2({
                     title="Cases not linked to a Jira ticket"
                     onClick={() => {
                       setTicketFilter("__unassigned__");
-                      savePersistedScope("all");
+                      savePersistedScope("__unassigned__", canvasId);
                     }}
                     className={`shrink-0 rounded-full px-2.5 py-0.5 text-[12px] font-medium ${
                       ticketFilter === "__unassigned__"
@@ -1980,18 +2030,23 @@ export function SitTestingViewV2({
           loadedCounts={workingSummary.byTicket}
           onChange={(tickets) => {
             setSelected(tickets);
-            savePersistedSelectedKeys(tickets.map((t) => t.key));
-            // R17: pills / M stay live∪selected (no collapse). Grid filter follows a single
-            // selection so one checked ticket shows that ticket's cases — not All 83 —
-            // while other ticket pills remain. Multi-select keeps All (click a pill to focus).
+            savePersistedSelectedKeys(
+              tickets.map((t) => t.key),
+              canvasId,
+            );
+            // R17: pills / M stay live∪selected (no collapse). View filter follows selection:
+            // 1 ticket → that pill; 2+ → Selected filter; 0 → All.
             applyMergedScope(history, tickets);
             if (tickets.length === 1) {
               const only = tickets[0].key;
               setTicketFilter(only);
-              savePersistedScope(only);
+              savePersistedScope(only, canvasId);
+            } else if (tickets.length > 1) {
+              setTicketFilter("__selected__");
+              savePersistedScope("__selected__", canvasId);
             } else {
               setTicketFilter("all");
-              savePersistedScope("all");
+              savePersistedScope("all", canvasId);
             }
           }}
           onClose={() => setPickerOpen(false)}

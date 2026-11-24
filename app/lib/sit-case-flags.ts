@@ -242,23 +242,27 @@ export function getCaseFlags(
     }
   }
 
-  // Duplicates: same requirement, steps+expected Jaccard >= 0.85 vs an earlier peer
-  const req = (cells.requirementId || "").trim();
-  const combined = `${cells.steps || ""}\n${cells.expected || ""}`;
-  for (const peer of allCases) {
-    if (peer.id === row.id) break; // only compare to earlier rows (stable, matches BE)
-    if (isDraftOrDeleted(peer.cells || {})) continue;
-    const peerReq = (peer.cells.requirementId || "").trim();
-    if (req && peerReq && req !== peerReq) continue;
-    const peerCombined = `${peer.cells.steps || ""}\n${peer.cells.expected || ""}`;
-    const score = jaccard(combined, peerCombined);
-    if (score >= DUP_THRESHOLD) {
-      const peerId = peer.cells.caseId || peer.id.slice(0, 8);
-      defects.push({
-        flag: "duplicate",
-        reason: `${caseId} is ${Math.round(score * 100)}% similar to ${peerId}: similar steps and expected result`,
-      });
-      break;
+  // Duplicates: same requirement, steps+expected Jaccard >= 0.85 vs an earlier peer.
+  // Skip intentional Duplicate-menu copies (scenario ends with "(copy)").
+  const intentionalCopy = /\(copy\)\s*$/i.test(cells.scenario || "");
+  if (!intentionalCopy) {
+    const req = (cells.requirementId || "").trim();
+    const combined = `${cells.steps || ""}\n${cells.expected || ""}`;
+    for (const peer of allCases) {
+      if (peer.id === row.id) break; // only compare to earlier rows (stable, matches BE)
+      if (isDraftOrDeleted(peer.cells || {})) continue;
+      const peerReq = (peer.cells.requirementId || "").trim();
+      if (req && peerReq && req !== peerReq) continue;
+      const peerCombined = `${peer.cells.steps || ""}\n${peer.cells.expected || ""}`;
+      const score = jaccard(combined, peerCombined);
+      if (score >= DUP_THRESHOLD) {
+        const peerId = peer.cells.caseId || peer.id.slice(0, 8);
+        defects.push({
+          flag: "duplicate",
+          reason: `${caseId} is ${Math.round(score * 100)}% similar to ${peerId}: similar steps and expected result`,
+        });
+        break;
+      }
     }
   }
 
