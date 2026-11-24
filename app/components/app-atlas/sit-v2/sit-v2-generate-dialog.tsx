@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { SitWorkbook } from "@/app/interfaces/appatlas";
+import { liveRows, normalizeTicketKey, ticketKeyOf } from "@/app/lib/sit-scope";
 
 export type TicketGenChoice = {
   issueKey: string;
@@ -69,12 +70,17 @@ export function SitV2GenerateDialog({
                 </div>
                 {versions.length > 0 && (
                   <ul className="mb-2 space-y-0.5 rounded-[6px] bg-[#fafafa] px-2 py-1.5 text-[11px] text-[#6b7280] dark:bg-[#141414]">
-                    {versions.map((h) => (
+                    {versions.map((h) => {
+                      const rows = h.sheets.find((s) => s.kind === "test-cases")?.rows || [];
+                      const want = normalizeTicketKey(c.issueKey);
+                      const ticketCount = liveRows(rows).filter((r) => ticketKeyOf(r) === want).length;
+                      return (
                       <li key={h.id}>
                         {ago(h.createdAt)} · {h.generator} ·{" "}
-                        {h.sheets.find((s) => s.kind === "test-cases")?.rows.length || 0} cases
+                        {ticketCount} cases
                       </li>
-                    ))}
+                      );
+                    })}
                   </ul>
                 )}
                 <div className="flex flex-col gap-1.5 text-[12.5px]">

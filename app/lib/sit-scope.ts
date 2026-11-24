@@ -28,6 +28,31 @@ export function workingSetKeys(selectedKeys: string[], workbookKeys: string[] = 
   return sortTicketKeys(Array.from(new Set([...selectedKeys, ...workbookKeys].map(normalizeTicketKey).filter(Boolean))));
 }
 
+/**
+ * R17: every ticket key that currently has at least one live row in the canvas workbooks
+ * (newest-per-ticket merge is applied later; this only discovers keys).
+ */
+export function liveTicketKeysFromWorkbooks(workbooks: SitWorkbook[]): string[] {
+  const keys = new Set<string>();
+  for (const wb of workbooks) {
+    const rows = wb.sheets.find((s) => s.kind === "test-cases")?.rows || [];
+    for (const r of liveRows(rows)) {
+      const k = ticketKeyOf(r);
+      if (k) keys.add(k);
+    }
+  }
+  return sortTicketKeys([...keys]);
+}
+
+/**
+ * R17 view scope (grid / pills / M in Jira N of M):
+ * selected keys UNION every key with live rows. Selection alone must not shrink the grid.
+ * Generate still uses selected keys only.
+ */
+export function viewWorkingKeys(selectedKeys: string[], workbooks: SitWorkbook[]): string[] {
+  return workingSetKeys(selectedKeys, liveTicketKeysFromWorkbooks(workbooks));
+}
+
 /** Trim + uppercase. Empty string if missing. */
 export function normalizeTicketKey(raw: string | null | undefined): string {
   return String(raw ?? "").trim().toUpperCase();
@@ -75,7 +100,7 @@ export type ScopeSummary = {
   total: number;
   /** Counts for each working-set key (0 if none). */
   byTicket: Record<string, number>;
-  /** Rows whose ticketKeyOf is empty or not in workingKeys. */
+  /** Rows whose ticketKeyOf is empty or unresolvable (R17: never foreign real keys). */
   unassigned: number;
   bySource: { total: number; ai: number; human: number };
   edited: number;
@@ -116,8 +141,12 @@ export function buildScopeSummary(rows: SitSheetRow[], workingKeys: string[] = [
     if (r.cells.deleted === "1") continue;
     total++;
     const key = ticketKeyOf(r);
-    if (!key || !keySet.has(key)) unassigned++;
-    else byTicket[key] = (byTicket[key] || 0) + 1;
+    if (!key) {
+      // R17 D3: Unassigned = keyless / unresolvable only.
+      unassigned++;
+    } else {
+      byTicket[key] = (byTicket[key] || 0) + 1;
+    }
 
     const prov = getCaseProvenance(r.cells);
     if (prov.origin === "human") human++;
@@ -129,7 +158,8 @@ export function buildScopeSummary(rows: SitSheetRow[], workingKeys: string[] = [
     else byStatus["Not run"]++;
   }
 
-  const ticketPillSum = keys.reduce((n, k) => n + (byTicket[k] || 0), 0);
+  const allPillKeys = sortTicketKeys(Array.from(new Set([...keys, ...Object.keys(byTicket)])));
+  const ticketPillSum = allPillKeys.reduce((n, k) => n + (byTicket[k] || 0), 0);
   return {
     total,
     byTicket,
@@ -137,7 +167,7 @@ export function buildScopeSummary(rows: SitSheetRow[], workingKeys: string[] = [
     bySource: { total: ai + human, ai, human },
     edited,
     byStatus,
-    workingKeys: keys,
+    workingKeys: allPillKeys,
     ticketPillSum,
   };
 }

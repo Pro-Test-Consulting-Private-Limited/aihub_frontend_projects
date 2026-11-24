@@ -46,6 +46,7 @@ import {
   sortTicketKeys,
   ticketKeyOf,
   ticketsFromKeys,
+  viewWorkingKeys,
   workbookWithMergedRows,
   workingSetKeys,
 } from "@/app/lib/sit-scope";
@@ -203,9 +204,10 @@ export function SitTestingViewV2({
 
   const applyMergedScope = useCallback(
     (hist: SitWorkbook[], sel: SitTicket[]) => {
+      // R17 D1/D2: grid view keys = selection UNION every live ticket key in canvas workbooks.
+      // Selection alone must not shrink pills / All / M in Jira (N of M).
       const selectedKeys = sel.map((t) => t.key);
-      const histKeys = hist.flatMap((h) => h.sourceIssueKeys || []);
-      const keys = workingSetKeys(selectedKeys, selectedKeys.length ? selectedKeys : histKeys);
+      const keys = viewWorkingKeys(selectedKeys, hist);
       const merged = mergeWorkbooksForKeys(hist, keys);
       const seed =
         hist.find((h) => merged.workbookIds.includes(h.id)) || hist[0] || null;
@@ -243,14 +245,14 @@ export function SitTestingViewV2({
       const nextSelected = ticketsFromKeys(allTickets, persisted);
       setSelected(nextSelected);
       savePersistedSelectedKeys(nextSelected.map((t) => t.key));
-      const scopeKeys = workingSetKeys(
+      const scopeKeys = viewWorkingKeys(
         nextSelected.map((t) => t.key),
-        items.flatMap((h) => h.sourceIssueKeys || []),
+        items,
       );
       const scope = loadPersistedScope(scopeKeys);
       setTicketFilter(scope);
       savePersistedScope(scope);
-      applyMergedScope(items, nextSelected.length ? nextSelected : ticketsFromKeys(allTickets, scopeKeys));
+      applyMergedScope(items, nextSelected);
       if (canvasId) {
         client.getClarifications(canvasId).then((c) => setClarifications(c.items || [])).catch(() => undefined);
       }
@@ -334,6 +336,7 @@ export function SitTestingViewV2({
       setSelected(nextSelected);
       savePersistedSelectedKeys(nextSelected.map((s) => s.key));
     }
+    // R17: changing selection must not rebuild a smaller grid; view keys stay live∪selected.
     applyMergedScope(history, nextSelected);
   };
 
@@ -394,9 +397,9 @@ export function SitTestingViewV2({
     const genKeys = sortTicketKeys(choices.map((c) => normalizeTicketKey(c.issueKey)).filter(Boolean));
     const baseRowsNow =
       workbook?.sheets.find((s) => s.kind === "test-cases")?.rows.filter((r) => r.cells.deleted !== "1") || [];
-    const baseKeysNow = workingSetKeys(
+    const baseKeysNow = viewWorkingKeys(
       selected.map((t) => t.key),
-      workbook?.sourceIssueKeys || history.flatMap((h) => h.sourceIssueKeys || []),
+      history,
     );
     baseKeysAtStreamRef.current = baseKeysNow;
     setGeneratingKeys(genKeys);
@@ -546,9 +549,9 @@ export function SitTestingViewV2({
     }
     const genRows =
       workbook?.sheets.find((s) => s.kind === "test-cases")?.rows.filter((r) => r.cells.deleted !== "1") || [];
-    const genKeys = workingSetKeys(
+    const genKeys = viewWorkingKeys(
       selected.map((t) => t.key),
-      workbook?.sourceIssueKeys || history.flatMap((h) => h.sourceIssueKeys || []),
+      history,
     );
     const genByTicket = buildScopeSummary(genRows, genKeys).byTicket;
     const choices: TicketGenChoice[] = selected.map((t) => {
@@ -697,9 +700,9 @@ export function SitTestingViewV2({
       await createCaseForTicket(ticketFilter);
       return;
     }
-    const keys = workingSetKeys(
+    const keys = viewWorkingKeys(
       selected.map((t) => t.key),
-      workbook.sourceIssueKeys || [],
+      history,
     );
     if (!keys.length) {
       setError("Select tickets before adding a row.");
@@ -750,12 +753,11 @@ export function SitTestingViewV2({
   };
 
   const baseWorkingKeys = useMemo(
-    () =>
-      workingSetKeys(
-        selected.map((t) => t.key),
-        workbook?.sourceIssueKeys || history.flatMap((h) => h.sourceIssueKeys || []),
-      ),
-    [selected, workbook, history],
+    () => viewWorkingKeys(
+      selected.map((t) => t.key),
+      history,
+    ),
+    [selected, history],
   );
 
   const baseWorkingRows = useMemo(() => {
@@ -1955,12 +1957,13 @@ export function SitTestingViewV2({
           onChange={(tickets) => {
             setSelected(tickets);
             savePersistedSelectedKeys(tickets.map((t) => t.key));
+            // R17: selection drives Generate only; applyMergedScope keeps live∪selected view keys.
             applyMergedScope(history, tickets);
-            const keys = workingSetKeys(
+            const keys = viewWorkingKeys(
               tickets.map((t) => t.key),
-              history.flatMap((h) => h.sourceIssueKeys || []),
+              history,
             );
-            if (ticketFilter !== "all" && !keys.includes(ticketFilter)) {
+            if (ticketFilter !== "all" && ticketFilter !== "__unassigned__" && !keys.includes(ticketFilter)) {
               setTicketFilter("all");
               savePersistedScope("all");
             }
