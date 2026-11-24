@@ -7,8 +7,10 @@ import { outlineButton, primaryButton } from "./modal";
 
 /**
  * Replay player: prefers assembled MP4 when present; falls back to screenshot scrubber.
- * Click ripples, cursor spotlight, keystroke toasts, and sensitive-field blurs are
- * composited from the recorded timeline (never injected into the page under test).
+ * Click ripples, cursor spotlight, and keystroke toasts are composited from the timeline
+ * (never injected into the page under test).
+ * Sensitive-field frost/blur overlays are off by default so replay matches the live site.
+ * Set NEXT_PUBLIC_REPLAY_FROST_SENSITIVE=1 to restore the old blur panels.
  */
 export function ReplayPlayer({ canvas, onClose }: { canvas: Canvas; onClose: () => void }) {
   const frames = useMemo(() => {
@@ -204,7 +206,8 @@ export function ReplayPlayer({ canvas, onClose }: { canvas: Canvas; onClose: () 
 }
 
 function Overlay({ event }: { event: ReplayTimelineEvent }) {
-  if (event.kind === "sensitive" && event.box) {
+  const frostSensitive = process.env.NEXT_PUBLIC_REPLAY_FROST_SENSITIVE === "1";
+  if (frostSensitive && event.kind === "sensitive" && event.box) {
     return (
       <div
         className="absolute backdrop-blur-md bg-black/70"

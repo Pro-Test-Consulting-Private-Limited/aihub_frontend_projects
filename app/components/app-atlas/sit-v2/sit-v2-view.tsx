@@ -266,6 +266,13 @@ export function SitTestingViewV2({
   }, [client, canvasId, applyMergedScope]);
 
   useEffect(() => {
+    // R17B S11: drop in-flight stream/history merge from the previous canvas before load.
+    abortRef.current?.abort();
+    abortRef.current = null;
+    clearStreamState();
+    setGenerating(false);
+    setProgress({});
+    setError(null);
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- initial load only when canvas changes
   }, [client, canvasId]);
