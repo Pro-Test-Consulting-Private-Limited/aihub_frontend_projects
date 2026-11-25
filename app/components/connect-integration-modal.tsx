@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { FaEye, FaEyeSlash } from "react-icons/fa";
 import Modal from "./modal";
 
@@ -174,12 +174,16 @@ export default function ConnectIntegrationModal({
             Personal access token
             <div className="relative mt-1">
               <input
-                type={showFigmaToken ? "text" : "password"}
+                type="text"
                 value={figmaToken}
                 onChange={(e) => setFigmaToken(e.target.value)}
                 placeholder="figd_…"
                 autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
                 spellCheck={false}
+                // text + disc mask: avoids Edge/Chrome native password "eye" that fights our control
+                style={showFigmaToken ? undefined : ({ WebkitTextSecurity: "disc" } as CSSProperties)}
                 className="w-full h-[38px] pl-3 pr-10 rounded-[8px] border border-[rgba(94,96,102,0.3)] dark:border-[#2a2a2a] bg-white dark:bg-[#1a1a1a] text-[13px] outline-none"
               />
               <button
