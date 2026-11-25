@@ -1017,6 +1017,12 @@ export function SitTestingViewV2({
       ? ticketFilter
       : null;
 
+  /** Same pool as the Jira Tickets picker (“Active Stories”) — not workbook case-keys. */
+  const jiraStoryCount = useMemo(
+    () => epics.reduce((n, e) => n + e.tickets.length, 0),
+    [epics],
+  );
+
   const activeAcs = useMemo(() => {
     if (!activeTicketKey) return [] as string[];
     const t = epics.flatMap((e) => e.tickets).find((x) => x.key === activeTicketKey);
@@ -1103,12 +1109,12 @@ export function SitTestingViewV2({
             <button
               type="button"
               onClick={() => setPickerOpen(true)}
-              title="Jira ticket selection for Generate. Use the purple pills below to filter which cases you see."
+              title="Jira ticket selection for Generate. Count matches the picker (Jira stories), not case pills."
               className="rounded-[8px] border border-[#e2e6ef] bg-white px-3 py-1.5 text-[12.5px] font-medium text-[#1F1F1F] transition hover:bg-[#fafafa] dark:border-[#2a2a2a] dark:bg-[#141414] dark:text-[#ededed]"
             >
               Jira Tickets
-              {workingKeys.length
-                ? ` (${selected.length} of ${workingKeys.length})`
+              {jiraStoryCount > 0
+                ? ` (${selected.length} of ${jiraStoryCount})`
                 : selected.length
                   ? ` (${selected.length})`
                   : ""}
