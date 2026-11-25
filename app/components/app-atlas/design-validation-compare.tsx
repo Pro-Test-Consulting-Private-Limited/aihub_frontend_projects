@@ -12,6 +12,7 @@ import {
 import { atlasUrl } from "@/app/services/appatlas";
 
 export type CompareMode = "side" | "overlay" | "onion" | "swipe" | "diff";
+type Matte = "light" | "dark" | "checker";
 
 const MODES: Array<{ id: CompareMode; label: string }> = [
   { id: "side", label: "Side-by-Side" },
@@ -20,6 +21,92 @@ const MODES: Array<{ id: CompareMode; label: string }> = [
   { id: "swipe", label: "Swipe" },
   { id: "diff", label: "Difference Map" },
 ];
+
+function matteClass(matte: Matte) {
+  if (matte === "dark") return "bg-[#1a1a1a]";
+  if (matte === "checker") {
+    return "bg-[length:16px_16px] bg-[linear-gradient(45deg,#e5e7eb_25%,transparent_25%),linear-gradient(-45deg,#e5e7eb_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#e5e7eb_75%),linear-gradient(-45deg,transparent_75%,#e5e7eb_75%)] bg-[position:0_0,0_8px,8px_-8px,-8px_0] bg-[#fafafa]";
+  }
+  return "bg-[#F4F4F5]";
+}
+
+/** Both images share one layout box so overlays stay aligned. */
+function StackedPair({
+  baseSrc,
+  topSrc,
+  topOpacity,
+  transform,
+  baseLabel,
+  topLabel,
+  showLabels,
+}: {
+  baseSrc: string;
+  topSrc: string;
+  topOpacity: number;
+  transform: string;
+  baseLabel?: string;
+  topLabel?: string;
+  showLabels?: boolean;
+}) {
+  return (
+    <div className="flex h-full w-full items-center justify-center overflow-hidden p-3">
+      <div className="relative max-h-full max-w-full" style={{ transform, transformOrigin: "center center" }}>
+        {showLabels && baseLabel ? (
+          <div className="absolute left-2 top-2 z-20 rounded bg-black/60 px-2 py-0.5 text-[10px] font-semibold uppercase text-white">
+            {baseLabel}
+            {topLabel ? ` + ${topLabel}` : ""}
+          </div>
+        ) : null}
+        {/* White plate so PNG transparency / dark UI stay readable */}
+        <div className="rounded-sm bg-white shadow-sm ring-1 ring-black/10">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={baseSrc}
+            alt={baseLabel || "base"}
+            draggable={false}
+            className="block max-h-[min(70vh,100%)] max-w-full object-contain"
+          />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={topSrc}
+            alt={topLabel || "top"}
+            draggable={false}
+            className="pointer-events-none absolute inset-0 h-full w-full object-contain"
+            style={{ opacity: topOpacity }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SingleFit({
+  src,
+  label,
+  transform,
+  showLabels,
+}: {
+  src: string;
+  label?: string;
+  transform: string;
+  showLabels?: boolean;
+}) {
+  return (
+    <div className="relative flex h-full w-full items-center justify-center overflow-hidden p-3">
+      {showLabels && label ? (
+        <div className="absolute left-2 top-2 z-20 rounded bg-black/60 px-2 py-0.5 text-[10px] font-semibold uppercase text-white">
+          {label}
+        </div>
+      ) : null}
+      <div style={{ transform, transformOrigin: "center center" }} className="max-h-full max-w-full">
+        <div className="rounded-sm bg-white shadow-sm ring-1 ring-black/10">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={src} alt={label || ""} draggable={false} className="block max-h-[min(70vh,100%)] max-w-full object-contain" />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function DesignValidationCompare({
   figmaUrl,
@@ -35,16 +122,16 @@ export function DesignValidationCompare({
   showLabels?: boolean;
 }) {
   const [mode, setMode] = useState<CompareMode>("side");
+  const [matte, setMatte] = useState<Matte>("light");
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
   const dragOrigin = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
-  const [opacity, setOpacity] = useState(45);
+  const [opacity, setOpacity] = useState(50);
   const [figmaOnTop, setFigmaOnTop] = useState(true);
   const [swipe, setSwipe] = useState(50);
   const [swipeDragging, setSwipeDragging] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
-  const stageRef = useRef<HTMLDivElement>(null);
   const swipeRef = useRef<HTMLDivElement>(null);
 
   const figmaSrc = atlasUrl(figmaUrl);
@@ -54,6 +141,11 @@ export function DesignValidationCompare({
   const resetView = () => {
     setZoom(1);
     setPan({ x: 0, y: 0 });
+  };
+
+  const setCompareMode = (next: CompareMode) => {
+    setMode(next);
+    if (next === "onion" || next === "overlay") setOpacity(50);
   };
 
   const onPointerDown = (e: ReactPointerEvent) => {
@@ -104,11 +196,12 @@ export function DesignValidationCompare({
   }, [fullscreen]);
 
   const transform = `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`;
+  const baseSrc = mode === "overlay" && !figmaOnTop ? figmaSrc : recordedSrc;
+  const topSrc = mode === "overlay" && !figmaOnTop ? recordedSrc : figmaSrc;
 
-  const shell = (
+  return (
     <div
-      className={`flex min-h-0 flex-col ${fullscreen ? "fixed inset-0 z-[80] bg-[#0b0b0f] p-4" : "h-full"}`}
-      ref={stageRef}
+      className={`flex min-h-0 flex-col ${fullscreen ? "fixed inset-0 z-[80] bg-[#F4F4F5] p-4 dark:bg-[#141414]" : "h-full"}`}
     >
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <div className="inline-flex rounded-[8px] border border-[#E5E7EB] p-0.5 dark:border-[#2a2a2a]">
@@ -116,7 +209,7 @@ export function DesignValidationCompare({
             <button
               key={m.id}
               type="button"
-              onClick={() => setMode(m.id)}
+              onClick={() => setCompareMode(m.id)}
               className={`rounded-[6px] px-2.5 py-1 text-[11.5px] font-medium ${
                 mode === m.id
                   ? "bg-[#8664f2] text-white"
@@ -128,11 +221,32 @@ export function DesignValidationCompare({
           ))}
         </div>
 
+        <div className="inline-flex rounded-[8px] border border-[#E5E7EB] p-0.5 text-[11px] dark:border-[#2a2a2a]">
+          {(
+            [
+              ["light", "Light"],
+              ["checker", "Grid"],
+              ["dark", "Dark"],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setMatte(id)}
+              className={`rounded-[6px] px-2 py-1 ${
+                matte === id ? "bg-[#E5E7EB] font-medium dark:bg-[#2a2a2a]" : "text-[#6B7280]"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
         <div className="ml-auto flex flex-wrap items-center gap-1">
           {(mode === "overlay" || mode === "onion") && (
             <>
               <label className="flex items-center gap-2 text-[11px] text-[#6B7280]">
-                Opacity
+                {mode === "onion" ? "Blend" : "Top opacity"}
                 <input
                   type="range"
                   min={0}
@@ -206,13 +320,18 @@ export function DesignValidationCompare({
         <div className="mb-2 text-[11.5px] text-[#6B7280]">
           Diff · <span className="font-semibold text-[#1F1F1F] dark:text-[#ededed]">{percentChanged}%</span> pixels
           changed
+          {percentChanged >= 40 ? (
+            <span className="ml-2 text-[#B45309]">
+              — layouts differ a lot; Onion/Overlay will look ghosted. Prefer Side-by-Side or Swipe.
+            </span>
+          ) : null}
         </div>
       ) : null}
 
       <div
-        className={`relative min-h-0 flex-1 overflow-hidden rounded-[10px] border border-[#E5E7EB] bg-[#111] dark:border-[#2a2a2a] ${
-          dragging ? "cursor-grabbing" : "cursor-grab"
-        }`}
+        className={`relative min-h-0 flex-1 overflow-hidden rounded-[10px] border border-[#E5E7EB] dark:border-[#2a2a2a] ${matteClass(
+          matte,
+        )} ${dragging ? "cursor-grabbing" : "cursor-grab"}`}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -224,61 +343,26 @@ export function DesignValidationCompare({
         }}
       >
         {mode === "side" ? (
-          <div className="grid h-full grid-cols-2 gap-px bg-[#1f1f1f]">
-            {(["Figma", "Recorded"] as const).map((label) => (
-              <div key={label} className="relative overflow-hidden bg-[#111]">
-                {showLabels ? (
-                  <div className="absolute left-2 top-2 z-10 rounded bg-black/55 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
-                    {label}
-                  </div>
-                ) : null}
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={label === "Figma" ? figmaSrc : recordedSrc}
-                  alt={label}
-                  draggable={false}
-                  className="absolute left-1/2 top-1/2 max-h-none max-w-none origin-center object-contain"
-                  style={{
-                    transform: `translate(-50%, -50%) ${transform}`,
-                    height: "90%",
-                    width: "auto",
-                  }}
-                />
-              </div>
-            ))}
+          <div className="grid h-full grid-cols-2 gap-px bg-[#D4D4D8]/80">
+            <div className={`relative overflow-hidden ${matteClass(matte)}`}>
+              <SingleFit src={figmaSrc} label="Figma" transform={transform} showLabels={showLabels} />
+            </div>
+            <div className={`relative overflow-hidden ${matteClass(matte)}`}>
+              <SingleFit src={recordedSrc} label="Recorded" transform={transform} showLabels={showLabels} />
+            </div>
           </div>
         ) : null}
 
         {(mode === "overlay" || mode === "onion") && (
-          <div className="relative h-full w-full">
-            {showLabels ? (
-              <div className="absolute left-2 top-2 z-10 rounded bg-black/55 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
-                {mode === "onion" ? "Onion" : figmaOnTop ? "Figma over Recorded" : "Recorded over Figma"}
-              </div>
-            ) : null}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={mode === "overlay" && !figmaOnTop ? figmaSrc : recordedSrc}
-              alt="base"
-              draggable={false}
-              className="absolute left-1/2 top-1/2 origin-center object-contain"
-              style={{ transform: `translate(-50%, -50%) ${transform}`, height: "90%", width: "auto" }}
-            />
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={mode === "overlay" && !figmaOnTop ? recordedSrc : figmaSrc}
-              alt="top"
-              draggable={false}
-              className="absolute left-1/2 top-1/2 origin-center object-contain"
-              style={{
-                transform: `translate(-50%, -50%) ${transform}`,
-                height: "90%",
-                width: "auto",
-                opacity: opacity / 100,
-                mixBlendMode: mode === "onion" ? "normal" : "normal",
-              }}
-            />
-          </div>
+          <StackedPair
+            baseSrc={baseSrc}
+            topSrc={topSrc}
+            topOpacity={opacity / 100}
+            transform={transform}
+            baseLabel={mode === "onion" ? "Recorded" : figmaOnTop ? "Recorded" : "Figma"}
+            topLabel={mode === "onion" ? "Figma" : figmaOnTop ? "Figma" : "Recorded"}
+            showLabels={showLabels}
+          />
         )}
 
         {mode === "swipe" ? (
@@ -291,41 +375,47 @@ export function DesignValidationCompare({
               updateSwipeFromClientX(e.clientX);
             }}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={recordedSrc}
-              alt="Recorded"
-              draggable={false}
-              className="absolute inset-0 h-full w-full object-contain"
-              style={{ transform }}
-            />
-            <div className="absolute inset-0 overflow-hidden" style={{ width: `${swipe}%` }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={figmaSrc}
-                alt="Figma"
-                draggable={false}
-                className="h-full max-w-none object-contain"
-                style={{
-                  width: `${10000 / Math.max(swipe, 1)}%`,
-                  height: "100%",
-                  transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-                  transformOrigin: "left center",
-                }}
-              />
+            <div className="absolute inset-0 flex items-center justify-center p-3">
+              <div className="relative max-h-full max-w-full" style={{ transform, transformOrigin: "center center" }}>
+                <div className="rounded-sm bg-white shadow-sm ring-1 ring-black/10">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={recordedSrc}
+                    alt="Recorded"
+                    draggable={false}
+                    className="block max-h-[min(70vh,100%)] max-w-full object-contain"
+                  />
+                </div>
+                <div
+                  className="absolute inset-0 overflow-hidden rounded-sm"
+                  style={{ width: `${swipe}%` }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={figmaSrc}
+                    alt="Figma"
+                    draggable={false}
+                    className="absolute left-0 top-0 h-full max-w-none object-contain object-left"
+                    style={{
+                      width: `${10000 / Math.max(swipe, 0.01)}%`,
+                      maxWidth: "none",
+                    }}
+                  />
+                </div>
+              </div>
             </div>
             <div
-              className="absolute inset-y-0 z-10 w-0.5 bg-[#8664f2] shadow-[0_0_0_1px_rgba(255,255,255,0.35)]"
+              className="pointer-events-none absolute inset-y-0 z-10 w-0.5 bg-[#8664f2]"
               style={{ left: `${swipe}%` }}
             >
-              <div className="absolute left-1/2 top-1/2 h-8 w-8 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-[#8664f2]" />
+              <div className="absolute left-1/2 top-1/2 h-8 w-8 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-[#8664f2] shadow" />
             </div>
             {showLabels ? (
               <>
-                <div className="absolute left-2 top-2 z-10 rounded bg-black/55 px-2 py-0.5 text-[10px] font-semibold uppercase text-white">
+                <div className="absolute left-2 top-2 z-20 rounded bg-black/60 px-2 py-0.5 text-[10px] font-semibold uppercase text-white">
                   Figma
                 </div>
-                <div className="absolute right-2 top-2 z-10 rounded bg-black/55 px-2 py-0.5 text-[10px] font-semibold uppercase text-white">
+                <div className="absolute right-2 top-2 z-20 rounded bg-black/60 px-2 py-0.5 text-[10px] font-semibold uppercase text-white">
                   Recorded
                 </div>
               </>
@@ -334,25 +424,9 @@ export function DesignValidationCompare({
         ) : null}
 
         {mode === "diff" ? (
-          <div className="relative h-full w-full">
-            {showLabels ? (
-              <div className="absolute left-2 top-2 z-10 rounded bg-black/55 px-2 py-0.5 text-[10px] font-semibold uppercase text-white">
-                Difference map
-              </div>
-            ) : null}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={diffSrc}
-              alt="Difference"
-              draggable={false}
-              className="absolute left-1/2 top-1/2 origin-center object-contain"
-              style={{ transform: `translate(-50%, -50%) ${transform}`, height: "90%", width: "auto" }}
-            />
-          </div>
+          <SingleFit src={diffSrc} label="Difference map" transform={transform} showLabels={showLabels} />
         ) : null}
       </div>
     </div>
   );
-
-  return shell;
 }
