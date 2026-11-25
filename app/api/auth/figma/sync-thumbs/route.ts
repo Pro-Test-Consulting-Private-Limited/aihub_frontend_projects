@@ -61,9 +61,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ items, requested: batch.length, got: items.length });
   } catch (err) {
     const status = err instanceof FigmaApiError ? err.status : 502;
+    const retryAfterSec = err instanceof FigmaApiError ? err.retryAfterSec : null;
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Sync failed" },
-      { status: status === 429 ? 429 : 502 },
+      {
+        error: err instanceof Error ? err.message : "Sync failed",
+        ...(retryAfterSec != null ? { retryAfterSec } : {}),
+      },
+      {
+        status: status === 429 ? 429 : 502,
+        ...(retryAfterSec != null ? { headers: { "Retry-After": String(retryAfterSec) } } : {}),
+      },
     );
   }
 }

@@ -25,10 +25,12 @@ function figmaAuthHeaders(accessToken: string): Record<string, string> {
 
 export class FigmaApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  retryAfterSec: number | null;
+  constructor(message: string, status: number, retryAfterSec: number | null = null) {
     super(message);
     this.name = "FigmaApiError";
     this.status = status;
+    this.retryAfterSec = retryAfterSec;
   }
 }
 
@@ -46,9 +48,15 @@ async function figmaFetch(accessToken: string, path: string): Promise<Record<str
           ? data.message
           : `Figma API ${res.status}`;
     if (res.status === 429 || /rate limit/i.test(msg)) {
+      const retryRaw = res.headers.get("retry-after");
+      const retryAfterSec = retryRaw != null && Number.isFinite(Number(retryRaw)) ? Math.max(1, Math.ceil(Number(retryRaw))) : null;
+      const waitHint = retryAfterSec
+        ? `Wait ${retryAfterSec}s (Figma Retry-After), then try again`
+        : "Wait for the current minute window to refill, then try again";
       throw new FigmaApiError(
-        "Figma rate limit exceeded — too many API calls. Wait about a minute, then Refresh. Thumbnails load slowly on purpose to avoid this.",
+        `Figma rate limit exceeded — ${waitHint}. Use Sync for cached previews; GET image is Tier 1 (~10–20 req/min on paid Dev/Full seats).`,
         429,
+        retryAfterSec,
       );
     }
     throw new FigmaApiError(msg, res.status);

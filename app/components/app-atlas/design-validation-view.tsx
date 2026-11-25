@@ -182,7 +182,7 @@ export function DesignValidationView({
           hitLimit = true;
           setError(
             data.error ||
-              "Figma rate limit hit mid-sync. Wait ~1 minute, then Sync again — already saved previews stay cached.",
+              "Figma rate limit hit mid-sync. Limits are per-minute (Tier 1 GET image ≈ 10–20/min on paid Dev/Full). Wait for Retry-After / the next minute, then Sync again — already saved previews stay cached.",
           );
           break;
         }
