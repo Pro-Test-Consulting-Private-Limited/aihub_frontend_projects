@@ -797,6 +797,56 @@ export function atlasClient({ instance, accounts }: Msal) {
         json("POST", {}),
       ),
 
+    listSecurityPasses: (canvasId: string) =>
+      request<{
+        passes: Array<{ id: string; title: string; kind: string; built: boolean; unlockCount: number; description: string }>;
+        jobs: Array<{ id: string; passId: string; status: string; progress: Record<string, unknown> }>;
+      }>(`/canvases/${encodeURIComponent(canvasId)}/security/passes`),
+    enqueueSecurityPass: (canvasId: string, passId: string) =>
+      request<Record<string, unknown>>(
+        `/canvases/${encodeURIComponent(canvasId)}/security/passes/${encodeURIComponent(passId)}`,
+        json("POST", {}),
+      ),
+    getSecurityReport: (canvasId: string) =>
+      request<Record<string, unknown>>(`/canvases/${encodeURIComponent(canvasId)}/security/report`),
+    getSecurityResults: (canvasId: string) =>
+      request<{ items: unknown[]; tally: Record<string, number>; inventory: unknown }>(
+        `/canvases/${encodeURIComponent(canvasId)}/security/results`,
+      ),
+    attestSecurityCheck: (
+      canvasId: string,
+      checkId: string,
+      body: { humanStatus: "pass" | "fail" | "na"; notes?: string; evidenceBase64?: string; evidenceFilename?: string },
+    ) =>
+      request<Record<string, unknown>>(
+        `/canvases/${encodeURIComponent(canvasId)}/security/checks/${encodeURIComponent(checkId)}/attest`,
+        json("POST", body),
+      ),
+    ingestSecurityAgentRun: (
+      canvasId: string,
+      body: { checkName: string; runId: string; verdict: string; detail?: string; notes?: string },
+    ) =>
+      request<{ checkId: string; status: string; coveredCheckIds: string[] }>(
+        `/canvases/${encodeURIComponent(canvasId)}/security/agent-ingest`,
+        json("POST", body),
+      ),
+    exportSecurityReport: async (canvasId: string, format: "json" | "html" | "xlsx") => {
+      const bypass = isLocalAuthBypassEnabled();
+      const token = bypass ? null : await getFreshIdToken(instance, accounts);
+      const res = await fetch(
+        `${atlasApiBase()}/canvases/${encodeURIComponent(canvasId)}/security/export/${format}`,
+        { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) } },
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new AtlasError((err as { error?: string }).error ?? res.statusText, res.status);
+      }
+      const blob = await res.blob();
+      const cd = res.headers.get("Content-Disposition") || "";
+      const match = /filename="([^"]+)"/.exec(cd);
+      return { blob, filename: match?.[1] || `security-report.${format}` };
+    },
+
     /** Canvas GitHub trial (logs `cicdCanvasTrial`)  -  secondary; prefer CI/CD page. */
     connectGithub: (
       canvasId: string,

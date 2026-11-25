@@ -23,6 +23,7 @@ import {
 import type { AtlasClient } from "@/app/services/appatlas";
 import { atlasUrl } from "@/app/services/appatlas";
 import type { SecurityFinding, SecurityScan, SecuritySeverity } from "@/app/interfaces/appatlas";
+import { SecurityCoveragePanel } from "@/app/components/app-atlas/security-coverage-panel";
 
 const OWASP_TOP10 = [
   "A01:2021",
@@ -58,6 +59,7 @@ const SAMPLE_ENV = process.env.NEXT_PUBLIC_SECURITY_POSTURE_SAMPLE === "1";
 type DeepTab = "findings" | "headers" | "csp" | "cookies" | "thirdparty" | "diff";
 type GroupBy = "none" | "screen" | "owasp" | "check";
 type DrawerTab = "overview" | "evidence" | "remediation" | "history";
+type TopView = "coverage" | "posture";
 
 function SevChip({ severity }: { severity: SecuritySeverity }) {
   return (
@@ -67,13 +69,27 @@ function SevChip({ severity }: { severity: SecuritySeverity }) {
   );
 }
 
-function ScoreRing({ score, grade }: { score: number; grade: string }) {
+function ScoreRing({
+  score,
+  grade,
+  gatedLabel,
+}: {
+  score: number;
+  grade: string;
+  /** When set, hide letter grade (not enough tested). */
+  gatedLabel?: string | null;
+}) {
   const r = 42;
   const c = 2 * Math.PI * r;
-  const pct = Math.max(0, Math.min(100, score)) / 100;
+  const gated = Boolean(gatedLabel);
+  const pct = gated ? 0 : Math.max(0, Math.min(100, score)) / 100;
   const color = score >= 90 ? "#16A34A" : score >= 80 ? "#65A30D" : score >= 65 ? "#D97706" : score >= 50 ? "#EA580C" : "#DC2626";
   return (
-    <div className="relative h-[110px] w-[110px]" role="img" aria-label={`Posture score ${score}, grade ${grade}`}>
+    <div
+      className="relative h-[110px] w-[110px]"
+      role="img"
+      aria-label={gated ? gatedLabel! : `Posture score ${score}, grade ${grade}`}
+    >
       <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
         <circle cx="50" cy="50" r={r} fill="none" stroke="currentColor" strokeWidth="8" className="text-[#E5E7EB] dark:text-[#2a2a2a]" />
         <circle
@@ -81,16 +97,25 @@ function ScoreRing({ score, grade }: { score: number; grade: string }) {
           cy="50"
           r={r}
           fill="none"
-          stroke={color}
+          stroke={gated ? "#9CA3AF" : color}
           strokeWidth="8"
           strokeLinecap="round"
           strokeDasharray={`${c * pct} ${c * (1 - pct)}`}
           className="transition-all duration-700"
         />
       </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-[28px] font-bold leading-none text-[#1F1F1F] dark:text-[#ededed]">{grade}</span>
-        <span className="mt-0.5 text-[12px] text-[#7E7E7E]">{score}/100</span>
+      <div className="absolute inset-0 flex flex-col items-center justify-center px-2 text-center">
+        {gated ? (
+          <>
+            <span className="text-[11px] font-semibold leading-tight text-[#1F1F1F] dark:text-[#ededed]">{gatedLabel}</span>
+            <span className="mt-0.5 text-[10px] text-[#7E7E7E]">No grade yet</span>
+          </>
+        ) : (
+          <>
+            <span className="text-[28px] font-bold leading-none text-[#1F1F1F] dark:text-[#ededed]">{grade}</span>
+            <span className="mt-0.5 text-[12px] text-[#7E7E7E]">{score}/100</span>
+          </>
+        )}
       </div>
     </div>
   );
@@ -150,6 +175,8 @@ export function CanvasPosture({
   const [scanning, setScanning] = useState(false);
   const [sampleMode, setSampleMode] = useState(false);
 
+  const [topView, setTopView] = useState<TopView>("coverage");
+  const [gradeGateLabel, setGradeGateLabel] = useState<string | null>(null);
   const [deepTab, setDeepTab] = useState<DeepTab>("findings");
   const [groupBy, setGroupBy] = useState<GroupBy>("none");
   const [q, setQ] = useState("");
@@ -203,6 +230,9 @@ export function CanvasPosture({
         setFindings([]);
         setDiff(null);
       }
+      const report = await client.getSecurityReport(canvasId).catch(() => null);
+      const grade = report?.grade as { eligible?: boolean; label?: string } | undefined;
+      setGradeGateLabel(grade && grade.eligible === false ? grade.label || null : null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load posture");
     } finally {
@@ -446,8 +476,36 @@ export function CanvasPosture({
         )}
       </header>
 
+      <div className="shrink-0 border-b border-[#E5E7EB] px-5 pt-2 dark:border-[#2a2a2a]">
+        <div className="flex gap-1" role="tablist" aria-label="Security views">
+          {(
+            [
+              ["coverage", "Coverage & report"],
+              ["posture", "Passive findings"],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={topView === id}
+              onClick={() => setTopView(id)}
+              className={`rounded-t-[8px] px-3 py-2 text-[12px] font-medium ${
+                topView === id
+                  ? "bg-white text-[#8664F2] shadow-[0_-1px_0_#8664F2_inset] dark:bg-[#141414]"
+                  : "text-[#7E7E7E]"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-        {!activeScan ? (
+        {topView === "coverage" && canvasId ? (
+          <SecurityCoveragePanel client={client} canvasId={canvasId} />
+        ) : !activeScan ? (
           <EmptyPanel
             title="No scan yet"
             body="Record the allowlisted app, save the canvas, then run Re-scan. Capture only stores redacted response metadata."
@@ -458,10 +516,16 @@ export function CanvasPosture({
             {/* Hero */}
             <section className="grid grid-cols-12 gap-4" aria-label="Posture summary">
               <div className="col-span-12 flex flex-wrap items-center gap-6 rounded-[12px] border border-[#E5E7EB] bg-white p-4 dark:border-[#2a2a2a] dark:bg-[#141414] xl:col-span-4">
-                <ScoreRing score={summary.score ?? 0} grade={summary.grade ?? "?"} />
+                <ScoreRing score={summary.score ?? 0} grade={summary.grade ?? "?"} gatedLabel={gradeGateLabel} />
                 <div className="min-w-0 flex-1">
-                  <div className="text-[13px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">Posture score</div>
-                  <p className="mt-1 text-[11px] leading-relaxed text-[#7E7E7E]">{summary.formula || "Severity-weighted per scan"}</p>
+                  <div className="text-[13px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">
+                    {gradeGateLabel ? "Testing progress" : "Posture score"}
+                  </div>
+                  <p className="mt-1 text-[11px] leading-relaxed text-[#7E7E7E]">
+                    {gradeGateLabel
+                      ? "Letter grade is hidden until enough checks are tested and traffic is observed."
+                      : summary.formula || "Severity-weighted per scan"}
+                  </p>
                   <div className="mt-2 flex gap-3 text-[12px]">
                     <span className="inline-flex items-center gap-1 text-[#DC2626]">
                       <TbArrowUp size={14} /> {deltaNew} new
