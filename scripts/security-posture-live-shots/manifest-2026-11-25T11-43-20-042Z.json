@@ -1,0 +1,156 @@
+[
+  {
+    "file": "dark-hero-2026-11-25T11-43-20-042Z.png",
+    "url": "https://ai-hub-dev.protestcorp.com/security-harness/live-dashboard.html",
+    "panel": "hero",
+    "theme": "dark",
+    "at": "2026-11-25T11:43:42.438Z"
+  },
+  {
+    "file": "dark-owasp-2026-11-25T11-43-20-042Z.png",
+    "url": "https://ai-hub-dev.protestcorp.com/security-harness/live-dashboard.html",
+    "panel": "owasp",
+    "theme": "dark",
+    "at": "2026-11-25T11:43:42.547Z"
+  },
+  {
+    "file": "dark-screens-2026-11-25T11-43-20-042Z.png",
+    "url": "https://ai-hub-dev.protestcorp.com/security-harness/live-dashboard.html",
+    "panel": "screens",
+    "theme": "dark",
+    "at": "2026-11-25T11:43:42.662Z"
+  },
+  {
+    "file": "dark-findings-2026-11-25T11-43-20-042Z.png",
+    "url": "https://ai-hub-dev.protestcorp.com/security-harness/live-dashboard.html",
+    "panel": "findings",
+    "theme": "dark",
+    "at": "2026-11-25T11:43:42.754Z"
+  },
+  {
+    "file": "dark-drawer-2026-11-25T11-43-20-042Z.png",
+    "url": "https://ai-hub-dev.protestcorp.com/security-harness/live-dashboard.html",
+    "panel": "drawer",
+    "theme": "dark",
+    "at": "2026-11-25T11:43:42.869Z"
+  },
+  {
+    "file": "dark-headers-2026-11-25T11-43-20-042Z.png",
+    "url": "https://ai-hub-dev.protestcorp.com/security-harness/live-dashboard.html",
+    "panel": "headers",
+    "theme": "dark",
+    "at": "2026-11-25T11:43:42.944Z"
+  },
+  {
+    "file": "dark-csp-2026-11-25T11-43-20-042Z.png",
+    "url": "https://ai-hub-dev.protestcorp.com/security-harness/live-dashboard.html",
+    "panel": "csp",
+    "theme": "dark",
+    "at": "2026-11-25T11:43:43.032Z"
+  },
+  {
+    "file": "dark-cookies-2026-11-25T11-43-20-042Z.png",
+    "url": "https://ai-hub-dev.protestcorp.com/security-harness/live-dashboard.html",
+    "panel": "cookies",
+    "theme": "dark",
+    "at": "2026-11-25T11:43:43.096Z"
+  },
+  {
+    "file": "dark-thirdparty-2026-11-25T11-43-20-042Z.png",
+    "url": "https://ai-hub-dev.protestcorp.com/security-harness/live-dashboard.html",
+    "panel": "thirdparty",
+    "theme": "dark",
+    "at": "2026-11-25T11:43:43.188Z"
+  },
+  {
+    "file": "dark-diff-2026-11-25T11-43-20-042Z.png",
+    "url": "https://ai-hub-dev.protestcorp.com/security-harness/live-dashboard.html",
+    "panel": "diff",
+    "theme": "dark",
+    "at": "2026-11-25T11:43:43.277Z"
+  },
+  {
+    "file": "dark-full-2026-11-25T11-43-20-042Z.png",
+    "url": "https://ai-hub-dev.protestcorp.com/security-harness/live-dashboard.html",
+    "panel": "full",
+    "theme": "dark",
+    "at": "2026-11-25T11:43:43.464Z"
+  },
+  {
+    "file": "light-hero-2026-11-25T11-43-20-042Z.png",
+    "url": "https://ai-hub-dev.protestcorp.com/security-harness/live-dashboard-light.html",
+    "panel": "hero",
+    "theme": "light",
+    "at": "2026-11-25T11:43:47.858Z"
+  },
+  {
+    "file": "light-owasp-2026-11-25T11-43-20-042Z.png",
+    "url": "https://ai-hub-dev.protestcorp.com/security-harness/live-dashboard-light.html",
+    "panel": "owasp",
+    "theme": "light",
+    "at": "2026-11-25T11:43:47.955Z"
+  },
+  {
+    "file": "light-screens-2026-11-25T11-43-20-042Z.png",
+    "url": "https://ai-hub-dev.protestcorp.com/security-harness/live-dashboard-light.html",
+    "panel": "screens",
+    "theme": "light",
+    "at": "2026-11-25T11:43:48.034Z"
+  },
+  {
+    "file": "light-findings-2026-11-25T11-43-20-042Z.png",
+    "url": "https://ai-hub-dev.protestcorp.com/security-harness/live-dashboard-light.html",
+    "panel": "findings",
+    "theme": "light",
+    "at": "2026-11-25T11:43:48.131Z"
+  },
+  {
+    "file": "light-drawer-2026-11-25T11-43-20-042Z.png",
+    "url": "https://ai-hub-dev.protestcorp.com/security-harness/live-dashboard-light.html",
+    "panel": "drawer",
+    "theme": "light",
+    "at": "2026-11-25T11:43:48.238Z"
+  },
+  {
+    "file": "light-headers-2026-11-25T11-43-20-042Z.png",
+    "url": "https://ai-hub-dev.protestcorp.com/security-harness/live-dashboard-light.html",
+    "panel": "headers",
+    "theme": "light",
+    "at": "2026-11-25T11:43:48.349Z"
+  },
+  {
+    "file": "light-csp-2026-11-25T11-43-20-042Z.png",
+    "url": "https://ai-hub-dev.protestcorp.com/security-harness/live-dashboard-light.html",
+    "panel": "csp",
+    "theme": "light",
+    "at": "2026-11-25T11:43:48.469Z"
+  },
+  {
+    "file": "light-cookies-2026-11-25T11-43-20-042Z.png",
+    "url": "https://ai-hub-dev.protestcorp.com/security-harness/live-dashboard-light.html",
+    "panel": "cookies",
+    "theme": "light",
+    "at": "2026-11-25T11:43:48.534Z"
+  },
+  {
+    "file": "light-thirdparty-2026-11-25T11-43-20-042Z.png",
+    "url": "https://ai-hub-dev.protestcorp.com/security-harness/live-dashboard-light.html",
+    "panel": "thirdparty",
+    "theme": "light",
+    "at": "2026-11-25T11:43:48.622Z"
+  },
+  {
+    "file": "light-diff-2026-11-25T11-43-20-042Z.png",
+    "url": "https://ai-hub-dev.protestcorp.com/security-harness/live-dashboard-light.html",
+    "panel": "diff",
+    "theme": "light",
+    "at": "2026-11-25T11:43:48.696Z"
+  },
+  {
+    "file": "light-full-2026-11-25T11-43-20-042Z.png",
+    "url": "https://ai-hub-dev.protestcorp.com/security-harness/live-dashboard-light.html",
+    "panel": "full",
+    "theme": "light",
+    "at": "2026-11-25T11:43:49.127Z"
+  }
+]
