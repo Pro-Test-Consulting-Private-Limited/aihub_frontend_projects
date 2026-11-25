@@ -11,13 +11,22 @@ export function isFigmaIntegrationEnabled(): boolean {
   return process.env.NEXT_PUBLIC_FIGMA_INTEGRATION === "1" || process.env.FIGMA_INTEGRATION === "1";
 }
 
+/**
+ * Figma personal access tokens (figd_…) must use X-Figma-Token.
+ * OAuth bearer tokens use Authorization: Bearer.
+ */
+function figmaAuthHeaders(accessToken: string): Record<string, string> {
+  const token = accessToken.trim();
+  if (token.startsWith("figd_") || !token.includes(".")) {
+    return { "X-Figma-Token": token, Accept: "application/json" };
+  }
+  return { Authorization: `Bearer ${token}`, Accept: "application/json" };
+}
+
 /** Validate a Figma personal access token against /v1/me. */
 export async function getFigmaMe(accessToken: string): Promise<FigmaUser> {
   const res = await fetch(`${API_BASE}/me`, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      Accept: "application/json",
-    },
+    headers: figmaAuthHeaders(accessToken),
     cache: "no-store",
   });
   const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { FaEye, FaEyeSlash } from "react-icons/fa";
 import Modal from "./modal";
 
 type Provider = "jira" | "github" | "swagger" | "figma";
@@ -32,6 +33,7 @@ export default function ConnectIntegrationModal({
   const [specUrl, setSpecUrl] = useState("");
   const [swaggerToken, setSwaggerToken] = useState("");
   const [figmaToken, setFigmaToken] = useState("");
+  const [showFigmaToken, setShowFigmaToken] = useState(false);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -170,13 +172,25 @@ export default function ConnectIntegrationModal({
         <div className="flex flex-col gap-3">
           <label className="text-[12px] font-[600] text-[#1F1F1F] dark:text-[#ededed]">
             Personal access token
-            <input
-              type="password"
-              value={figmaToken}
-              onChange={(e) => setFigmaToken(e.target.value)}
-              placeholder="figd_…"
-              className="mt-1 w-full h-[38px] px-3 rounded-[8px] border border-[rgba(94,96,102,0.3)] dark:border-[#2a2a2a] bg-white dark:bg-[#1a1a1a] text-[13px] outline-none"
-            />
+            <div className="relative mt-1">
+              <input
+                type={showFigmaToken ? "text" : "password"}
+                value={figmaToken}
+                onChange={(e) => setFigmaToken(e.target.value)}
+                placeholder="figd_…"
+                autoComplete="off"
+                spellCheck={false}
+                className="w-full h-[38px] pl-3 pr-10 rounded-[8px] border border-[rgba(94,96,102,0.3)] dark:border-[#2a2a2a] bg-white dark:bg-[#1a1a1a] text-[13px] outline-none"
+              />
+              <button
+                type="button"
+                aria-label={showFigmaToken ? "Hide token" : "Show token"}
+                onClick={() => setShowFigmaToken((v) => !v)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded text-[#7E7E7E] hover:text-[#1F1F1F] dark:hover:text-[#ededed]"
+              >
+                {showFigmaToken ? <FaEyeSlash size={14} /> : <FaEye size={14} />}
+              </button>
+            </div>
           </label>
           <a
             href="https://developers.figma.com/docs/rest-api/personal-access-tokens/"
