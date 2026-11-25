@@ -41,20 +41,20 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <MetricsFilterProvider>
-      <div className="p-6 pb-[4.5rem] h-full overflow-y-auto">
+      <div className="px-6 pb-4 pt-4">
         <Breadcrumbs breadcrumbs={breadcrumbs} />
 
-        <div className="font-[500] text-[22px] text-[#081332] dark:text-[#ededed] mt-[25px]">
+        <div className="mt-3 text-[20px] font-[500] text-[#081332] dark:text-[#ededed]">
           Metrics
         </div>
-        <div className="flex border-b border-b-[rgba(202,196,208)] dark:border-b-[#2a2a2a] mt-[20px]">
+        <div className="mt-3 flex border-b border-b-[rgba(202,196,208)] dark:border-b-[#2a2a2a]">
           {metricsSubItems.map((subItem) => {
             return (
               <div
                 key={subItem.value}
-                className={`h-[45px] w-[230px] flex items-center justify-center text-[14px] cursor-pointer ${
+                className={`flex h-[45px] w-[230px] cursor-pointer items-center justify-center text-[14px] ${
                   active === subItem.value
-                    ? "bg-[#FBF8FF] dark:bg-[#2a2440] text-[#8664F2] font-[500] border-b-[2px] rounded-t-[10px] border-[#8664F2]"
+                    ? "rounded-t-[10px] border-b-[2px] border-[#8664F2] bg-[#FBF8FF] font-[500] text-[#8664F2] dark:bg-[#2a2440]"
                     : "text-[#49454F] dark:text-[#a0a0a0]"
                 }`}
                 onClick={() => handleActive(subItem.value)}
@@ -70,7 +70,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             key={pathname}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ duration: 1, ease: "easeInOut" }}
+            transition={{ duration: 0.15, ease: "easeOut" }}
           >
             {children}
           </motion.div>

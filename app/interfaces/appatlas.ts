@@ -11,6 +11,13 @@ export type NavType = "button" | "link" | "form" | "key" | "in-page" | "other";
 
 export type ScreenStateKind = "initial" | "loading" | "loaded" | "interaction" | "error";
 
+export type SimulatedStateMeta = {
+  endpoint: string;
+  mode: string;
+  status?: number;
+  delayMs?: number;
+};
+
 export type ScreenState = {
   id: string;
   label: string;
@@ -21,6 +28,9 @@ export type ScreenState = {
   text?: string;
   kind: ScreenStateKind;
   createdAt: number;
+  autoLabel?: string;
+  simulated?: SimulatedStateMeta;
+  recordedAs?: string;
 };
 
 export type ArrivalInfo = {
@@ -71,15 +81,48 @@ export type Viewer = { kind: "neko"; url: string } | { kind: "vnc"; url: string 
 
 export type EmulationSummary = {
   devicePreset: string;
+  /** Actual page CSS viewport after setup. */
   viewport: { width: number; height: number };
+  /** Preset / requested viewport (chips warn when this differs from viewport). */
+  requestedViewport?: { width: number; height: number };
+  /** Remote desktop size (viewport + browser chrome)  -  prefer for the stream iframe. */
+  streamSurface?: { width: number; height: number };
+  browserChromeHeight?: number;
+  viewportLimited?: boolean;
+  viewportWarning?: string | null;
+  streamScaled?: boolean;
   networkPreset: string;
   isMobile: boolean;
+  hasTouch?: boolean;
+  deviceScaleFactor?: number;
+  userAgent?: string;
   locale?: string;
   timezoneId?: string;
   colorScheme?: string;
   orientation?: string;
   offline: boolean;
   cpuThrottlingRate?: number;
+  network?: {
+    latencyMs: number;
+    downloadKbps: number;
+    uploadKbps: number;
+  } | null;
+  /** Saved user device/setup preset that launched this session. */
+  recordingPresetId?: string;
+  recordingPresetName?: string;
+  /** Stable tag for per-device coverage: name|preset:WxH */
+  deviceKey?: string;
+};
+
+export type ReplayTimelineEvent = {
+  at: number;
+  kind: string;
+  label: string;
+  x?: number;
+  y?: number;
+  sensitive?: boolean;
+  box?: { x: number; y: number; w: number; h: number };
+  who?: string;
 };
 
 export type SessionSnapshot = {
@@ -101,6 +144,50 @@ export type SessionSnapshot = {
   /** Who started the recording (from Microsoft Entra, or nginx basic auth when login is off). */
   owner?: { name: string; email: string };
   emulation: EmulationSummary;
+  health?: {
+    level: "ok" | "warn" | "bad";
+    consoleErrors: number;
+    consoleWarnings: number;
+    pageErrors: number;
+    failedRequests: number;
+    httpErrors: number;
+    brokenImages: number;
+    ttfbMs: number | null;
+    lcpMs: number | null;
+    cls: number | null;
+    a11yViolations: number;
+  };
+  replay?: {
+    mp4Url?: string;
+    gifUrl?: string;
+    durationSec?: number;
+    frameCount?: number;
+    error?: string;
+    limitedMessage?: string;
+  };
+  timeline?: ReplayTimelineEvent[];
+  recordedAs?: string | null;
+  simulate?: {
+    enabled: boolean;
+    locked: boolean;
+    lockReason?: string;
+    environment: string;
+    observed: Array<{
+      method: string;
+      path: string;
+      lastStatus: number;
+      count: number;
+      simulatedCount?: number;
+      emptyCapable: boolean;
+      emptyDisabledReason?: string;
+    }>;
+    armed: { id: string; method: string; path: string; mode: string; armedAt: number } | null;
+    lastFired?: {
+      at: number;
+      autoLabel: string;
+      meta: SimulatedStateMeta;
+    } | null;
+  };
 };
 
 export type Capacity = {
@@ -123,6 +210,45 @@ export type CanvasState = {
   kind: ScreenStateKind;
   screenshotUrl: string;
   pageObjectCount: number;
+  autoLabel?: string;
+  simulated?: SimulatedStateMeta;
+  recordedAs?: string;
+};
+
+export type A11yNodeDetail = {
+  target: string;
+  failureSummary?: string;
+  screenshotUrl?: string;
+};
+
+export type A11yIssue = {
+  id: string;
+  help: string;
+  impact: string | null;
+  nodes: number;
+  target?: string;
+  failureSummary?: string;
+  screenshotUrl?: string;
+  nodeDetails?: A11yNodeDetail[];
+};
+
+export type SessionHealthSummary = {
+  level: "ok" | "warn" | "bad";
+  consoleErrors: number;
+  consoleWarnings: number;
+  consoleWarningSamples?: string[];
+  pageErrors: number;
+  failedRequests: number;
+  httpErrors: number;
+  brokenImages: number;
+  ttfbMs: number | null;
+  lcpMs: number | null;
+  cls: number | null;
+  a11yViolations: number;
+  a11ySummary?: string[];
+  a11yIssues?: A11yIssue[];
+  slowestRequestMs?: number | null;
+  slowestRequestUrl?: string | null;
 };
 
 export type CanvasNode = {
@@ -140,6 +266,7 @@ export type CanvasNode = {
   /** Unique across all states of the page. */
   pageObjects: CanvasPageObject[];
   arrivedVia?: { summary: string; elementLabel: string; navType: NavType; fromPath: string };
+  health?: SessionHealthSummary;
 };
 
 export type CanvasEdge = {
@@ -156,6 +283,16 @@ export type CanvasEdge = {
 };
 
 export type CanvasTestData = { nodeId: string; path: string; field: string; value: string };
+
+export type CanvasDeviceProfile = {
+  key: string;
+  label: string;
+  width: number;
+  height: number;
+  devicePreset: string;
+  recordingPresetId?: string;
+  userAgent?: string;
+};
 
 export type CanvasSummary = {
   id: string;
@@ -176,8 +313,21 @@ export type CanvasSummary = {
   pageObjects: number;
   thumbnailUrl: string | null;
   jiraProjectKey: string | null;
+  /** Linked Teams channel (Phase 1), when configured. */
+  teams?: CanvasTeams | null;
+  /** Device W×H profile stamped when the recording was saved. */
+  deviceProfile?: CanvasDeviceProfile | null;
   createdAt: number;
   updatedAt: number;
+};
+
+/** Durable Swagger binding on a canvas (App Atlas owns this; localStorage is a mirror). */
+export type CanvasSwaggerBinding = {
+  specUrl: string;
+  title: string | null;
+  connectedAt: number;
+  swaggerKey: string;
+  specHash: string | null;
 };
 
 export type Canvas = CanvasSummary & {
@@ -185,9 +335,25 @@ export type Canvas = CanvasSummary & {
   nodes: CanvasNode[];
   edges: CanvasEdge[];
   testData: CanvasTestData[];
+  replay?: {
+    mp4Url?: string;
+    gifUrl?: string;
+    durationSec?: number;
+    frameCount?: number;
+    error?: string;
+    limitedMessage?: string;
+  };
+  timeline?: ReplayTimelineEvent[];
   jira: JiraMapping | null;
   /** One entry per Jira ticket mapped to a screen; filled in the background after connecting Jira. */
   clarifications?: CanvasClarification[];
+  teams: CanvasTeams | null;
+  teamsMessages?: CanvasTeamsMessage[];
+  github?: CanvasGithub | null;
+  cicd?: CanvasCicd | null;
+  swagger?: CanvasSwaggerBinding | null;
+  /** Org-wide API chain (identities + dependencies); not shown in product UI. */
+  swaggerChain?: unknown;
 };
 
 export type ClarificationQuestion = {
@@ -230,7 +396,7 @@ export type TicketNote = {
 export type CanvasClarifications = { canvasId: string; pending: number; items: CanvasClarification[] };
 
 /** Someone who has App Atlas open on the same project right now. */
-export type PresenceUser = { id: string; name: string; email: string };
+export type PresenceUser = { id: string; name: string; email: string; photo?: string };
 
 export type JiraStatus = { connected: boolean; baseUrl?: string; email?: string; user?: string };
 
@@ -281,7 +447,7 @@ export type JiraMapping = {
   /** nodeId -> tickets shown on the screen: the matcher's picks, or the manual list where there is one. */
   nodes: Record<string, JiraNodeMatch[]>;
   /** nodeId -> manual mapping that overrides the matcher for that screen. */
-  manual?: Record<string, { issueKeys: string[]; by: string; at: number }>;
+  manual?: Record<string, { issueKeys: string[]; by: string; at: number; note?: string }>;
   /** issueKey -> nodeIds whose best/possible matches include it. Epics roll up from their children. */
   coverage: Record<string, string[]>;
 };
@@ -292,4 +458,267 @@ export type AtlasConfig = {
   provider: string;
   capacity: Capacity;
   presets: { devices: Preset[]; networks: Preset[] };
+  features?: { persona: boolean; replay: boolean; health: boolean };
+  featureDefaults?: { persona: boolean; replay: boolean; health: boolean };
 };
+
+/** Preconfigured Teams channel on a canvas (Phase 1). */
+export type CanvasTeams = {
+  teamId: string;
+  channelId: string;
+  teamName: string | null;
+  channelName: string | null;
+  connectedAt: number;
+};
+
+export type CanvasTeamsMessage = {
+  id: string;
+  canvasId: string;
+  issueKey: string | null;
+  subject: string | null;
+  text: string;
+  graphMessageId: string;
+  createdAt: number;
+  createdBy: { id: string; name: string; email: string };
+};
+
+/** GitHub repo linked for CI/CD canvas trial. Secret masked after connect. */
+export type CanvasGithub = {
+  owner: string;
+  repo: string;
+  openapiPath: string;
+  smokeBaseUrl: string;
+  webhookSecret: string;
+  connectedAt: number;
+  connectedBy: { id: string; name: string };
+};
+
+/** CI/CD page: Jenkins/Actions trigger binding. Secret masked after enable (full only once). */
+export type CanvasCicd = {
+  triggerSecret: string;
+  smokeBaseUrl: string;
+  enabledAt: number;
+  enabledBy: { id: string; name: string };
+};
+
+export type CicdSnippets = { curl: string; githubActions: string; jenkins: string };
+
+export type SuiteLayer = "contract" | "functional" | "data_driven" | "schema" | "chain";
+
+export type SuiteCase = {
+  id: string;
+  layer: SuiteLayer;
+  name: string;
+  method: string;
+  path: string;
+};
+
+export type SuiteSnapshot = {
+  specHash: string;
+  generatedAt: number;
+  counts: Record<SuiteLayer, number>;
+  cases: SuiteCase[];
+};
+
+export type CaseResult = SuiteCase & {
+  status: "passed" | "failed" | "skipped";
+  detail: string;
+  ms: number;
+};
+
+export type CicdPipeline = {
+  id: string;
+  name: string;
+  baseUrl: string;
+  swaggerUrl: string;
+  mode: "live" | "demo";
+  triggerSecret: string;
+  suite: SuiteSnapshot | null;
+  ownerId: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type PipelineRun = {
+  id: string;
+  pipelineId: string;
+  event: "pull_request" | "push" | "release" | "manual";
+  status: "queued" | "running" | "passed" | "failed" | "skipped";
+  title: string;
+  branch: string | null;
+  sha: string | null;
+  prNumber: number | null;
+  specHashBefore: string | null;
+  specHashAfter: string | null;
+  summary: string | null;
+  error: string | null;
+  results: CaseResult[] | null;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type CicdRun = {
+  id: string;
+  canvasId: string;
+  event: "pull_request" | "push" | "release" | "manual";
+  status: "queued" | "running" | "passed" | "failed" | "skipped";
+  title: string;
+  branch: string | null;
+  sha: string | null;
+  prNumber: number | null;
+  specHashBefore: string | null;
+  specHashAfter: string | null;
+  delta: { added: string[]; removed: string[]; changed: string[] } | null;
+  summary: string | null;
+  error: string | null;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type AtlasSettings = {
+  notesCarryOver: boolean;
+  notesWithoutQuestions: boolean;
+  shareDataAcrossEnvironments?: boolean;
+  securityLiveChecks: boolean;
+  securityCheckEnabled: Record<string, boolean>;
+  cicdPageTrial: boolean;
+  cicdCanvasTrial: boolean;
+};
+
+export type SitTicketGenerationMeta = {
+  caseCount: number;
+  generator: string;
+  at: number;
+  edited: boolean;
+  workbookId: string;
+  versions: number;
+};
+
+export type SitTicket = {
+  key: string;
+  summary: string;
+  type: string;
+  status: string;
+  statusCategory: string;
+  epicKey: string | null;
+  url: string;
+  /** Acceptance criteria texts (AC coverage chip). */
+  acceptanceCriteria?: string[];
+  /** v2 picker enrichment (optional for legacy responses) */
+  rcqCount?: number;
+  rcqComplete?: boolean;
+  hasNotes?: boolean;
+  /** False when ticket has no canvas screen mapping (steps may be less specific). */
+  hasScreenContext?: boolean;
+  generation?: SitTicketGenerationMeta | null;
+};
+
+export type SitEpic = {
+  key: string;
+  summary: string;
+  status: string;
+  statusCategory: string;
+  ticketCount: number;
+  tickets: SitTicket[];
+};
+
+export type SitModelState = "up" | "idle" | "down" | "unconfigured" | "unknown";
+
+export type SitModelStatus = {
+  state: SitModelState;
+  label: string;
+  detail: string;
+  model: string | null;
+  httpCode: number | null;
+  ms: number | null;
+};
+
+export type SitSheetColumn = { id: string; name: string; width?: number };
+export type SitSheetRow = { id: string; cells: Record<string, string> };
+export type SitSheet = {
+  id: string;
+  name: string;
+  kind: "test-cases" | "test-data" | "traceability" | "custom";
+  columns: SitSheetColumn[];
+  rows: SitSheetRow[];
+  traceabilityNote?: string;
+};
+
+export type SitWorkbook = {
+  id: string;
+  canvasId: string | null;
+  confirmedId: string;
+  sourceIssueKeys: string[];
+  sourceSummaries: Record<string, string>;
+  status: "queued" | "running" | "ready" | "failed";
+  error: string | null;
+  generator: "stub" | "huggingface";
+  sheets: SitSheet[];
+  createdAt: number;
+  updatedAt: number;
+  generatedAt?: number | null;
+  assessedAt?: number | null;
+  createdBy: { id: string; name: string };
+};
+
+/** Dead Test Finder flags from GET /sit/workbooks/:id/audit (deterministic, no run history). */
+export type DeadFlag =
+  | "stub_workbook"
+  | "template_case"
+  | "not_assessed"
+  | "orphan_ticket"
+  | "empty_oracle"
+  | "generic_expected"
+  | "duplicate_case"
+  | "thin_case"
+  | "contradiction"
+  | "needs_review";
+
+export type DeadFlagHit = { flag: DeadFlag; reason: string; caseId?: string; scenario?: string };
+
+export type SitDeadAudit = {
+  workbookId: string;
+  generator: string;
+  flagsByRowId: Record<string, DeadFlagHit[]>;
+  summary: Record<DeadFlag, number>;
+  flaggedRows: number;
+  needsReviewRows?: number;
+  /** Nested copy for newer clients; older callers read top-level fields. */
+  dead?: SitDeadAudit;
+  m4?: unknown;
+};
+
+export type SitJobKind = "generate" | "reassess";
+export type SitJobStatus = "queued" | "running" | "done" | "failed" | "cancelled";
+export type SitJobStage = "queued" | "generating" | "saving" | "assessing" | "done" | "failed";
+
+export type SitJobProgress = {
+  stage: SitJobStage;
+  queuePosition?: number;
+  batchSize?: number;
+  message?: string;
+  workbookId?: string;
+  caseIndex?: number;
+  caseTotal?: number;
+  elapsedMs?: number;
+};
+
+export type SitJob = {
+  id: string;
+  kind: SitJobKind;
+  status: SitJobStatus;
+  canvasId: string | null;
+  issueKey: string | null;
+  workbookId: string | null;
+  batchId: string | null;
+  user: { id: string; name: string };
+  progress: SitJobProgress;
+  plannedModelCalls: number;
+  error: string | null;
+  createdAt: number;
+  updatedAt: number;
+  startedAt: number | null;
+  finishedAt: number | null;
+};
+
+export type SitJobsList = { items: SitJob[]; pending: number };

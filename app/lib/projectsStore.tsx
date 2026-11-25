@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from "react";
 import { useMsal } from "@azure/msal-react";
 import { getFreshIdToken } from "@/app/lib/auth-client";
+import { isLocalAuthBypassEnabled } from "@/app/lib/auth-bypass";
 
 export type Project = {
   id: string;
@@ -21,6 +22,28 @@ export type Project = {
   dueDate?: string;
   progress?: number;
 };
+
+/** Real ai-hub-dev project id so POST /preview can resolve application_url from AI Hub DB. */
+const BYPASS_PROJECT_ID =
+  process.env.NEXT_PUBLIC_BYPASS_PROJECT_ID || "a88245fd-828f-419e-a4e5-dd47449e968a";
+
+const BYPASS_PROJECT: Project = {
+  id: BYPASS_PROJECT_ID,
+  name: "Local Bypass Demo",
+  description: "DEV-ONLY project for Phase A UI verification (maps to Pro-Test Digital Wallet)",
+  domain: "Testing",
+  department: "Information Technology",
+  workspace: "Local",
+  owner: "local-bypass",
+  dateOfCreation: new Date().toISOString().slice(0, 10),
+  applicationUrl: process.env.NEXT_PUBLIC_BYPASS_APP_URL || "https://ai-hub-demo.protestcorp.com/",
+  authRequired: false,
+  authType: "",
+  product: "App Atlas",
+  status: "Active",
+};
+
+export { BYPASS_PROJECT_ID };
 
 type ProjectsContextType = {
   projects: Project[];
@@ -48,6 +71,10 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError(null);
     try {
+      if (isLocalAuthBypassEnabled()) {
+        setProjects([BYPASS_PROJECT]);
+        return;
+      }
       const res = await fetch("/api/projects");
       if (!res.ok) throw new Error(`Failed to load projects (${res.status})`);
       setProjects(await res.json());

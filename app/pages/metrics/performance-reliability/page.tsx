@@ -1,12 +1,11 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
+
 import MetricsTimeFilterBar from "@/app/components/metrics-time-filter-bar";
+import { MetricsChartCard, MetricsChartGrid, MetricsStatusBar } from "@/app/components/metrics-chart-grid";
 import { useMetricsFilter } from "@/app/context/metrics-filter-context";
-import { MetricsTimeFilters } from "@/app/constants/metrics";
-import { getCustomFilterSeconds } from "@/app/interfaces/metrics-time-filter";
+import { useMetricsStats } from "@/app/hooks/use-metrics-stats";
+import { withPerformanceSeed } from "@/app/lib/metrics-seed";
 import { getPerformanceMetrics } from "@/app/services/analytics";
-import { useEffect, useState } from "react";
-import AreaLineChart from "../charts/area";
 
 export default function PerformanceReliability() {
   const {
@@ -20,43 +19,16 @@ export default function PerformanceReliability() {
     setAppliedCustomFilter,
   } = useMetricsFilter();
 
-  const [statsData, setStatsData] = useState<any>(null);
+  const { data, loading, error, reload } = useMetricsStats(getPerformanceMetrics, {
+    seed: withPerformanceSeed,
+  });
 
   const handleCustomOpenChange = (open: boolean) => {
-    if (open && selectedFilter === "custom") {
-      setCustomFilter(appliedCustomFilter);
-    }
+    if (open && selectedFilter === "custom") setCustomFilter(appliedCustomFilter);
     setIsCustomOpen(open);
   };
 
-  const handleCustomApply = () => {
-    setAppliedCustomFilter(customFilter);
-    setSelectedFilter("custom");
-  };
-
-  const handleCustomClearAndDismiss = () => {
-    setSelectedFilter("15m");
-    setIsCustomOpen(false);
-  };
-
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const seconds =
-          selectedFilter === "custom"
-            ? getCustomFilterSeconds(appliedCustomFilter)
-            : MetricsTimeFilters.find((f) => f.value === selectedFilter)
-                ?.seconds || 10800;
-
-        const res = await getPerformanceMetrics(seconds);
-        setStatsData(res.data);
-      } catch (err) {
-        console.log(err);
-      }
-    };
-
-    fetchStats();
-  }, [selectedFilter, appliedCustomFilter]);
+  const throttling = data?.throttling?.data || data?.throughput?.data || [];
 
   return (
     <div>
@@ -68,35 +40,30 @@ export default function PerformanceReliability() {
         appliedCustomFilter={appliedCustomFilter}
         isCustomOpen={isCustomOpen}
         onCustomOpenChange={handleCustomOpenChange}
-        onCustomApply={handleCustomApply}
-        onCustomClearAndDismiss={handleCustomClearAndDismiss}
+        onCustomApply={() => {
+          setAppliedCustomFilter(customFilter);
+          setSelectedFilter("custom");
+        }}
+        onCustomClearAndDismiss={() => {
+          setSelectedFilter("1h");
+          setIsCustomOpen(false);
+        }}
       />
-
-      <div className="flex justify-between flex-wrap items-center mt-[20px]">
-        <div className="w-[49%] border border-[rgba(94,96,102,0.1)] rounded-[15px] pb-[30px] mb-[20px]">
-          <div className="text-[14px] text-[#2C2C2C] p-4">
-            End-to-End Latency
-          </div>
-          <AreaLineChart metrics={statsData?.api_latency?.data || []} />
-        </div>
-        <div className="w-[49%] border border-[rgba(94,96,102,0.1)] rounded-[15px] pb-[30px] mb-[20px]">
-          <div className="text-[14px] text-[#2C2C2C] p-4">
-            Model Inference Latency
-          </div>
-          <AreaLineChart metrics={statsData?.inference_latency?.data || []} />
-        </div>
-
-        <div className="w-[49%] border border-[rgba(94,96,102,0.1)] rounded-[15px] pb-[30px] mb-[20px]">
-          <div className="text-[14px] text-[#2C2C2C] p-4">Error Rate</div>
-          <AreaLineChart metrics={statsData?.error_rate?.data || []} />
-        </div>
-        <div className="w-[49%] border border-[rgba(94,96,102,0.1)] rounded-[15px] pb-[30px] mb-[20px]">
-          <div className="text-[14px] text-[#2C2C2C] p-4">
-            Throttling Events
-          </div>
-          <AreaLineChart metrics={statsData?.throughput?.data || []} />
-        </div>
-      </div>
+      <MetricsStatusBar loading={loading && !data} error={error} onRetry={reload} />
+      <MetricsChartGrid>
+        <MetricsChartCard title="End-to-End Latency" metrics={data?.api_latency?.data || []} />
+        <MetricsChartCard title="Model Inference Latency" metrics={data?.inference_latency?.data || []} />
+        <MetricsChartCard title="Error Rate" metrics={data?.error_rate?.data || []} />
+        <MetricsChartCard
+          title="Throttling Events"
+          metrics={throttling}
+          emptyHint={
+            data?.throughput?.data?.length && !(data?.throttling || data?.throttle_events)
+              ? "Showing throughput (no dedicated throttling series from API)."
+              : undefined
+          }
+        />
+      </MetricsChartGrid>
     </div>
   );
 }

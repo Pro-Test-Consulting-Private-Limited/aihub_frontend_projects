@@ -3,7 +3,7 @@ import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { useMsal } from "@azure/msal-react";
 import { loginRequest } from "@/app/lib/msal";
-import { APPATLAS_API } from "@/app/services/appatlas";
+import { atlasApiBase } from "@/app/services/appatlas";
 
 /** Tells the operations dashboard (logs) who has the AI Hub open, on which site and page. Renders nothing. */
 export default function SitePresence() {
@@ -20,7 +20,7 @@ export default function SitePresence() {
       if (document.visibilityState !== "visible") return;
       try {
         const { idToken } = await instance.acquireTokenSilent({ ...loginRequest, account });
-        await fetch(`${APPATLAS_API}/presence`, {
+        await fetch(`${atlasApiBase()}/presence`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
           body: JSON.stringify({ room: "ai-hub", page: page.current }),

@@ -22,8 +22,22 @@ const msalConfig: Configuration = {
   },
 };
 
+/** App sign-in only. Do not put Graph Teams scopes here. */
 export const loginRequest = {
   scopes: ["User.Read"],
+};
+
+/**
+ * Incremental consent on the same Entra account when listing teams/channels or posting.
+ * Not a separate Teams login. Entra app needs these Graph permissions + admin consent.
+ */
+export const graphTeamsRequest = {
+  scopes: [
+    "Team.ReadBasic.All",
+    "Channel.ReadBasic.All",
+    "TeamMember.Read.All",
+    "ChannelMessage.Send",
+  ],
 };
 
 export const msalInstance = new PublicClientApplication(msalConfig);

@@ -14,6 +14,12 @@ import {
   TbX,
 } from "react-icons/tb";
 import type { Canvas, CanvasClarification, JiraIssue, JiraNodeMatch, TicketNote } from "@/app/interfaces/appatlas";
+import { isLocalAuthBypassEnabled } from "@/app/lib/auth-bypass";
+import { HealthPanel } from "./health-panel";
+import { PostToTeamsModal, type PostToTeamsPayload } from "./post-to-teams-modal";
+import { ReportBugModal } from "./report-bug-modal";
+import { atlasClient } from "@/app/services/appatlas";
+import { useMsal } from "@azure/msal-react";
 
 type Bucket = "Epic" | "Story" | "Bug" | "Task";
 
@@ -50,6 +56,25 @@ const initials = (name?: string) =>
 
 type Ticket = { issue: JiraIssue; match?: JiraNodeMatch; epic?: JiraIssue };
 
+function whyMatched(match?: JiraNodeMatch): string | null {
+  if (!match) return null;
+  if (match.via === "manual") {
+    return match.evidence?.[0] || "Pinned manually to this screen";
+  }
+  if (match.via === "entry") {
+    return match.evidence?.[0] || "Matched via entry point on this screen";
+  }
+  if (match.evidence?.[0]) return match.evidence[0];
+  const pct = Math.round((match.confidence || 0) * 100);
+  const parts = [
+    pct ? `${pct}% confidence` : null,
+    match.signals?.keyword ? `keyword ${Math.round(match.signals.keyword * 100)}%` : null,
+    match.signals?.semantic != null ? `semantic ${Math.round(match.signals.semantic * 100)}%` : null,
+    match.signals?.structure ? `structure ${Math.round(match.signals.structure * 100)}%` : null,
+  ].filter(Boolean);
+  return parts.length ? `Why matched: ${parts.join(" · ")}` : null;
+}
+
 export function JiraPanel({
   canvas,
   nodeId,
@@ -57,6 +82,9 @@ export function JiraPanel({
   onClose,
   onConnect,
   onSaveNote,
+  onSetNodeTickets,
+  onPostToTeams,
+  loadTeamsMembers,
 }: {
   canvas: Canvas;
   nodeId: string;
@@ -65,14 +93,45 @@ export function JiraPanel({
   onClose: () => void;
   onConnect?: () => void;
   onSaveNote: (issueKey: string, text: string) => Promise<TicketNote>;
+  /** Pin / unpin tickets on this screen (manual override). */
+  onSetNodeTickets?: (nodeId: string, issueKeys: string[] | null, note?: string) => Promise<void>;
+  /** Compose + post clarification questions to the linked Teams channel (same Entra account). */
+  onPostToTeams?: (payload: PostToTeamsPayload) => Promise<void>;
+  loadTeamsMembers?: () => Promise<Array<{ id: string; displayName: string; email?: string | null }>>;
 }) {
+  const teamsChannelLabel = canvas.teams
+    ? [canvas.teams.teamName, canvas.teams.channelName].filter(Boolean).join(" · ") || null
+    : null;
   const node = canvas.nodes.find((n) => n.id === nodeId);
   const mapping = canvas.jira;
   const [filter, setFilter] = useState<Bucket | null>(null);
+  const [drawerTab, setDrawerTab] = useState<"requirements" | "health">("requirements");
+  const [panelWidth, setPanelWidth] = useState(360);
+  const dragRef = useRef<{ startX: number; startW: number } | null>(null);
   const clarifications = useMemo(
     () => new Map((canvas.clarifications ?? []).map((c) => [c.issueKey, c])),
     [canvas.clarifications],
   );
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!dragRef.current) return;
+      const delta = dragRef.current.startX - e.clientX;
+      const next = Math.min(720, Math.max(280, dragRef.current.startW + delta));
+      setPanelWidth(next);
+    };
+    const onUp = () => {
+      dragRef.current = null;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, []);
 
   const tickets = useMemo<Ticket[]>(() => {
     if (!mapping) return [];
@@ -113,7 +172,22 @@ export function JiraPanel({
   const shown = filter ? tickets.filter((t) => bucketOf(t.issue) === filter) : tickets;
 
   return (
-    <div className="absolute top-0 right-0 z-20 flex h-full w-[360px] flex-col border-l border-[#E6E1F5] bg-white shadow-[-8px_0_24px_rgba(0,0,0,0.06)] dark:border-[#2a2a2a] dark:bg-[#0f0f0f]">
+    <div
+      className="absolute top-0 right-0 z-20 flex h-full flex-col border-l border-[#E6E1F5] bg-white shadow-[-8px_0_24px_rgba(0,0,0,0.06)] dark:border-[#2a2a2a] dark:bg-[#0f0f0f]"
+      style={{ width: panelWidth }}
+    >
+      <button
+        type="button"
+        aria-label="Resize side panel"
+        title="Drag to resize"
+        className="absolute top-0 left-0 z-30 h-full w-1.5 -translate-x-1/2 cursor-ew-resize bg-transparent hover:bg-[#8664F2]/35"
+        onMouseDown={(e) => {
+          e.preventDefault();
+          dragRef.current = { startX: e.clientX, startW: panelWidth };
+          document.body.style.cursor = "ew-resize";
+          document.body.style.userSelect = "none";
+        }}
+      />
       <div className="flex items-center justify-between border-b border-[#EEE] px-4 py-2.5 dark:border-[#1a1a1a]">
         <div className="min-w-0">
           <div className="text-[11px] text-[#7E7E7E]">Agile Project Management &amp; Issue Tracking</div>
@@ -126,62 +200,94 @@ export function JiraPanel({
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-3">
-        <div className="mb-3 flex items-center gap-2 text-[15px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">
-          <SiJira size={16} color="#2684FF" /> Jira Tickets
-          {mapping && <span className="text-[11px] font-normal text-[#7E7E7E]">· {mapping.projectKey}</span>}
-        </div>
-
-        {!mapping ? (
-          <div className="mt-8 text-center text-[13px] text-[#5E6066] dark:text-[#9ca3af]">
-            <p>Connect this canvas to Jira to see which epics, stories, tasks and bugs this screen covers.</p>
-            {onConnect && (
-              <button
-                type="button"
-                onClick={onConnect}
-                className="mx-auto mt-4 flex items-center gap-2 rounded-[8px] border border-[#C9B8F7] bg-[#F4EFFE] px-4 py-2 text-[13px] font-medium text-[#8664F2] hover:bg-[#EDE4FD]"
-              >
-                <TbLink size={15} /> Connect
-              </button>
-            )}
-          </div>
-        ) : (
-          <>
-            <div className="mb-3 grid grid-cols-4 gap-2">
-              {BUCKETS.map((b) => (
-                <button
-                  key={b.id}
-                  type="button"
-                  onClick={() => setFilter(filter === b.id ? null : b.id)}
-                  className={`flex items-center justify-center gap-1.5 rounded-[8px] border px-1 py-1.5 text-[11.5px] ${
-                    filter === b.id
-                      ? "border-[#8664F2] bg-[#F4EFFE] text-[#5B3FD1]"
-                      : "border-[#E5E7EB] text-[#1F1F1F] hover:border-[#C9B8F7] dark:border-[#2a2a2a] dark:text-[#ededed]"
-                  }`}
-                >
-                  <span className={`flex h-[18px] w-[18px] items-center justify-center rounded-[4px] ${b.tint}`}>{b.icon}</span>
-                  {b.id} {counts[b.id]}
-                </button>
-              ))}
-            </div>
-
-            {shown.length === 0 && (
-              <div className="mt-6 text-center text-[12.5px] text-[#7E7E7E]">
-                {tickets.length ? `No ${filter?.toLowerCase()} tickets on this screen.` : "No Jira tickets matched this screen."}
-              </div>
-            )}
-            {shown.map((t) => (
-              <TicketCard
-                key={t.issue.key}
-                ticket={t}
-                clarification={t.match ? clarifications.get(t.issue.key) : undefined}
-                editable={editable}
-                onSaveNote={onSaveNote}
-              />
-            ))}
-          </>
-        )}
+      <div className="flex gap-1 border-b border-[#EEE] px-3 pt-2 dark:border-[#1a1a1a]">
+        {(
+          [
+            { id: "requirements" as const, label: "Requirements" },
+            { id: "health" as const, label: "Health" },
+          ] as const
+        ).map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setDrawerTab(t.id)}
+            className={`rounded-t-[6px] px-3 py-1.5 text-[12px] font-medium ${
+              drawerTab === t.id
+                ? "bg-[#F4EFFE] text-[#5B3FD1]"
+                : "text-[#7E7E7E] hover:text-[#1F1F1F] dark:hover:text-white"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
+
+      {drawerTab === "health" ? (
+        <div className="flex-1 overflow-y-auto">{node ? <HealthPanel node={node} /> : null}</div>
+      ) : (
+        <div className="flex-1 overflow-y-auto px-4 py-3">
+          <div className="mb-3 flex items-center gap-2 text-[15px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">
+            <SiJira size={16} color="#2684FF" /> Jira Tickets
+            {mapping && <span className="text-[11px] font-normal text-[#7E7E7E]">· {mapping.projectKey}</span>}
+          </div>
+
+          {!mapping ? (
+            <div className="mt-8 text-center text-[13px] text-[#5E6066] dark:text-[#9ca3af]">
+              <p>Connect this canvas to Jira to see which epics, stories, tasks and bugs this screen covers.</p>
+              {onConnect && (
+                <button
+                  type="button"
+                  onClick={onConnect}
+                  className="mx-auto mt-4 flex items-center gap-2 rounded-[8px] border border-[#C9B8F7] bg-[#F4EFFE] px-4 py-2 text-[13px] font-medium text-[#8664F2] hover:bg-[#EDE4FD]"
+                >
+                  <TbLink size={15} /> Connect
+                </button>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="mb-3 grid grid-cols-4 gap-2">
+                {BUCKETS.map((b) => (
+                  <button
+                    key={b.id}
+                    type="button"
+                    onClick={() => setFilter(filter === b.id ? null : b.id)}
+                    className={`flex items-center justify-center gap-1.5 rounded-[8px] border px-1 py-1.5 text-[11.5px] ${
+                      filter === b.id
+                        ? "border-[#8664F2] bg-[#F4EFFE] text-[#5B3FD1]"
+                        : "border-[#E5E7EB] text-[#1F1F1F] hover:border-[#C9B8F7] dark:border-[#2a2a2a] dark:text-[#ededed]"
+                    }`}
+                  >
+                    <span className={`flex h-[18px] w-[18px] items-center justify-center rounded-[4px] ${b.tint}`}>{b.icon}</span>
+                    {b.id} {counts[b.id]}
+                  </button>
+                ))}
+              </div>
+
+              {shown.length === 0 && (
+                <div className="mt-6 text-center text-[12.5px] text-[#7E7E7E]">
+                  {tickets.length ? `No ${filter?.toLowerCase()} tickets on this screen.` : "No Jira tickets matched this screen."}
+                </div>
+              )}
+              {shown.map((t) => (
+                <TicketCard
+                  key={t.issue.key}
+                  ticket={t}
+                  canvas={canvas}
+                  nodeId={nodeId}
+                  clarification={t.match ? clarifications.get(t.issue.key) : undefined}
+                  editable={editable}
+                  onSaveNote={onSaveNote}
+                  onSetNodeTickets={onSetNodeTickets}
+                  onPostToTeams={onPostToTeams}
+                  loadTeamsMembers={loadTeamsMembers}
+                  teamsChannelLabel={teamsChannelLabel}
+                />
+              ))}
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -191,13 +297,55 @@ function TicketCard({
   clarification,
   editable,
   onSaveNote,
+  onSetNodeTickets,
+  onPostToTeams,
+  loadTeamsMembers,
+  teamsChannelLabel,
+  canvas,
+  nodeId,
 }: {
   ticket: Ticket;
   clarification?: CanvasClarification;
   editable: boolean;
   onSaveNote: (issueKey: string, text: string) => Promise<TicketNote>;
+  onSetNodeTickets?: (nodeId: string, issueKeys: string[] | null, note?: string) => Promise<void>;
+  onPostToTeams?: (payload: PostToTeamsPayload) => Promise<void>;
+  loadTeamsMembers?: () => Promise<Array<{ id: string; displayName: string; email?: string | null }>>;
+  teamsChannelLabel?: string | null;
+  canvas: Canvas;
+  nodeId: string;
 }) {
-  const { issue, epic } = ticket;
+  const { issue, epic, match } = ticket;
+  const { instance, accounts } = useMsal();
+  const client = useMemo(() => atlasClient({ instance, accounts }), [instance, accounts]);
+  const [bugOpen, setBugOpen] = useState(false);
+  const [bugChip, setBugChip] = useState<string | null>(null);
+  const [pinBusy, setPinBusy] = useState(false);
+  const why = whyMatched(match);
+  const pinned = match?.via === "manual" || Boolean(canvas.jira?.manual?.[nodeId]?.issueKeys?.includes(issue.key));
+  const currentKeys = () =>
+    (canvas.jira?.nodes?.[nodeId] ?? []).map((m) => m.key).filter(Boolean);
+
+  const togglePin = async () => {
+    if (!onSetNodeTickets || pinBusy) return;
+    setPinBusy(true);
+    try {
+      const keys = currentKeys();
+      if (pinned) {
+        const next = keys.filter((k) => k !== issue.key);
+        if (next.length === 0 && canvas.jira?.manual?.[nodeId]) {
+          await onSetNodeTickets(nodeId, null, "Unpinned last ticket  -  reset to matcher");
+        } else {
+          await onSetNodeTickets(nodeId, next, `Unpinned ${issue.key}`);
+        }
+      } else {
+        const next = [...new Set([...keys, issue.key])];
+        await onSetNodeTickets(nodeId, next, `Pinned ${issue.key}`);
+      }
+    } finally {
+      setPinBusy(false);
+    }
+  };
 
   return (
     <div className="mb-3 rounded-[12px] border border-[#E6E1F5] p-3 shadow-sm dark:border-[#2a2a2a]">
@@ -207,6 +355,12 @@ function TicketCard({
             {issue.key} <TbExternalLink size={12} />
           </a>
           <span className="rounded-[4px] bg-[#EEF2FF] px-1.5 py-0.5 text-[10px] text-[#4F46E5]">{issue.type.toLowerCase()}</span>
+          {pinned && (
+            <span className="rounded-[4px] bg-[#F3E8FF] px-1.5 py-0.5 text-[10px] font-medium text-[#7C3AED]">Pinned</span>
+          )}
+          {bugChip && (
+            <span className="rounded-[4px] bg-[#FEE2E2] px-1.5 py-0.5 text-[10px] font-medium text-[#B91C1C]">Bug {bugChip}</span>
+          )}
         </div>
         {issue.status && (
           <span className={`shrink-0 rounded-[6px] px-2 py-0.5 text-[10.5px] font-medium ${STATUS_STYLE[issue.statusCategory] ?? STATUS_STYLE.new}`}>
@@ -215,10 +369,15 @@ function TicketCard({
         )}
       </div>
       <div className="mt-1.5 text-[13.5px] font-semibold leading-snug text-[#1F1F1F] dark:text-[#ededed]">{issue.summary}</div>
+      {why && (
+        <div className="mt-1.5 text-[11px] leading-snug text-[#6B7280] dark:text-[#9ca3af]" title={why}>
+          {why}
+        </div>
+      )}
       <div className="mt-2 flex items-center justify-between text-[11px] text-[#5E6066] dark:text-[#9ca3af]">
         <div className="flex min-w-0 items-center gap-3">
           <span className="flex items-center gap-1" title={issue.assignee ?? "Unassigned"}>
-            <TbUser size={12} /> {issue.assignee ? initials(issue.assignee) : "—"}
+            <TbUser size={12} /> {issue.assignee ? initials(issue.assignee) : "-"}
           </span>
           {epic && (
             <span className="truncate" title={epic.summary}>
@@ -228,8 +387,65 @@ function TicketCard({
         </div>
         {issue.priority && <span className={`font-semibold uppercase ${PRIORITY_STYLE(issue.priority)}`}>{issue.priority}</span>}
       </div>
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        {(editable || isLocalAuthBypassEnabled()) && (
+          <button
+            type="button"
+            className="text-[11px] font-medium text-[#8664F2] underline-offset-2 hover:underline"
+            onClick={() => setBugOpen(true)}
+          >
+            Report bug
+          </button>
+        )}
+        {editable && onSetNodeTickets && (
+          <button
+            type="button"
+            disabled={pinBusy}
+            className="inline-flex items-center gap-1 text-[11px] font-medium text-[#5B21B6] underline-offset-2 hover:underline disabled:opacity-50"
+            onClick={() => void togglePin()}
+            title={pinned ? "Remove manual pin (or reset screen to matcher)" : "Pin this ticket to the screen"}
+          >
+            {pinBusy ? <TbLoader2 size={12} className="animate-spin" /> : <TbLink size={12} />}
+            {pinned ? "Unpin" : "Pin to screen"}
+          </button>
+        )}
+      </div>
 
-      {clarification && <Clarifications item={clarification} editable={editable} onSaveNote={onSaveNote} />}
+      {clarification && (
+        <Clarifications
+          item={clarification}
+          editable={editable}
+          onSaveNote={onSaveNote}
+          onPostToTeams={onPostToTeams}
+          loadTeamsMembers={loadTeamsMembers}
+          teamsChannelLabel={teamsChannelLabel}
+        />
+      )}
+      {bugOpen && (
+        <ReportBugModal
+          client={client}
+          acSummary={issue.summary}
+          acKey={issue.key}
+          acText={issue.summary}
+          projectKey={canvas.jira?.projectKey || issue.key.split("-")[0]}
+          storyKey={issue.key}
+          deepLink={`${typeof window !== "undefined" ? window.location.origin : ""}/app-atlas?canvas=${canvas.id}&node=${nodeId}`}
+          environmentLine={[
+            canvas.sessionId ? `session=${canvas.sessionId}` : "",
+            `canvas=${canvas.name}`,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+          timeline={canvas.timeline || []}
+          untilAt={Date.now()}
+          screenshotUrl={canvas.nodes.find((n) => n.id === nodeId)?.screenshotUrl}
+          onClose={() => setBugOpen(false)}
+          onCreated={(key) => {
+            setBugChip(key);
+            setBugOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -238,19 +454,56 @@ function Clarifications({
   item,
   editable,
   onSaveNote,
+  onPostToTeams,
+  loadTeamsMembers,
+  teamsChannelLabel,
 }: {
   item: CanvasClarification;
   editable: boolean;
   onSaveNote: (issueKey: string, text: string) => Promise<TicketNote>;
+  onPostToTeams?: (payload: PostToTeamsPayload) => Promise<void>;
+  loadTeamsMembers?: () => Promise<Array<{ id: string; displayName: string; email?: string | null }>>;
+  teamsChannelLabel?: string | null;
 }) {
   const pending = item.status === "queued" || item.status === "running";
+  const [composeOpen, setComposeOpen] = useState(false);
+  const [postMsg, setPostMsg] = useState<string | null>(null);
 
   return (
     <div className="mt-3">
-      <div className="mb-1.5 text-[10.5px] font-semibold tracking-wide text-[#5E6066] uppercase dark:text-[#9ca3af]">
-        Requirement clarification
-        {item.status === "ready" && <span className="ml-1 text-[#E1962E]">{item.questions.length}</span>}
+      <div className="mb-1.5 flex items-center justify-between gap-2 text-[10.5px] font-semibold tracking-wide text-[#5E6066] uppercase dark:text-[#9ca3af]">
+        <span>
+          Requirement clarification
+          {item.status === "ready" && <span className="ml-1 text-[#E1962E]">{item.questions.length}</span>}
+        </span>
+        {editable && onPostToTeams && item.status === "ready" && item.questions.length > 0 && (
+          <button
+            type="button"
+            onClick={() => {
+              setPostMsg(null);
+              setComposeOpen(true);
+            }}
+            className="rounded-[6px] border border-[#E6E1F5] bg-white px-2 py-0.5 text-[10px] font-medium normal-case text-[#6264A7] hover:border-[#6264A7] disabled:opacity-50 dark:border-[#2a2a2a] dark:bg-[#141414]"
+            title="Edit message, tag people, then post to the linked Teams channel"
+          >
+            Post to Teams
+          </button>
+        )}
       </div>
+      {postMsg && <div className="mb-1.5 text-[11px] text-[#5E6066] dark:text-[#9ca3af]">{postMsg}</div>}
+      {composeOpen && onPostToTeams && (
+        <PostToTeamsModal
+          issueKey={item.issueKey}
+          clarification={item}
+          channelLabel={teamsChannelLabel}
+          loadMembers={async () => (loadTeamsMembers ? loadTeamsMembers() : [])}
+          onPost={async (payload) => {
+            await onPostToTeams(payload);
+            setPostMsg("Posted to Teams");
+          }}
+          onClose={() => setComposeOpen(false)}
+        />
+      )}
 
       {pending && (
         <div className="flex items-center gap-2 rounded-[6px] bg-[#F4EFFE] px-2 py-1.5 text-[11.5px] text-[#5B3FD1] dark:bg-[#1c1530] dark:text-[#c4b5fd]">

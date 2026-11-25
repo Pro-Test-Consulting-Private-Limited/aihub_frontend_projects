@@ -2,15 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { SessionSnapshot } from "@/app/interfaces/appatlas";
+import { deviceDisplayName, networkChipLabel, recordingCountsLine } from "@/app/lib/recording-labels";
+import { MOBILE_BEZEL_INSET_PX, fitStreamScale } from "@/app/lib/stream-fit";
 import { atlasUrl, type AtlasClient } from "@/app/services/appatlas";
 import { outlineButton, primaryButton } from "./modal";
+import { WhatIfPanel } from "./what-if-panel";
 
 const DONE: SessionSnapshot["status"][] = ["finished", "expired", "error"];
-
-/** Remote screen sizes set in the backend deploy: neko 1600x900, noVNC 1280x800. */
-const SCREEN_RATIO: Record<string, number> = { neko: 16 / 9, vnc: 16 / 10 };
-/** Atlas header + recording bar + padding above and below the viewer. */
-const VIEWER_CHROME_PX = 150;
+const FALLBACK_BROWSER_CHROME = 88;
 
 export function RecordingView({
   client,
@@ -18,17 +17,21 @@ export function RecordingView({
   onFinished,
   onDiscarded,
   onSwitchViewer,
+  onEditSetup,
 }: {
   client: AtlasClient;
   initial: SessionSnapshot;
   onFinished: (snap: SessionSnapshot) => void;
   onDiscarded: () => void;
   onSwitchViewer?: (to: "vnc" | "auto") => void;
+  onEditSetup?: () => void;
 }) {
   const [snap, setSnap] = useState(initial);
   const [now, setNow] = useState(() => Date.now());
-  const [busy, setBusy] = useState<"finish" | "discard" | null>(null);
+  const [busy, setBusy] = useState<"finish" | "discard" | "save-login" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [box, setBox] = useState({ w: 800, h: 500 });
+  const containerRef = useRef<HTMLDivElement>(null);
   const latest = useRef(initial);
   const finishedRef = useRef(onFinished);
   finishedRef.current = onFinished;
@@ -64,6 +67,52 @@ export function RecordingView({
     return () => window.removeEventListener("beforeunload", warn);
   }, []);
 
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const measure = () => {
+      const r = el.getBoundingClientRect();
+      setBox({ w: Math.max(1, r.width), h: Math.max(1, r.height) });
+    };
+    measure();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
+    ro?.observe(el);
+    return () => ro?.disconnect();
+  }, []);
+
+  const vp = snap.emulation?.viewport;
+  const req = snap.emulation?.requestedViewport ?? vp;
+  const vw = Math.max(1, vp?.width ?? 1280);
+  const vh = Math.max(1, vp?.height ?? 800);
+  const rw = Math.max(1, req?.width ?? vw);
+  const rh = Math.max(1, req?.height ?? vh);
+  const surface = snap.emulation?.streamSurface ?? {
+    width: vw,
+    height: vh + (snap.emulation?.browserChromeHeight ?? FALLBACK_BROWSER_CHROME),
+  };
+  const sw = Math.max(1, surface.width);
+  const sh = Math.max(1, surface.height);
+  const isMobileFrame = Boolean(snap.emulation?.isMobile);
+  const fitted = fitStreamScale(box.w, box.h, sw, sh, {
+    maxUpscale: 1.5,
+    inset: isMobileFrame ? MOBILE_BEZEL_INSET_PX : 0,
+  });
+  const viewportLimited =
+    Boolean(snap.emulation?.viewportLimited) || vw !== rw || vh !== rh;
+  const viewportWarning =
+    snap.emulation?.viewportWarning ||
+    (viewportLimited ? `Viewport limited to ${vw} × ${vh} by the remote display` : null);
+
+  useEffect(() => {
+    console.info("[stream-fit]", {
+      container: box,
+      streamNative: { w: sw, h: sh },
+      viewport: { w: vw, h: vh },
+      scale: fitted.scale,
+      sized: { w: fitted.width, h: fitted.height },
+    });
+  }, [box, sw, sh, vw, vh, fitted.scale, fitted.width, fitted.height]);
+
   const finish = async () => {
     setBusy("finish");
     setError(null);
@@ -88,6 +137,15 @@ export function RecordingView({
   const countdown = `${Math.floor(left / 60000)}:${String(Math.floor((left % 60000) / 1000)).padStart(2, "0")}`;
   const viewer = snap.viewer;
 
+  const deviceLabel = deviceDisplayName(snap.emulation?.devicePreset ?? "desktop");
+  const orientLabel = snap.emulation?.orientation === "portrait" ? "Portrait" : "Landscape";
+  const netLabel = networkChipLabel({
+    devicePreset: snap.emulation?.devicePreset ?? "desktop",
+    networkPreset: snap.emulation?.networkPreset ?? "none",
+    offline: snap.emulation?.offline,
+    network: snap.emulation?.network,
+  });
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between gap-4 border-b border-[#EEE] bg-white px-5 py-2.5 dark:border-[#1a1a1a] dark:bg-[#0a0a0a]">
@@ -99,15 +157,144 @@ export function RecordingView({
               auto-stops in {countdown}
             </span>
           </div>
-          <div className="truncate text-[11px] text-[#7E7E7E]">
-            {snap.currentUrl || snap.startUrl} · {snap.nodes.length} screens · {snap.edges.length} actions · {snap.eventCount} events
+          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-[#5E6066] dark:text-[#9ca3af]">
+            <ConfigChip
+              label={deviceLabel}
+              title={`Preset: ${snap.emulation?.devicePreset ?? ""}\nDPR: ${snap.emulation?.deviceScaleFactor ?? 1}\nUA: ${snap.emulation?.userAgent ?? "default"}`}
+            />
+            <ConfigChip
+              label={`${vw} × ${vh}`}
+              title={
+                viewportLimited
+                  ? `Actual viewport (requested ${rw} × ${rh})`
+                  : "Actual page viewport (CSS pixels)"
+              }
+            />
+            {viewportWarning && <ConfigChip label={viewportWarning} title={viewportWarning} danger />}
+            {snap.emulation?.streamScaled && (
+              <ConfigChip label="Emulated, stream scaled" title="Remote display cannot fit viewport + chrome; page held via CDP" danger />
+            )}
+            {snap.emulation?.locale && (
+              <ConfigChip label={snap.emulation.locale} title={`Locale · ${snap.emulation.timezoneId || ""}`} />
+            )}
+            {snap.emulation?.colorScheme && snap.emulation.colorScheme !== "no-preference" && (
+              <ConfigChip
+                label={snap.emulation.colorScheme === "dark" ? "Dark" : "Light"}
+                title="Color scheme"
+              />
+            )}
+            {snap.health && (
+              <ConfigChip
+                label={
+                  snap.health.level === "ok"
+                    ? "Health OK"
+                    : snap.health.level === "warn"
+                      ? "Health warn"
+                      : "Health issues"
+                }
+                title={`Errors ${snap.health.consoleErrors}/${snap.health.pageErrors} · HTTP ${snap.health.httpErrors} · a11y ${snap.health.a11yViolations} · LCP ${snap.health.lcpMs != null ? `${snap.health.lcpMs}ms` : "not measured"}`}
+                danger={snap.health.level !== "ok"}
+              />
+            )}
+            <ConfigChip label={orientLabel} title={`Orientation: ${snap.emulation?.orientation ?? ""}`} />
+            <ConfigChip
+              label={netLabel}
+              title={
+                snap.emulation?.offline
+                  ? "Offline"
+                  : snap.emulation?.network
+                    ? `↓ ${snap.emulation.network.downloadKbps} kbps · ↑ ${snap.emulation.network.uploadKbps} kbps · ${snap.emulation.network.latencyMs} ms`
+                    : "No throttling"
+              }
+              danger={snap.emulation?.offline}
+            />
+            {snap.simulate?.armed && (
+              <ConfigChip
+                label={`Armed · ${snap.simulate.armed.mode}`}
+                title={`${snap.simulate.armed.method} ${snap.simulate.armed.path}`}
+                danger
+              />
+            )}
+            {(snap.simulate?.lastFired ||
+              snap.nodes.some((n) => n.states.some((st) => st.simulated))) && (
+              <ConfigChip
+                label="Simulated"
+                title={
+                  snap.simulate?.lastFired
+                    ? `${snap.simulate.lastFired.autoLabel} · ${snap.simulate.lastFired.meta.endpoint}`
+                    : "Simulated failure state"
+                }
+                danger
+              />
+            )}
+            {snap.recordedAs && <ConfigChip label={`Recorded as: ${snap.recordedAs}`} title="Saved login role" />}
+            <span className="truncate font-mono text-[11px] text-[#7E7E7E]" title={snap.currentUrl || snap.startUrl}>
+              {snap.currentUrl || snap.startUrl}
+            </span>
+            <span className="text-[#7E7E7E]">
+              · {recordingCountsLine(snap.nodes.length, snap.edges.length, snap.eventCount)}
+            </span>
+            {onEditSetup && (
+              <button
+                type="button"
+                className="ml-1 text-[#8664F2] underline-offset-2 hover:underline"
+                onClick={onEditSetup}
+              >
+                Edit for next run
+              </button>
+            )}
           </div>
         </div>
         <div className="flex shrink-0 gap-3">
+          <button
+            type="button"
+            className={`${outlineButton} !py-1.5 !text-[13px]`}
+            disabled={!!busy || snap.status !== "recording"}
+            title="Save cookies + storage for this app origin (encrypted)"
+            onClick={() => {
+              const role = window.prompt("Role label for this login", "User");
+              if (role == null) return;
+              setBusy("save-login");
+              void client
+                .saveSessionLogin(snap.id, { roleLabel: role || "User" })
+                .then(() => setError(null))
+                .catch(async (err: unknown) => {
+                  const msg = err instanceof Error ? err.message : "Could not save login";
+                  if (/No logged-in session detected/i.test(msg)) {
+                    const ok = window.confirm(
+                      "No logged-in session detected. Log in first, then save.\n\nSave anyway?",
+                    );
+                    if (!ok) {
+                      setError(msg);
+                      return;
+                    }
+                    try {
+                      await client.saveSessionLogin(snap.id, {
+                        roleLabel: role || "User",
+                        confirmUnauthenticated: true,
+                      });
+                      setError(null);
+                    } catch (err2: unknown) {
+                      setError(err2 instanceof Error ? err2.message : "Could not save login");
+                    }
+                    return;
+                  }
+                  setError(msg);
+                })
+                .finally(() => setBusy(null));
+            }}
+          >
+            {busy === "save-login" ? "Saving login…" : "Save this login"}
+          </button>
           <button type="button" className={`${outlineButton} !py-1.5 !text-[13px]`} onClick={discard} disabled={!!busy}>
             {busy === "discard" ? "Discarding…" : "Discard"}
           </button>
-          <button type="button" className={`${primaryButton} !py-1.5 !text-[13px]`} onClick={finish} disabled={!!busy || snap.status !== "recording"}>
+          <button
+            type="button"
+            className={`${primaryButton} !py-1.5 !text-[13px]`}
+            onClick={finish}
+            disabled={!!busy || snap.status !== "recording"}
+          >
             {busy === "finish" ? "Building map…" : "Finish & Save"}
           </button>
         </div>
@@ -116,59 +303,121 @@ export function RecordingView({
       {onSwitchViewer && viewer?.kind === "neko" && (
         <div className="flex items-center justify-between gap-3 bg-[#F4EFFE] px-5 py-1.5 text-[12px] text-[#5B3FD1] dark:bg-[#1e1a2e]">
           <span>Stuck on the neko logo? Some networks block the video stream.</span>
-          <button type="button" disabled={!!busy} onClick={() => onSwitchViewer("vnc")} className="shrink-0 font-medium underline hover:no-underline">
+          <button
+            type="button"
+            disabled={!!busy}
+            onClick={() => onSwitchViewer("vnc")}
+            className="shrink-0 font-medium underline hover:no-underline"
+          >
             Switch to the compatible viewer
           </button>
         </div>
       )}
-      {onSwitchViewer && viewer?.kind === "vnc" && typeof window !== "undefined" && localStorage.getItem("appatlas-viewer") === "vnc" && (
-        <div className="flex items-center justify-end gap-3 px-5 pt-1.5 text-[11px] text-[#7E7E7E]">
-          Using the compatible viewer.
-          <button type="button" disabled={!!busy} onClick={() => onSwitchViewer("auto")} className="text-[#8664F2] underline hover:no-underline">
-            Try the smooth viewer
-          </button>
-        </div>
-      )}
+      {onSwitchViewer &&
+        viewer?.kind === "vnc" &&
+        typeof window !== "undefined" &&
+        localStorage.getItem("appatlas-viewer") === "vnc" && (
+          <div className="flex items-center justify-end gap-3 px-5 pt-1.5 text-[11px] text-[#7E7E7E]">
+            Using the compatible viewer.
+            <button
+              type="button"
+              disabled={!!busy}
+              onClick={() => onSwitchViewer("auto")}
+              className="text-[#8664F2] underline hover:no-underline"
+            >
+              Try the smooth viewer
+            </button>
+          </div>
+        )}
 
       <div className="flex min-h-0 flex-1 gap-4 p-4">
-        <div className="flex min-w-0 flex-1 items-start justify-center overflow-auto">
+        <div ref={containerRef} className="flex min-w-0 flex-1 items-center justify-center overflow-hidden">
           {viewer && viewer.kind !== "local" ? (
-            <iframe
-              src={atlasUrl(viewer.url)}
-              allow="autoplay; clipboard-read; clipboard-write; fullscreen"
-              className="rounded-[10px] border border-[#E6E1F5] bg-black dark:border-[#2a2a2a]"
-              style={{
-                aspectRatio: SCREEN_RATIO[viewer.kind] ?? 16 / 9,
-                width: `min(100%, calc((100vh - ${VIEWER_CHROME_PX}px) * ${SCREEN_RATIO[viewer.kind] ?? 16 / 9}))`,
-              }}
-              title="Remote browser"
-            />
+            <div
+              className={`flex items-center justify-center ${
+                isMobileFrame
+                  ? "rounded-[28px] border-[3px] border-[#333] bg-[#111] p-[6px] shadow-lg"
+                  : ""
+              }`}
+              style={isMobileFrame ? { boxSizing: "border-box" } : undefined}
+            >
+              <iframe
+                src={atlasUrl(viewer.url)}
+                allow="autoplay; clipboard-read; clipboard-write; fullscreen"
+                className="block rounded-[10px] border-0 bg-black"
+                style={{
+                  width: fitted.width,
+                  height: fitted.height,
+                }}
+                title="Remote browser"
+              />
+            </div>
           ) : (
             <div className="mt-20 text-center text-[13px] text-[#7E7E7E]">
-              {viewer?.kind === "local" ? "Use the Chromium window opened on the backend machine." : "Waiting for the browser…"}
+              {viewer?.kind === "local"
+                ? "Use the Chromium window opened on the backend machine."
+                : "Waiting for the browser…"}
             </div>
           )}
         </div>
-        <div className="w-[230px] shrink-0 overflow-y-auto">
-          <div className="mb-2 text-[12px] font-medium text-[#1F1F1F] dark:text-[#ededed]">Screens captured</div>
-          {snap.nodes.length === 0 && <div className="text-[11px] text-[#7E7E7E]">Screens appear here as you browse.</div>}
-          {[...snap.nodes].reverse().map((n) => (
-            <div
-              key={n.id}
-              className={`mb-2 overflow-hidden rounded-[8px] border bg-white dark:bg-[#141414] ${
-                n.status === "active" ? "border-[#8664F2]" : "border-[#E6E1F5] dark:border-[#2a2a2a]"
-              }`}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={atlasUrl(n.shotUrl)} alt="" loading="lazy" className="h-[90px] w-full object-cover object-top" />
-              <div className="px-2 py-1.5">
-                <div className="truncate text-[11px] font-medium text-[#1F1F1F] dark:text-[#ededed]">{n.path}</div>
-                <div className="text-[10px] text-[#7E7E7E]">{n.states.length} states</div>
+        <div className="flex w-[260px] shrink-0 flex-col gap-3 overflow-y-auto">
+          {snap.simulate && <WhatIfPanel client={client} sessionId={snap.id} simulate={snap.simulate} />}
+          <div>
+            <div className="mb-2 text-[12px] font-medium text-[#1F1F1F] dark:text-[#ededed]">Screens captured</div>
+            {snap.nodes.length === 0 && <div className="text-[11px] text-[#7E7E7E]">Screens appear here as you browse.</div>}
+            {[...snap.nodes].reverse().map((n) => (
+              <div
+                key={n.id}
+                className={`mb-2 overflow-hidden rounded-[8px] border bg-white dark:bg-[#141414] ${
+                  n.status === "active" ? "border-[#8664F2]" : "border-[#E6E1F5] dark:border-[#2a2a2a]"
+                }`}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={atlasUrl(n.shotUrl)} alt="" loading="lazy" className="h-[90px] w-full object-cover object-top" />
+                <div className="px-2 py-1.5">
+                  <div className="truncate text-[11px] font-medium text-[#1F1F1F] dark:text-[#ededed]">{n.path}</div>
+                  <div className="text-[10px] text-[#7E7E7E]">
+                    {n.states.length} {n.states.length === 1 ? "state" : "states"}
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {n.states
+                      .filter((s) => s.simulated || s.recordedAs)
+                      .slice(-4)
+                      .map((s) => (
+                        <span
+                          key={s.id}
+                          className={`rounded-[4px] px-1 py-0.5 text-[9px] font-medium ${
+                            s.simulated
+                              ? "bg-[#FEF3C7] text-[#92400E]"
+                              : "bg-[#EEF2FF] text-[#4F46E5]"
+                          }`}
+                          title={s.simulated ? `${s.simulated.mode} · ${s.simulated.endpoint}` : s.recordedAs}
+                        >
+                          {s.simulated ? "Simulated" : `Recorded as: ${s.recordedAs}`}
+                        </span>
+                      ))}
+                  </div>
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
     </div>
+  );
+}
+
+function ConfigChip({ label, title, danger }: { label: string; title?: string; danger?: boolean }) {
+  return (
+    <span
+      title={title}
+      className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+        danger
+          ? "border-[#FCD34D] bg-[#FFFBEB] text-[#92400E]"
+          : "border-[#E5E7EB] bg-[#F9FAFB] text-[#374151] dark:border-[#2a2a2a] dark:bg-[#141414] dark:text-[#d1d5db]"
+      }`}
+    >
+      {label}
+    </span>
   );
 }

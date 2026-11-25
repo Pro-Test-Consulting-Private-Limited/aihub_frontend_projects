@@ -4,10 +4,13 @@ How the AI Hub frontend is put together: routes, state and data flow, Microsoft 
 per-environment configuration, error handling, and the main design choices. For endpoint details see
 [ENDPOINTS.md](ENDPOINTS.md); for settings see [CONFIGURATION.md](CONFIGURATION.md).
 
+**New here?** Start with [ONBOARDING.md](ONBOARDING.md).
+
 **Contents:** [Big picture](#big-picture) · [Route map](#route-map) · [Layouts and providers](#layouts-and-providers) ·
 [State and data flow](#state-and-data-flow) · [Authentication (MSAL) flow](#authentication-msal-flow) ·
 [App Atlas](#app-atlas) · [Integrations](#integrations) · [Configuration per environment](#configuration-per-environment) ·
-[Error handling](#error-handling) · [Key design choices](#key-design-choices) · [Known gaps](#known-gaps)
+[Error handling](#error-handling) · [Key design choices](#key-design-choices) · [Known gaps](#known-gaps) ·
+[Related repos](#related-repos)
 
 ---
 
@@ -92,14 +95,15 @@ app/layout.tsx                RootLayout
         ├── app/page.tsx      Sign-in (AuthenticationLayout → Login)
         └── app/pages/layout.tsx
             └── ProjectsProvider    app/lib/projectsStore.tsx
-                ├── SideNav, TopNav  (App Atlas: icon rail only, no TopNav, full height)
+                ├── SideNav, TopNav  (App Atlas: icon rail only; atlas header has its own UserProfileMenu)
                 └── page            (most pages wrap themselves in <AuthGuard>)
 ```
 
 - `AuthProvider` renders **nothing** until MSAL has initialised and processed any redirect response, so no page runs
   with a half-ready MSAL instance.
 - `app/pages/layout.tsx` remembers whether the side nav is collapsed (`localStorage["sidenav-collapsed"]`). On
-  `/app-atlas` it forces the narrow icon rail and drops the top nav to make room for the canvas.
+  `/app-atlas` it forces the narrow icon rail and drops the shell TopNav; the Atlas header shows
+  `UserProfileMenu` (`app/components/user-profile-menu.tsx`) — Graph photo + friendly name + logout (no raw MS UPN in chrome).
 - `/metrics/*` has its own layout (`app/pages/metrics/layout.tsx`) with tabs and a shared time filter
   (`MetricsFilterProvider`, `app/context/metrics-filter-context.tsx`).
 
@@ -182,19 +186,32 @@ Details:
 
 ## App Atlas
 
-App Atlas maps an application by recording a real user journey. The frontend part is `app/pages/app-atlas/page.tsx`
-→ `AtlasWorkspace` (`app/components/app-atlas/atlas-workspace.tsx`). All backend calls go through `atlasClient()`
-(`app/services/appatlas.ts`).
+App Atlas maps an application by recording a real user journey, then runs product tabs (SIT, API Testing, Coverage,
+CI/CD, Security, Performance, Reports) against that canvas. The frontend entry is `app/pages/app-atlas/page.tsx`
+→ `AtlasWorkspace` (`app/components/app-atlas/atlas-workspace.tsx`). All Atlas HTTP goes through `atlasClient()`
+(`app/services/appatlas.ts`). Types live in `app/interfaces/appatlas.ts`.
+
+**One shared backend:** dig, sit and prod frontends all call the same `appatlas-backend` via `/atlas-api/`. Frontend
+images stay per env; only promote FE to move UI. **Dig ≠ SIT as websites** (`frontend-dev` vs `frontend-sit`);
+**dig = sit = prod for Atlas API data.** The **SIT Testing** tab is a product feature (also on dig), not the SIT
+hostname. Backend contract and ops UI:
+[appatlas-backend docs](https://github.com/Pro-Test-Consulting-Private-Limited/appatlas-backend/tree/dev/docs/architecture)
+(see §1.4 dig vs SIT).
 
 ### Layout of the workspace
 
-- **Header:** project picker (projects from `useProjects()`; the selected one is in `?projectId=`), tabs (**Canvas**;
-  API Testing, SIT, Coverage, Security and Performance are "coming soon"), a History / My History toggle, and the
-  avatars of people on the same project right now.
-- **Explorer** (`explorer.tsx`): canvases recorded against the selected project's host (`hostOf(applicationUrl)`),
-  with run, save, rename, delete and connect actions.
-- **Main area**, in priority order: the live recording if one is running, else the selected canvas, else an empty
-  state (for example "Save it to turn it into a canvas", or "has no Application URL yet").
+- **Header:** project picker (`?projectId=`; picker grows with viewport so long names are not clipped), product tabs
+  (**Canvas**, **API Testing**, **SIT**, **Coverage**, **Security**, **Performance**, **Reports**, **CI/CD** when
+  trial flags allow), **History** as icon-only toggle, up to two presence initials (name tooltips only), and
+  **UserProfileMenu** (Graph photo + friendly name — same component as Home TopNav; never dump MS UPN in hover).
+- **Explorer** (`explorer.tsx`): canvases for the project's host; drag the right edge to widen. **Canvas name first**
+  (full, wraps); owner on the line below. Separate **Connected** icon row (Jira / Swagger / Teams / …). Do not merge
+  Connected icons into the canvas list.
+- **Coverage** (`coverage-overview.tsx` + `coverage-hub.tsx`): Live hub panels, then SIT depth table. Eisenhower Matrix
+  board is **not sticky** (avoids covering table rows); per-ticket matrix cells stay compact.
+- **Connect apps** (`connect-apps-modal.tsx`): icon grid; click toggles select/unselect; connection status on icons;
+  integrate from the modal. Keep this pattern if you touch connect UX.
+- **Main area:** live recording if running, else selected canvas / active tab view, else empty state.
 
 ### Live session (recording)
 
@@ -249,32 +266,25 @@ sequenceDiagram
 - `editable` is true only for the owner's canvases (`canvas.isMine`); other people's canvases are labelled
   "view only". Rename and delete are also owner-only on the backend.
 
+### Opening a canvas (lite)
+
+Prefer `GET /canvases/:id?view=lite` via `getCanvas(id, "lite")` when selecting a canvas so the UI stays responsive.
+Use a fuller view when a tab needs the heavy payload. This pairs with Phase 2/3 backend work (indexes, batched jobs).
+
 ### Jira panel and mapping
 
-1. **Connect:** the "Connect apps" modal (`connect-apps-modal.tsx`) shows Jira as available only if the user has
-   connected Jira on `/integrations` (`useIntegrationStatus`). Linear, Teams and Slack are shown but disabled.
-2. **Choose a project:** `GET /api/app-atlas/jira/projects` (this app's route) lists Jira projects using the user's
-   own Jira credentials from cookies.
-3. **Map:** `POST /api/app-atlas/canvases/:id/jira { projectKey }` → this app adds the Jira credentials and forwards
-   to App Atlas, which fetches the tickets, scores them against each screen, and returns the updated `Canvas` with a
-   `jira` mapping. This can take up to a minute on big projects. "Disconnect" calls the DELETE variant; "Re-map"
-   repeats the POST.
-4. **View:** clicking a screen opens `JiraPanel` (`jira-panel.tsx`). It lists the tickets App Atlas mapped to that
-   node (`canvas.jira.nodes[nodeId]`), adds each ticket's epic (walking up to 4 parent levels), and groups them into
-   Epic, Story, Bug and Task filter buttons. Each card links to Jira and shows status, assignee initials, priority and
-   epic.
-5. **Clarification questions:** after mapping, App Atlas generates requirement-clarification questions per ticket in
-   the background. While any item is `queued` or `running`, the workspace polls
-   `GET /canvases/:id/clarifications` every 5 s and merges the result into the open canvas. Each ticket card shows a
-   spinner, an error, "No open questions", or the numbered questions with reasons. A ticket that has questions
-   also has a Notes box: the canvas owner edits it (saved on blur, this canvas only, never sent to Jira); everyone
-   else sees it read-only. `PUT /canvases/:id/notes/:issueKey` `{ text }`. A ticket that finished with no
-   questions gets the box only when `notesOpen` is true (a switch on the logs dashboard). Refresh the canvas
-   after changing a notes switch.
+1. **Connect:** Connect apps modal — Jira needs `/integrations` credentials (`useIntegrationStatus`). Other apps
+   (Swagger, Teams, GitHub, …) follow the same modal; availability depends on integrations + canvas links + trial flags.
+2. **Choose a project:** `GET /api/app-atlas/jira/projects` lists Jira projects from the user's cookies.
+3. **Map (async):** `POST /api/app-atlas/canvases/:id/jira { projectKey }` may return **202** with a `jobId`.
+   `connectJira` in `appatlas.ts` polls `/api/app-atlas/canvases/:id/jira/jobs/:jobId` until done, then reloads
+   `GET /canvases/:id?view=lite`. Do not assume a synchronous Canvas body on every POST. "Disconnect" is DELETE;
+   "Re-map" repeats POST.
+4. **View:** `JiraPanel` lists tickets on the node, epics, filters, clarifications and notes (notes stay on the canvas;
+   never posted to Jira automatically).
+5. **Clarifications:** poll `GET /canvases/:id/clarifications` while items are `queued` / `running`.
 
-Manual mapping edits, Jira refresh and question retry/regenerate were removed from this app in the latest commits;
-they are managed from the operations (logs) dashboard in appatlas-backend. `retryClarifications` and the `regenerate`
-flag of `connectJira` remain in the client but aren't used by the UI.
+Operator-only mapping edits and rematch live on **logs.protestcorp.com** (backend `admin-ui`), not in this FE.
 
 ### Presence
 
@@ -308,7 +318,8 @@ and GitHub exist and work when their environment variables are set, but nothing 
 | Build env | `.env.production` for prod, on the VM | `.env.production` for SIT, on the VM | `.env.production` for dev, on the VM | `.env.local` |
 | API bases in the browser | page origin | page origin | page origin | `NEXT_PUBLIC_*` values |
 | Entra redirect URI | page origin + `/` | page origin + `/` | page origin + `/` | `http://localhost:3000/` |
-| App Atlas | not in the current prod build | shared App Atlas backend | shared App Atlas backend | whatever `NEXT_PUBLIC_APPATLAS_API` points at |
+| App Atlas UI | whatever is on `main` / last promote (may lag dig) | same commit as dig after promote | latest `dev` | local |
+| App Atlas API | **shared** `appatlas-backend` for all three sites | same | same | `NEXT_PUBLIC_APPATLAS_API` |
 | Postgres database (VM guide) | `aihub` | `aihub_nonprod` | `aihub_nonprod` | your own |
 
 How this works in code:
@@ -368,8 +379,22 @@ The full list is in [CONFIGURATION.md](CONFIGURATION.md).
 
 These are visible in the code and worth knowing before changing things:
 
-- `npm run lint` uses `next lint`, which Next.js 16 removed.
-- In the accelerator wheel the labels "Selenium" and "cypress" are swapped relative to the routes they open
+- `npm run lint` uses `next lint`, which Next.js 16 removed. Use `npx eslint .`.
+- In the accelerator wheel the labels "Selenium" and "cypress" may be swapped relative to the routes they open
   (`app/constants/projects.ts`).
-- `Dockerfile` ends with `COPY /app .`, a leftover from an earlier multi-stage build that copies the `app/` folder
-  over the working directory again; it's harmless but confusing.
+- `Dockerfile` ends with `COPY /app .`, a leftover from an earlier multi-stage build; harmless but confusing.
+- Prod FE can lag dig/sit until someone runs `aihub-deploy promote frontend sit prod`. Always check
+  `aihub-deploy status` before assuming prod has the same App Atlas UI.
+- Ops / logs UI is **not** in this repo (see [Related repos](#related-repos)).
+
+---
+
+## Related repos
+
+| Repo | What a FE developer uses it for |
+|---|---|
+| **This repo** (`aihub_frontend_projects`) | All AI Hub + App Atlas **UI** |
+| [appatlas-backend](https://github.com/Pro-Test-Consulting-Private-Limited/appatlas-backend) | Atlas API (`FRONTEND.md`, `backend/API.md`), ops dashboard (`docs/architecture/06-operations-dashboard.md`, `backend/admin-ui/`) |
+| API / security agents | Separate containers; FE calls them through Atlas or site paths as documented in ENDPOINTS |
+
+Deploy helpers (`aihub-deploy`) live with the backend repo on the VM.

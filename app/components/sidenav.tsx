@@ -13,10 +13,12 @@ import DarkImage from "../../public/icons/navbar/dark.png";
 interface SideNavProps {
   collapsed: boolean;
   transition: string;
+  /** Hide scrollbars while the width transition runs (avoids flash mid-expand). */
+  lockOverflow?: boolean;
   onExpand: () => void;
 }
 
-export default function SideNav({ collapsed, transition, onExpand }: SideNavProps) {
+export default function SideNav({ collapsed, transition, lockOverflow = false, onExpand }: SideNavProps) {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const route = useRouter();
@@ -32,13 +34,13 @@ export default function SideNav({ collapsed, transition, onExpand }: SideNavProp
     `w-[100%] ${collapsed ? "" : "md:w-[50%]"} rounded-[10px] h-[35px] flex items-center justify-center cursor-pointer text-[16px] text-[#1F1F1F] dark:text-[#ededed] font-[500] ${
       activeTheme === value ? "bg-[#fff] dark:bg-[#0a0a0a]" : ""
     }`;
-  const themeIconClass = `mr-[0px] ${collapsed ? "" : "md:mr-[5px]"} h-5 w-auto`;
+  const themeIconClass = `mr-[0px] ${collapsed ? "" : "md:mr-[5px]"} h-5 w-auto dark:invert`;
 
   return (
     <div
-      className={`flex justify-between h-full overflow-y-auto overflow-x-hidden flex-col px-4 py-4 bg-[#fff] dark:bg-[#0a0a0a] border-r border-[#FAFAFA] dark:border-[#1a1a1a] transition-[width] ${transition} fixed top-0 bottom-0 left-0 z-40 ml-0 ${
+      className={`flex h-full flex-col justify-between border-r border-[#FAFAFA] bg-[#fff] px-4 py-4 transition-[width] dark:border-[#1a1a1a] dark:bg-[#0a0a0a] fixed top-0 bottom-0 left-0 z-40 ml-0 ${transition} ${
         collapsed ? "w-[75px]" : "w-[75px] md:w-[300px]"
-      }`}
+      } ${lockOverflow ? "overflow-hidden" : "overflow-x-hidden overflow-y-auto"}`}
     >
       <div>
         <div

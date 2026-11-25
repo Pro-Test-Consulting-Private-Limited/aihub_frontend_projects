@@ -46,3 +46,7 @@ coverage/
 # Optional local deployment output
 .vercel/
 .firebase/
+
+.env.sit-ui-test.local
+.env.local
+

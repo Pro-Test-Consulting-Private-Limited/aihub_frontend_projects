@@ -1,11 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   TbChevronDown,
   TbChevronLeft,
   TbChevronRight,
-  TbDeviceFloppy,
   TbDotsVertical,
   TbFolder,
   TbFolderFilled,
@@ -13,10 +12,14 @@ import {
   TbLink,
   TbLock,
   TbPlayerPlay,
+  TbNetwork,
+  TbListCheck,
   TbPlus,
 } from "react-icons/tb";
-import { SiJira } from "react-icons/si";
+import { SiGithub, SiJira, SiSwagger } from "react-icons/si";
 import type { Canvas, CanvasSummary } from "@/app/interfaces/appatlas";
+import type { CanvasSwagger } from "@/app/lib/canvas-swagger";
+import { gitSyncDotClass, gitSyncTone, repoNameOnly, type GitSyncStatusInput } from "@/app/lib/git-sync-ui";
 
 const iconButton =
   "flex h-[26px] w-[26px] items-center justify-center rounded-[6px] text-[#5E6066] hover:bg-[#F2EBFB] hover:text-[#8664F2] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[#5E6066] dark:text-[#9ca3af] dark:hover:bg-[#2a2440]";
@@ -29,40 +32,127 @@ type Props = {
   loading: boolean;
   selectedId: string | null;
   canvas: Canvas | null;
-  canSave: boolean;
   canStart: boolean;
+  canReplay: boolean;
   onSelect: (id: string) => void;
   onRename: (c: CanvasSummary) => void;
   onDelete: (c: CanvasSummary) => void;
   onNew: () => void;
-  onRun: () => void;
-  onSave: () => void;
+  onReplay: () => void;
   onCollapse: () => void;
+  onExpand?: () => void;
+  /** When true, panel animates to a thin rail instead of unmounting. */
+  collapsed?: boolean;
   onFocusNode: (id: string) => void;
   onConnect: (c: CanvasSummary) => void;
+  /** Swagger spec connected to the selected canvas. Independent of Jira. */
+  swagger: CanvasSwagger | null;
+  gitConnected?: boolean;
+  gitCard?: {
+    repo: string | null;
+    branch?: string | null;
+    lastStatus: string | null;
+    lastSyncedAt: number | null;
+    lastError?: string | null;
+    dirty?: boolean;
+    syncing?: boolean;
+    masterOff?: boolean;
+  } | null;
+  view: "screens" | "api" | "sit";
+  /** e.g. "6 Modules, 25 End-Points" */
+  apiSummary: string;
+  onView: (view: "screens" | "api" | "sit") => void;
 };
 
 export function Explorer(props: Props) {
-  const { canvases, loading, selectedId, canvas } = props;
+  const { canvases, loading, selectedId, canvas, collapsed = false } = props;
   const [canvasesOpen, setCanvasesOpen] = useState(true);
   const [detailsOpen, setDetailsOpen] = useState(true);
   const [menuFor, setMenuFor] = useState<string | null>(null);
+  const [panelWidth, setPanelWidth] = useState(270);
+  const dragRef = useRef<{ startX: number; startW: number } | null>(null);
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!dragRef.current) return;
+      const delta = e.clientX - dragRef.current.startX;
+      setPanelWidth(Math.min(480, Math.max(200, dragRef.current.startW + delta)));
+    };
+    const onUp = () => {
+      dragRef.current = null;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, []);
+
+  const displayWidth = collapsed ? 28 : panelWidth;
 
   return (
-    <div className="flex h-full w-[270px] shrink-0 flex-col border-r border-[#EEE] bg-white dark:border-[#1a1a1a] dark:bg-[#0a0a0a]">
+    <div
+      className="relative flex h-full shrink-0 flex-col overflow-hidden border-r border-[#EEE] bg-white transition-[width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] dark:border-[#1a1a1a] dark:bg-[#0a0a0a]"
+      style={{ width: displayWidth }}
+    >
+      {/* Collapsed rail */}
+      <button
+        type="button"
+        onClick={() => props.onExpand?.()}
+        aria-hidden={!collapsed}
+        tabIndex={collapsed ? 0 : -1}
+        className={`absolute inset-0 z-40 flex flex-col items-center gap-1.5 bg-[#F3F4F6] py-3 text-[#5E6066] transition-opacity duration-200 hover:text-[#8664F2] dark:bg-[#161616] dark:text-[#9ca3af] dark:hover:text-[#8664F2] ${
+          collapsed ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
+        }`}
+        title="Show explorer"
+        data-testid="atlas-explorer-show"
+      >
+        <TbChevronRight size={14} className="shrink-0" />
+        {"EXPLORER".split("").map((ch, i) => (
+          <span key={`${ch}-${i}`} className="text-[10px] font-semibold leading-none tracking-wide">
+            {ch}
+          </span>
+        ))}
+      </button>
+
+      <div
+        className={`flex h-full min-w-[200px] flex-col transition-opacity duration-200 ease-out ${
+          collapsed ? "pointer-events-none opacity-0" : "opacity-100"
+        }`}
+        style={{ width: panelWidth }}
+      >
+      <button
+        type="button"
+        aria-label="Resize explorer"
+        title="Drag to resize"
+        className="absolute top-0 right-0 z-30 h-full w-1.5 translate-x-1/2 cursor-ew-resize bg-transparent hover:bg-[#8664F2]/35"
+        onMouseDown={(e) => {
+          if (collapsed) return;
+          e.preventDefault();
+          dragRef.current = { startX: e.clientX, startW: panelWidth };
+          document.body.style.cursor = "ew-resize";
+          document.body.style.userSelect = "none";
+        }}
+      />
       <div className="flex items-center justify-between border-b border-[#EEE] px-4 py-3 dark:border-[#1a1a1a]">
         <div className="text-[15px] font-medium text-[#1F1F1F] dark:text-[#ededed]">Explorer</div>
         <div className="flex items-center gap-1">
           <button type="button" className={iconButton} title="New canvas: start recording" onClick={props.onNew} disabled={!props.canStart}>
             <TbPlus size={16} />
           </button>
-          <button type="button" className={iconButton} title={props.canSave ? "Save execution" : "Nothing to save"} onClick={props.onSave} disabled={!props.canSave}>
-            <TbDeviceFloppy size={16} />
-          </button>
-          <button type="button" className={iconButton} title="Run AppAtlas (desktop, no throttling)" onClick={props.onRun} disabled={!props.canStart}>
+          <button
+            type="button"
+            className={iconButton}
+            title={props.canReplay ? "Replay recording" : "Open a canvas with a recording to replay"}
+            onClick={props.onReplay}
+            disabled={!props.canReplay}
+          >
             <TbPlayerPlay size={15} />
           </button>
-          <button type="button" className={iconButton} title="Hide explorer" onClick={props.onCollapse}>
+          <button type="button" className={iconButton} title="Hide explorer" data-testid="atlas-explorer-hide" onClick={props.onCollapse}>
             <TbChevronLeft size={16} />
           </button>
         </div>
@@ -70,8 +160,12 @@ export function Explorer(props: Props) {
 
       <div className="flex-1 overflow-y-auto text-[12px]">
         <SectionHeader open={canvasesOpen} onToggle={() => setCanvasesOpen((o) => !o)} icon={<TbLayoutGrid size={14} className="text-[#8664F2]" />} label="Canvases" />
-        {canvasesOpen && (
-          <div className="pb-2">
+        <div
+          className={`grid transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+            canvasesOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+          }`}
+        >
+          <div className="min-h-0 overflow-hidden pb-2">
             {loading && <div className="px-5 py-2 text-[#7E7E7E]">Loading…</div>}
             {!loading && canvases.length === 0 && (
               <div className="px-5 py-2 text-[#7E7E7E]">No canvases for this app yet. Click + to record one.</div>
@@ -86,19 +180,32 @@ export function Explorer(props: Props) {
                     active ? "bg-[#FFF6EA] dark:bg-[#2a2440]" : "hover:bg-[#F9FAFC] dark:hover:bg-[#141414]"
                   }`}
                 >
-                  <div className="flex items-center gap-2">
-                    {active ? <TbChevronDown size={12} className="shrink-0 text-[#7E7E7E]" /> : <TbChevronRight size={12} className="shrink-0 text-[#7E7E7E]" />}
-                    <span className="h-[10px] w-[10px] shrink-0 rounded-[2px] border-2 border-[#E1962E] bg-[#FFE7C2]" />
-                    <span className="min-w-0 flex-1 truncate font-medium text-[#1F1F1F] dark:text-[#ededed]" title={c.description || c.name}>
-                      {c.name}
-                    </span>
-                    <span className="max-w-[70px] shrink-0 truncate text-[10px] text-[#9ca3af]" title={c.owner.email}>
-                      {c.owner.name}
-                    </span>
+                  <div className="flex min-w-0 items-start gap-2">
+                    {active ? (
+                      <TbChevronDown size={12} className="mt-1 shrink-0 text-[#7E7E7E] dark:text-[#a3a3a3]" />
+                    ) : (
+                      <TbChevronRight size={12} className="mt-1 shrink-0 text-[#7E7E7E] dark:text-[#a3a3a3]" />
+                    )}
+                    <span className="mt-1 h-[10px] w-[10px] shrink-0 rounded-[2px] border-2 border-[#E1962E] bg-[#FFE7C2]" />
+                    {/* Name first (full, can wrap); owner only in leftover space below. */}
+                    <div className="min-w-0 flex-1">
+                      <div
+                        className="break-words text-[13px] font-medium leading-snug text-[#1F1F1F] dark:text-[#ededed]"
+                        title={c.description || c.name}
+                      >
+                        {c.name}
+                      </div>
+                      <div
+                        className="mt-0.5 truncate text-[10px] leading-tight text-[#9ca3af]"
+                        title={`${c.owner.name}${c.owner.email ? ` · ${c.owner.email}` : ""}`}
+                      >
+                        {c.owner.name}
+                      </div>
+                    </div>
                     {c.isMine ? (
                       <button
                         type="button"
-                        className="shrink-0 text-[#9ca3af] hover:text-[#1F1F1F]"
+                        className="mt-0.5 shrink-0 text-[#9ca3af] hover:text-[#1F1F1F]"
                         aria-label="Canvas actions"
                         onClick={(e) => {
                           e.stopPropagation();
@@ -108,41 +215,73 @@ export function Explorer(props: Props) {
                         <TbDotsVertical size={14} />
                       </button>
                     ) : (
-                      <TbLock size={12} className="shrink-0 text-[#c0c0c0]" title="View only: recorded by someone else" />
+                      <TbLock
+                        size={12}
+                        className="mt-1 shrink-0 text-[#c0c0c0] dark:text-[#9ca3af]"
+                        title="View only: recorded by someone else"
+                      />
                     )}
                   </div>
                   {active && (
-                    <div className="mt-1.5 flex justify-between pl-[34px] text-[10.5px] text-[#5E6066] dark:text-[#9ca3af]">
-                      <span>{formatCanvasDate(c.createdAt)}</span>
-                      <span>{c.screens} Screens, {c.transitions} Events</span>
+                    <div className="mt-1.5 space-y-0.5 pl-[14px]">
+                      <ViewRow
+                        active={props.view === "screens"}
+                        icon={<TbLayoutGrid size={13} />}
+                        label={formatCanvasDate(c.createdAt)}
+                        meta={`${c.screens} Screens, ${c.transitions} Events`}
+                        onClick={() => props.onView("screens")}
+                      />
+                      {props.swagger && (
+                        <ViewRow
+                          active={props.view === "api"}
+                          icon={<TbNetwork size={13} className="text-[#8664F2]" />}
+                          label="API Testing"
+                          meta={props.apiSummary}
+                          onClick={() => props.onView("api")}
+                        />
+                      )}
+                      <ViewRow
+                        active={props.view === "sit"}
+                        icon={<TbListCheck size={13} className="text-[#8664F2]" />}
+                        label="SIT Testing"
+                        meta="Jira → cases + data"
+                        onClick={() => props.onView("sit")}
+                      />
                     </div>
                   )}
-                  {active && (c.isMine || c.jiraProjectKey) && (
-                    <div className="mt-2.5 flex gap-1.5">
-                    <button
-                      type="button"
-                      disabled={!c.isMine}
-                      title={c.isMine ? (c.jiraProjectKey ? "Manage connected apps" : "Connect apps to this canvas") : "Connected apps"}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        props.onConnect(c);
-                      }}
-                      className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-[8px] border border-[#C9B8F7] bg-[#F4EFFE] py-2 text-[12.5px] font-medium text-[#8664F2] hover:bg-[#EDE4FD] disabled:cursor-default disabled:hover:bg-[#F4EFFE] dark:border-[#3a3060] dark:bg-[#1e1a2e]"
-                    >
-                      {c.jiraProjectKey ? (
-                        <>
-                          <span className="flex h-[20px] w-[20px] items-center justify-center rounded-[5px] bg-white shadow-sm">
-                            <SiJira size={12} color="#2684FF" />
-                          </span>
-                          <span>Jira · {c.jiraProjectKey}</span>
-                        </>
-                      ) : (
-                        <>
-                          <TbLink size={15} />
-                          Connect
-                        </>
+                  {active && (c.isMine || c.jiraProjectKey || props.swagger || props.gitConnected) && (
+                    <div className="mt-2.5 flex flex-col gap-1.5">
+                      {c.jiraProjectKey && (
+                        <ConnectedAppButton
+                          canvas={c}
+                          label={`Jira · ${c.jiraProjectKey}`}
+                          icon={<SiJira size={12} color="#2684FF" />}
+                          title="Manage connected apps"
+                          onConnect={props.onConnect}
+                        />
                       )}
-                    </button>
+                      {props.swagger && (
+                        <ConnectedAppButton
+                          canvas={c}
+                          label="Swagger"
+                          icon={<SiSwagger size={12} color="#85EA2D" />}
+                          title={props.swagger.title ? `Swagger: ${props.swagger.title}` : "Manage connected apps"}
+                          onConnect={props.onConnect}
+                        />
+                      )}
+                      {props.gitConnected && (
+                        <GitHubExplorerPill canvas={c} gitCard={props.gitCard} onConnect={props.onConnect} />
+                      )}
+                      {!c.jiraProjectKey && !props.swagger && !props.gitConnected && (
+                        <ConnectedAppButton
+                          canvas={c}
+                          label="Connect"
+                          icon={<TbLink size={15} />}
+                          bare
+                          title="Connect apps to this canvas"
+                          onConnect={props.onConnect}
+                        />
+                      )}
                     </div>
                   )}
                   {menuFor === c.id && (
@@ -162,11 +301,15 @@ export function Explorer(props: Props) {
               );
             })}
           </div>
-        )}
+        </div>
 
         <SectionHeader open={detailsOpen} onToggle={() => setDetailsOpen((o) => !o)} icon={<TbFolder size={14} className="text-[#B0359B]" />} label="Canvas Details" />
-        {detailsOpen && (
-          <div className="pb-4">
+        <div
+          className={`grid transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+            detailsOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+          }`}
+        >
+          <div className="min-h-0 overflow-hidden pb-4">
             {canvases.map((c) => {
               const open = c.id === selectedId;
               const loaded = open && canvas?.id === c.id ? canvas : null;
@@ -174,25 +317,31 @@ export function Explorer(props: Props) {
                 <div key={c.id}>
                   <div
                     onClick={() => props.onSelect(c.id)}
-                    className="flex cursor-pointer items-center gap-2 px-5 py-1.5 hover:bg-[#F9FAFC] dark:hover:bg-[#141414]"
+                    className="flex min-w-0 cursor-pointer items-center gap-2 px-5 py-1.5 hover:bg-[#F9FAFC] dark:hover:bg-[#141414]"
+                    title={c.name}
                   >
-                    {open ? <TbChevronDown size={12} className="text-[#7E7E7E]" /> : <TbChevronRight size={12} className="text-[#7E7E7E]" />}
-                    <TbFolderFilled size={14} className="text-[#E1962E]" />
-                    <span className="truncate font-medium text-[#1F1F1F] dark:text-[#ededed]">{c.name}</span>
+                    {open ? <TbChevronDown size={12} className="shrink-0 text-[#7E7E7E] dark:text-[#a3a3a3]" /> : <TbChevronRight size={12} className="shrink-0 text-[#7E7E7E] dark:text-[#a3a3a3]" />}
+                    <TbFolderFilled size={14} className="shrink-0 text-[#E1962E] dark:text-[#F0B45A]" />
+                    <span className="min-w-0 flex-1 truncate font-medium text-[#1F1F1F] dark:text-[#ededed]">{c.name}</span>
                   </div>
-                  {open && (
-                    <div className="pl-[52px] text-[#5E6066] dark:text-[#9ca3af]">
-                      {!loaded && <div className="py-1">Loading…</div>}
+                  <div
+                    className={`grid transition-[grid-template-rows,opacity] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                      open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+                    }`}
+                  >
+                    <div className="min-h-0 overflow-hidden pl-[52px] text-[#5E6066] dark:text-[#9ca3af]">
+                      {open && !loaded && <div className="py-1">Loading…</div>}
                       {loaded?.nodes.map((n) => (
                         <TreeLeaf key={n.id} label={n.title || n.path} title={n.path} onClick={() => props.onFocusNode(n.id)} />
                       ))}
                     </div>
-                  )}
+                  </div>
                 </div>
               );
             })}
           </div>
-        )}
+        </div>
+      </div>
       </div>
     </div>
   );
@@ -201,7 +350,12 @@ export function Explorer(props: Props) {
 function SectionHeader({ open, onToggle, icon, label }: { open: boolean; onToggle: () => void; icon: React.ReactNode; label: string }) {
   return (
     <div onClick={onToggle} className="flex cursor-pointer items-center gap-2 border-b border-[#F3F3F3] px-4 py-2.5 font-medium text-[#1F1F1F] dark:border-[#1a1a1a] dark:text-[#ededed]">
-      {open ? <TbChevronDown size={13} className="text-[#7E7E7E]" /> : <TbChevronRight size={13} className="text-[#7E7E7E]" />}
+      <TbChevronDown
+        size={13}
+        className={`text-[#7E7E7E] transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] dark:text-[#a3a3a3] ${
+          open ? "rotate-0" : "-rotate-90"
+        }`}
+      />
       {icon}
       {label}
     </div>
@@ -213,5 +367,108 @@ function TreeLeaf({ label, title, onClick }: { label: string; title?: string; on
     <div onClick={onClick} title={title} className="cursor-pointer truncate py-1 hover:text-[#8664F2]">
       {label}
     </div>
+  );
+}
+
+function ViewRow({ active, icon, label, meta, onClick }: { active: boolean; icon: React.ReactNode; label: string; meta: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      className={`flex w-full items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[12px] text-[#1F1F1F] dark:text-[#ededed] ${
+        active ? "bg-[#F6E3BE] dark:bg-[#3a3050]" : "hover:bg-[#FBEFD9] dark:hover:bg-[#1a1a1a]"
+      }`}
+    >
+      <span className="shrink-0 text-[#5E6066] dark:text-[#9ca3af]">{icon}</span>
+      <span className="min-w-0 truncate font-medium">{label}</span>
+      <span className="ml-auto shrink-0 text-[10px] text-[#5E6066] dark:text-[#9ca3af]">{meta}</span>
+    </button>
+  );
+}
+
+/** One button per app connected to the canvas (Jira and Swagger are independent); owner-only, opens the connect modal. */
+function ConnectedAppButton({
+  canvas,
+  label,
+  icon,
+  title,
+  bare,
+  onConnect,
+  trailing,
+}: {
+  canvas: CanvasSummary;
+  label: string;
+  icon: React.ReactNode;
+  title: string;
+  bare?: boolean;
+  onConnect: (c: CanvasSummary) => void;
+  trailing?: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={!canvas.isMine}
+      title={canvas.isMine ? title : "Connected apps"}
+      onClick={(e) => {
+        e.stopPropagation();
+        onConnect(canvas);
+      }}
+      className="flex h-[36px] min-w-0 w-full items-center gap-2 rounded-[8px] border border-[#C9B8F7] bg-[#F4EFFE] px-2.5 py-0 text-[12.5px] font-medium text-[#8664F2] hover:bg-[#EDE4FD] disabled:cursor-default disabled:hover:bg-[#F4EFFE] dark:border-[#3a3060] dark:bg-[#1e1a2e]"
+    >
+      {bare ? (
+        icon
+      ) : (
+        <span className="flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-[5px] bg-white shadow-sm dark:bg-[#2a2440]">
+          {icon}
+        </span>
+      )}
+      <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+      {trailing}
+    </button>
+  );
+}
+
+function GitHubExplorerPill({
+  canvas,
+  gitCard,
+  onConnect,
+}: {
+  canvas: CanvasSummary;
+  gitCard?: GitSyncStatusInput & { repo?: string | null; branch?: string | null; lastSyncedAt?: number | null } | null;
+  onConnect: (c: CanvasSummary) => void;
+}) {
+  const tone = gitSyncTone({
+    connected: true,
+    lastStatus: gitCard?.lastStatus,
+    lastError: gitCard?.lastError,
+    dirty: gitCard?.dirty,
+    syncing: gitCard?.syncing,
+    masterOff: gitCard?.masterOff,
+  });
+  const name = repoNameOnly(gitCard?.repo);
+  const tipParts = [
+    gitCard?.repo ? `Repo: ${gitCard.repo}` : null,
+    gitCard?.branch ? `Branch: ${gitCard.branch}` : null,
+    gitCard?.lastStatus ? `Status: ${gitCard.lastStatus}` : null,
+    gitCard?.lastSyncedAt ? `Last synced: ${new Date(gitCard.lastSyncedAt).toLocaleString()}` : null,
+  ].filter(Boolean);
+  return (
+    <ConnectedAppButton
+      canvas={canvas}
+      label={`GitHub · ${name}`}
+      icon={<SiGithub size={12} color="#24292F" />}
+      title={tipParts.join(" · ") || "Manage GitHub sync"}
+      onConnect={onConnect}
+      trailing={
+        <span
+          className={`h-[8px] w-[8px] shrink-0 rounded-full ${gitSyncDotClass(tone)}`}
+          aria-label={tone}
+          title={tone}
+        />
+      }
+    />
   );
 }

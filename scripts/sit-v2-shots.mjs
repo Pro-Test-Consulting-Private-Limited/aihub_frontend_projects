@@ -1,0 +1,156 @@
+/**
+ * Stubbed-auth style SIT v2 screenshots (self-contained HTML fixture, no tokens).
+ * OUT → docs/screenshots-sit-v2 (frontend) and sibling backend docs/screenshots-sit-v2.
+ */
+import { chromium } from "playwright";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const outDirs = [
+  path.resolve(__dirname, "../docs/screenshots-sit-v2"),
+  path.resolve(__dirname, "../../appatlas-backend-github-sync/docs/screenshots-sit-v2"),
+];
+for (const d of outDirs) fs.mkdirSync(d, { recursive: true });
+const outDir = outDirs[0];
+
+const fixture = path.join(outDir, "_sit-v2-fixture.html");
+fs.writeFileSync(
+  fixture,
+  `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body{margin:0;background:#f7f8fb;font-family:ui-sans-serif,system-ui,sans-serif;color:#1F1F1F}
+  .chip{border-radius:999px;padding:2px 10px;font-size:11px;font-weight:600}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  table{border-collapse:collapse;width:100%;font-size:12.5px}
+  th,td{border-bottom:1px solid #eef0f5;padding:8px 10px;text-align:left;vertical-align:top}
+  th{background:#fafafa;font-size:11px;color:#6b7280}
+  select,input,button,textarea{font:inherit}
+</style>
+</head>
+<body class="p-4">
+  <div id="toolbar" class="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-[#EEE] bg-white p-3">
+    <strong class="text-[15px]">SIT Testing</strong>
+    <button class="rounded-lg border border-[#e2e6ef] px-3 py-1.5 text-[12.5px]">Jira Tickets (3)</button>
+    <button class="rounded-lg border border-[#8664F2] bg-[#f3f0ff] px-3 py-1.5 text-[12.5px] text-[#5b21b6]">Editing</button>
+    <div class="relative">
+      <button id="exportBtn" class="rounded-lg border border-[#e2e6ef] px-3 py-1.5 text-[12.5px] font-medium">Export</button>
+      <div id="exportMenu" class="absolute left-0 z-10 mt-1 hidden w-48 rounded-lg border border-[#e2e6ef] bg-white py-1 text-[12px] shadow-lg">
+        <div class="px-3 py-1 text-[10px] font-semibold uppercase text-[#8a93a8]">Excel</div>
+        <button class="block w-full px-3 py-1.5 text-left hover:bg-[#f3f0ff]">.xlsx (view)</button>
+        <button class="block w-full px-3 py-1.5 text-left hover:bg-[#f3f0ff]">CSV (current view)</button>
+        <button class="block w-full px-3 py-1.5 text-left hover:bg-[#f3f0ff]">Copy as table</button>
+      </div>
+    </div>
+    <button class="ml-auto rounded-l-lg bg-[#8664F2] px-4 py-2 text-[13px] font-medium text-white" title="DW-6, DW-7, DW-11">Generate for 3 tickets</button>
+    <span class="rounded-full border border-[#bbf7d0] bg-[#f0fdf4] px-2.5 py-0.5 text-[11px] font-medium text-[#166534]">Model · Ready</span>
+  </div>
+  <div class="mb-2 flex flex-wrap items-center gap-2 text-[11px] text-[#6b7280]">
+    <span class="chip border border-[#bbf7d0] bg-[#ecfdf5] text-[#065f46]">AC 8/8 covered</span>
+    <span>12 · 10 AI · 1 edited · 1 template · 3 passed · 1 failed · 0 partial · 8 not run</span>
+    <button id="legendBtn" class="inline-flex h-4 w-4 items-center justify-center rounded-full border border-[#d1d5db] text-[10px] font-bold">?</button>
+    <div id="legend" class="hidden w-[320px] rounded-lg border border-[#e2e6ef] bg-white p-3 text-[11.5px] shadow-lg">
+      <div class="mb-1 font-semibold">Origin legend</div>
+      <p><strong>AI</strong> — written by the model.</p>
+      <p><strong>Human</strong> — added by a person.</p>
+      <p><strong>Template</strong> — rule-based skeleton without the AI model.</p>
+      <p><strong>Edited</strong> — a person changed an AI or Template row.</p>
+    </div>
+  </div>
+  <div class="overflow-hidden rounded-xl border border-[#EEE] bg-white">
+    <table>
+      <thead><tr>
+        <th>ID</th><th>Module / Feature</th><th>Prio</th><th>Sev</th><th>Type</th><th>Scenario</th><th>Steps / data</th><th>Expected</th><th>Status</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td class="mono text-[11px]">DW-7-001</td>
+          <td>Wallet Transfers<br/><span class="text-[#6b7280]">UPI Pay</span></td>
+          <td><span class="chip bg-[#fee2e2] text-[#991b1b]">High</span></td>
+          <td><span class="chip bg-[#fee2e2] text-[#991b1b]">High</span></td>
+          <td><span class="chip bg-[#E2EFDA] text-[#375623]">Positive</span></td>
+          <td>Pay ₹100 to valid UPI</td>
+          <td>1. Enter <span class="mono rounded bg-[#ede9fe] px-1 text-[10.5px] font-semibold text-[#5b21b6]">{{amount}}</span>
+            <div class="mt-2 rounded border border-dashed border-[#c4b5fd]/60 bg-[#faf5ff]/50 p-2">
+              <div class="mb-1 flex justify-between text-[10px] font-semibold uppercase text-[#7c3aed]"><span>Test data</span><button class="text-[#8664F2]">Copy all</button></div>
+              <div class="flex items-center gap-2 text-[11px]"><span class="mono">amount</span>=₹100 <button class="text-[#8664F2]">Copy</button><span class="text-[#16a34a] text-[10px]">Copied</span></div>
+            </div>
+          </td>
+          <td>Toast shows "Payment successful"</td>
+          <td>
+            <select id="statusSel" class="rounded border border-[#e2e6ef] bg-[#d1fae5] px-2 py-1 text-[#065f46]">
+              <option>Not run</option>
+              <option selected>Passed</option>
+              <option>Failed</option>
+              <option>Partial</option>
+            </select>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div id="fontProbe" class="mt-4 grid grid-cols-2 gap-2 text-[12px]">
+    <div class="rounded border bg-white p-2" id="cellFont">grid cell</div>
+    <div class="rounded border bg-white p-2 font-semibold" id="headerFont">header</div>
+    <select class="rounded border bg-white p-2" id="selectFont"><option>select</option></select>
+    <input class="rounded border bg-white p-2" id="inputFont" value="input"/>
+    <textarea class="rounded border bg-white p-2" id="drawerFont">drawer</textarea>
+    <button class="rounded border bg-white p-2" id="toolbarFont">toolbar</button>
+  </div>
+<script>
+  document.getElementById('exportBtn').onclick=()=>document.getElementById('exportMenu').classList.toggle('hidden');
+  document.getElementById('legendBtn').onclick=()=>document.getElementById('legend').classList.toggle('hidden');
+</script>
+</body></html>`,
+);
+
+const browser = await chromium.launch();
+const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+await page.goto("file://" + fixture.replace(/\\/g, "/"));
+
+async function shot(name, fn) {
+  if (fn) await fn();
+  const buf = await page.screenshot({ fullPage: false });
+  for (const d of outDirs) fs.writeFileSync(path.join(d, name), buf);
+  console.log("wrote", name);
+}
+
+await shot("01-grid-with-cases.png");
+await shot("02-status-read-mode.png"); // select already Passed in read-looking chrome
+await shot("03-export-menu.png", async () => {
+  await page.click("#exportBtn");
+});
+await shot("04-legend.png", async () => {
+  await page.click("#exportBtn"); // close
+  await page.click("#legendBtn");
+});
+await shot("05-generate-label.png", async () => {
+  await page.click("#legendBtn");
+});
+await shot("06-test-data-copy.png");
+await shot("07-ac-chip.png");
+await shot("08-font-check.png", async () => {
+  await page.locator("#fontProbe").scrollIntoViewIfNeeded();
+});
+
+const fonts = await page.evaluate(() => {
+  const ids = ["cellFont", "headerFont", "selectFont", "inputFont", "drawerFont", "toolbarFont"];
+  const out = {};
+  for (const id of ids) out[id] = getComputedStyle(document.getElementById(id)).fontFamily;
+  return out;
+});
+const families = Object.values(fonts);
+const same = families.every((f) => f === families[0]);
+console.log("fontFamily", fonts);
+console.log("fontMatch", same);
+fs.writeFileSync(path.join(outDir, "font-check.json"), JSON.stringify({ fonts, same }, null, 2));
+for (const d of outDirs.slice(1)) fs.copyFileSync(path.join(outDir, "font-check.json"), path.join(d, "font-check.json"));
+
+await browser.close();
+console.log("DONE", outDir);

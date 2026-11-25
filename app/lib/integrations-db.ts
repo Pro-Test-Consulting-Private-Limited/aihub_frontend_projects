@@ -1,7 +1,7 @@
 import { pool } from "@/app/lib/db";
 import type { VerifiedUser } from "@/app/lib/auth-server";
 
-export type IntegrationProvider = "jira" | "github" | "swagger";
+export type IntegrationProvider = "jira" | "github" | "swagger" | "teams";
 
 export type UserIntegrationRow = {
   provider: IntegrationProvider;

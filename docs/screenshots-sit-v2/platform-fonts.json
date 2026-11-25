@@ -1,0 +1,150 @@
+{
+  "expectFamily": "DM Sans",
+  "table": {
+    "toolbarBtn": {
+      "primary": "DM Sans 9pt",
+      "fonts": [
+        {
+          "family": "DM Sans 9pt",
+          "isCustom": true,
+          "glyphCount": 12
+        }
+      ],
+      "ok": true,
+      "expectFamily": "DM Sans"
+    },
+    "tab": {
+      "primary": "DM Sans 9pt",
+      "fonts": [
+        {
+          "family": "DM Sans 9pt",
+          "isCustom": true,
+          "glyphCount": 11
+        }
+      ],
+      "ok": true,
+      "expectFamily": "DM Sans"
+    },
+    "filterCtrl": {
+      "primary": "DM Sans 9pt",
+      "fonts": [
+        {
+          "family": "DM Sans 9pt",
+          "isCustom": true,
+          "glyphCount": 5
+        },
+        {
+          "family": "Cambria Math",
+          "isCustom": false,
+          "glyphCount": 1
+        }
+      ],
+      "ok": true,
+      "expectFamily": "DM Sans"
+    },
+    "headerCell": {
+      "primary": "DM Sans 9pt",
+      "fonts": [
+        {
+          "family": "DM Sans 9pt",
+          "isCustom": true,
+          "glyphCount": 8
+        }
+      ],
+      "ok": true,
+      "expectFamily": "DM Sans"
+    },
+    "bodyCell": {
+      "primary": "DM Sans 9pt",
+      "fonts": [
+        {
+          "family": "DM Sans 9pt",
+          "isCustom": true,
+          "glyphCount": 45
+        }
+      ],
+      "ok": true,
+      "expectFamily": "DM Sans"
+    },
+    "cellEditor": {
+      "primary": "DM Sans 9pt",
+      "fonts": [
+        {
+          "family": "DM Sans 9pt",
+          "isCustom": true,
+          "glyphCount": 29
+        }
+      ],
+      "ok": true,
+      "expectFamily": "DM Sans"
+    },
+    "dropdownTrigger": {
+      "primary": "DM Sans 9pt",
+      "fonts": [
+        {
+          "family": "DM Sans 9pt",
+          "isCustom": true,
+          "glyphCount": 7
+        },
+        {
+          "family": "Cambria Math",
+          "isCustom": false,
+          "glyphCount": 1
+        }
+      ],
+      "ok": true,
+      "expectFamily": "DM Sans"
+    },
+    "popoverItem": {
+      "primary": "DM Sans 9pt",
+      "fonts": [
+        {
+          "family": "DM Sans 9pt",
+          "isCustom": true,
+          "glyphCount": 8
+        }
+      ],
+      "ok": true,
+      "expectFamily": "DM Sans"
+    },
+    "expandPanel": {
+      "primary": "DM Sans 9pt",
+      "fonts": [
+        {
+          "family": "DM Sans 9pt",
+          "isCustom": true,
+          "glyphCount": 55
+        }
+      ],
+      "ok": true,
+      "expectFamily": "DM Sans"
+    },
+    "prioChip": {
+      "primary": "DM Sans 9pt",
+      "fonts": [
+        {
+          "family": "DM Sans 9pt",
+          "isCustom": true,
+          "glyphCount": 13
+        }
+      ],
+      "ok": true,
+      "expectFamily": "DM Sans"
+    },
+    "countsChip": {
+      "primary": "DM Sans 9pt",
+      "fonts": [
+        {
+          "family": "DM Sans 9pt",
+          "isCustom": true,
+          "glyphCount": 5
+        }
+      ],
+      "ok": true,
+      "expectFamily": "DM Sans"
+    }
+  },
+  "allOk": true,
+  "method": "CDP CSS.getPlatformFontsForNode",
+  "note": "Native <select> deliberately absent; harness uses same DM Sans woff2 as app/config/fonts."
+}

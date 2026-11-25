@@ -12,6 +12,26 @@ export const BASE_URL_VERSION = process.env.NEXT_PUBLIC_API_BASE_URL_VERSION!;
 export const CLARIFY_API_BASE =
   siteOrigin() || process.env.NEXT_PUBLIC_CLARIFY_API_BASE_URL || "http://localhost:4000";
 
+/**
+ * API Test Scenario Agent (Swagger quality + contract/data/functional runs on App Atlas).
+ * On AI Hub sites: same-origin `/api-agent` (nginx → VM container). Local: localhost:4500.
+ * NEXT_PUBLIC_API_AGENT_BASE_URL overrides when set (build env).
+ */
+export const API_AGENT_BASE = (
+  process.env.NEXT_PUBLIC_API_AGENT_BASE_URL ||
+  (siteOrigin() ? `${siteOrigin()}/api-agent` : "http://localhost:4500")
+).replace(/\/$/, "");
+
+/**
+ * Security Test Agent (credential stuffing + guided checks on the App Atlas Security tab).
+ * On AI Hub sites: same-origin `/security-agent` (nginx → VM container). Local: localhost:4600.
+ * NEXT_PUBLIC_SECURITY_AGENT_BASE_URL overrides when set (build env).
+ */
+export const SECURITY_AGENT_BASE = (
+  process.env.NEXT_PUBLIC_SECURITY_AGENT_BASE_URL ||
+  (siteOrigin() ? `${siteOrigin()}/security-agent` : "http://localhost:4600")
+).replace(/\/$/, "");
+
 export const ACTION_DRIVEN_TEST_CASE_GENERATOR_SITE = `${
   siteOrigin() || "https://ai-hub.protestcorp.com"
 }/vnc_lite.html`;

@@ -40,14 +40,14 @@ const NavLinks = ({ list, collapsed = false, onExpand }: NavProps) => {
     return (
       <Image
         src={icon}
-        className="w-[18px] dark:invert-0"
+        className={`w-[18px] ${isActive ? "" : "dark:invert"}`}
         style={
           isActive
             ? {
                 filter:
                   "brightness(0) saturate(100%) invert(44%) sepia(12%) saturate(2326%) hue-rotate(205deg) brightness(91%) contrast(91%)",
               }
-            : {}
+            : undefined
         }
         alt="nav-icon"
       />
@@ -72,16 +72,16 @@ const NavLinks = ({ list, collapsed = false, onExpand }: NavProps) => {
                 setExpanded(link.href);
               } else setExpanded(isExpanded ? "" : link.href);
             }}
-            className={`w-[45px] ${collapsed ? "" : "md:w-[260px]"} relative rounded-md font-[500] p-2 px-3 text-[15.5px] cursor-pointer ${
+            className={`relative w-full max-w-full overflow-hidden rounded-md p-2 px-3 text-[15.5px] font-[500] cursor-pointer ${
               pathname === link.href
                 ? "text-[#8664F2] bg-[#FBF8FF] dark:bg-[#2a2440]"
                 : "text-[#333333] dark:text-[#ededed] bg-[#fff] dark:bg-transparent"
             } ${isExpanded ? "mb-[0px]" : "mb-[10px]"}`}
           >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                {renderImage(link.icon, link.href)}
-                <p className={`font-[500] whitespace-nowrap ${wideOnly}`}>{link.name}</p>
+            <div className="flex min-w-0 items-center justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="shrink-0">{renderImage(link.icon, link.href)}</span>
+                <p className={`min-w-0 truncate font-[500] ${wideOnly}`}>{link.name}</p>
               </div>
               {link.items.length > 0 && (
                 <motion.div
@@ -115,7 +115,7 @@ const NavLinks = ({ list, collapsed = false, onExpand }: NavProps) => {
                     >
                       <div
                         key={index}
-                        className={`flex justify-between h-[40px] w-[260px] items-center rounded-md pl-[25px] text-[15.5px] cursor-pointer ${
+                        className={`flex h-[40px] w-full max-w-full items-center justify-between overflow-hidden rounded-md pl-[25px] text-[15.5px] cursor-pointer ${
                           pathname === sub.href
                             ? "text-[#8664F2] bg-[#FBF8FF] dark:bg-[#2a2440]"
                             : "text-[#333333] dark:text-[#ededed] bg-[#fff] dark:bg-transparent"
@@ -125,7 +125,7 @@ const NavLinks = ({ list, collapsed = false, onExpand }: NavProps) => {
                           router.push(sub.href);
                         }}
                       >
-                        <p className="font-[500]">{sub.name}</p>
+                        <p className="truncate font-[500]">{sub.name}</p>
                       </div>
                     </div>
                   ))}

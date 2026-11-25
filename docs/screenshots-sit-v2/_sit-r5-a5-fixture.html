@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>R5 A5 grid readability fixture</title>
+<style>
+  body { margin: 0; font-family: system-ui, sans-serif; background: #f7f8fb; }
+  .toolbar { padding: 12px 16px; background: #fff; border-bottom: 1px solid #eee; font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; background: #fff; }
+  th, td { border: 1px solid #e5e7eb; padding: 8px; vertical-align: top; font-size: 12px; }
+  th { background: #fafafa; text-align: left; }
+  .col-id { width: 90px; }
+  .col-type { width: 100px; }
+  .col-scenario { width: 22%; }
+  .col-status { width: 90px; }
+  .chip { display: inline-block; border-radius: 999px; padding: 1px 8px; font-size: 10px; font-weight: 600; background: #ecfdf5; color: #065f46; }
+  .thin { background: #fff7ed; color: #9a3412; }
+  .pill { display: inline-flex; white-space: nowrap; border-radius: 999px; padding: 2px 8px; font-size: 10px; font-weight: 600; margin: 2px; }
+  .p-med { background: #fef3c7; color: #92400e; }
+  .s-high { background: #fee2e2; color: #991b1b; }
+  ul { margin: 0; padding-left: 16px; }
+  .token { display: inline-flex; border: 1px solid #c4b5fd; background: #f5f3ff; color: #5b21b6; border-radius: 4px; padding: 0 4px; font-family: ui-monospace, monospace; font-size: 10.5px; margin: 0 2px; }
+  .more { color: #8664F2; font-weight: 600; margin-top: 4px; display: inline-block; }
+  .typechip { display: inline-block; background: #f5f3ff; color: #5b21b6; border-radius: 4px; padding: 0 6px; font-size: 10px; font-weight: 600; margin-right: 6px; }
+</style>
+</head>
+<body>
+  <div class="toolbar">SIT Testing · A5 readability · AC 6/8 covered · Quality: 4 flagged</div>
+  <table>
+    <thead>
+      <tr>
+        <th class="col-id">ID</th>
+        <th class="col-type">Type</th>
+        <th class="col-scenario">Scenario</th>
+        <th>Preconditions</th>
+        <th>Steps</th>
+        <th>Expected</th>
+        <th>P / S</th>
+        <th class="col-status">Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="col-id">DW-11-08</td>
+        <td><span class="chip">Positive</span></td>
+        <td><span class="typechip">Positive</span>Send money with valid registered mobile</td>
+        <td>
+          <ul>
+            <li>Send-money page (/send-money) is open at https://example.test/send-money in a desktop browser</li>
+            <li>User is signed in with a valid session</li>
+            <li>Value for <span class="token" title="Filled from Test data">unregisteredMobile</span> is prepared for this case</li>
+          </ul>
+        </td>
+        <td>
+          <ul>
+            <li>1. Type mobile into Recipient field</li>
+            <li>2. Enter amount 100</li>
+            <li>3. Click Continue</li>
+            <li>4. Confirm transfer</li>
+          </ul>
+          <span class="more">Show more</span>
+          <!-- 5th step hidden: 5. Verify receipt number -->
+        </td>
+        <td>
+          <ul>
+            <li>Confirmation shows success</li>
+            <li>Balance updates</li>
+            <li>Receipt id visible</li>
+          </ul>
+        </td>
+        <td><span class="pill p-med">P Med</span><span class="pill s-high">S High</span></td>
+        <td>Not run</td>
+      </tr>
+      <tr>
+        <td>DW-11-09</td>
+        <td><span class="chip thin" title="Thin , below detail thresholds (fewer than 4 steps, 3 preconditions, or 2 expected bullets)">Thin</span></td>
+        <td><span class="typechip">Negative</span>Reject invalid amount</td>
+        <td>
+          <ul>
+            <li>Send-money page open</li>
+            <li>User signed in</li>
+            <li>Environment matches Release</li>
+          </ul>
+        </td>
+        <td>
+          <ul>
+            <li>1. Enter amount 0</li>
+            <li>2. Click Continue</li>
+          </ul>
+        </td>
+        <td>
+          <ul>
+            <li>Error blocks the transfer</li>
+          </ul>
+        </td>
+        <td><span class="pill p-med">P Med</span><span class="pill p-med">S Med</span></td>
+        <td>Not run</td>
+      </tr>
+    </tbody>
+  </table>
+</body>
+</html>

@@ -18,12 +18,15 @@ export const MetricsBaseBreadcrumbs = [
   { label: "Projects : Pro Test", href: "/projects", active: false },
 ];
 
+/** Quick chips only. Long ranges (e.g. 15 months) belong under Custom. */
 export const MetricsTimeFilters = [
-  { label: "1h", value: "1h", seconds: 3600 },
-  { label: "3h", value: "3h", seconds: 10800 },
-  { label: "12h", value: "12h", seconds: 43200 },
-  { label: "1d", value: "1d", seconds: 86400 },
-  { label: "1w", value: "1w", seconds: 604800 },
-  { label: "15m", value: "15m", seconds: 38880000 },
+  { label: "1 hr", value: "1h", seconds: 3600 },
+  { label: "3 hr", value: "3h", seconds: 10800 },
+  { label: "12 hr", value: "12h", seconds: 43200 },
+  { label: "1 day", value: "1d", seconds: 86400 },
+  { label: "1 wk", value: "1w", seconds: 604800 },
   { label: "Custom", value: "custom" },
 ];
+
+/** Poll metrics charts while the tab is visible. */
+export const METRICS_POLL_MS = 20_000;

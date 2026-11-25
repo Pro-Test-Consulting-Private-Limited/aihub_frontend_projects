@@ -3,7 +3,7 @@ import { TestDataItem, TestResultsItem } from "@/app/interfaces/project";
 import React, { useState } from "react";
 
 function cell(value: string | number | null | undefined) {
-  if (value === null || value === undefined || value === "") return "—";
+  if (value === null || value === undefined || value === "") return "-";
   return String(value);
 }
 

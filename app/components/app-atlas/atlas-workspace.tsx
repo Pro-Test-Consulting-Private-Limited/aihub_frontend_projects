@@ -1,20 +1,20 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMsal } from "@azure/msal-react";
 import {
   TbChartLine,
   TbChevronDown,
-  TbChevronRight,
   TbHistory,
   TbLayoutGrid,
   TbNetwork,
-  TbReportSearch,
   TbShieldCheck,
   TbBrandSpeedtest,
   TbWorld,
   TbListCheck,
+  TbLoader2,
 } from "react-icons/tb";
 import { useProjects } from "@/app/lib/projectsStore";
 import type { Canvas, CanvasSummary, PresenceUser, SessionSnapshot } from "@/app/interfaces/appatlas";
@@ -24,18 +24,60 @@ import { Explorer } from "./explorer";
 import { ConnectAppsModal } from "./connect-apps-modal";
 import { JiraPanel } from "./jira-panel";
 import { SaveExecutionModal } from "./save-execution-modal";
+import { SessionSetupModal } from "./session-setup-modal";
 import { RecordingView } from "./recording-view";
+import { ReplayPlayer } from "./replay-player";
+import { PhaseCToolsModal } from "./phase-c-tools";
+import {
+  emulationBodyFromPrefs,
+  loadEmulationPrefs,
+  type SessionEmulationPrefs,
+} from "@/app/lib/session-emulation";
+import { useApiSpec, useApiSpecView } from "@/app/hooks/use-api-spec";
+import { clearCanvasSwagger, getCanvasSwagger, setCanvasSwagger, type CanvasSwagger } from "@/app/lib/canvas-swagger";
+import { isLocalAuthBypassEnabled } from "@/app/lib/auth-bypass";
+import { isSitUiV2Enabled } from "@/app/lib/sit-ui-v2";
+import { UserProfileMenu } from "@/app/components/user-profile-menu";
+import { fetchGraphProfilePhotoDataUrl, msalSelfKeys } from "@/app/lib/auth-client";
 
-const TABS = [
+const tabFallback = (
+  <div className="flex h-full items-center justify-center gap-2 text-[13px] text-[#7E7E7E]">
+    <TbLoader2 className="animate-spin" size={16} /> Loading…
+  </div>
+);
+
+const ApiTestingView = dynamic(() => import("./api-testing-view").then((m) => m.ApiTestingView), {
+  ssr: false,
+  loading: () => tabFallback,
+});
+const SitTestingView = dynamic(() => import("./sit-testing-view").then((m) => m.SitTestingView), {
+  ssr: false,
+  loading: () => tabFallback,
+});
+const SitTestingViewV2 = dynamic(() => import("./sit-v2/sit-v2-view").then((m) => m.SitTestingViewV2), {
+  ssr: false,
+  loading: () => tabFallback,
+});
+const SecurityOverview = dynamic(() => import("./security-overview").then((m) => m.SecurityOverview), {
+  ssr: false,
+  loading: () => tabFallback,
+});
+const PerformanceView = dynamic(() => import("./performance-view").then((m) => m.PerformanceView), {
+  ssr: false,
+  loading: () => tabFallback,
+});
+
+/** CI/CD, Coverage, and Reports stay "coming soon" on prod — not promoted from dev. */
+const BASE_TABS = [
   { id: "canvas", label: "Canvas", icon: TbLayoutGrid },
   { id: "api", label: "API Testing", icon: TbNetwork },
-  { id: "sit", label: "SIT", icon: TbListCheck },
+  { id: "sit", label: "SIT Testing", icon: TbListCheck },
   { id: "coverage", label: "Coverage", icon: TbChartLine },
   { id: "security", label: "Security", icon: TbShieldCheck },
   { id: "performance", label: "Performance", icon: TbBrandSpeedtest },
 ] as const;
 
-type TabId = (typeof TABS)[number]["id"];
+type TabId = (typeof BASE_TABS)[number]["id"];
 
 const hostOf = (url: string) => {
   try {
@@ -64,6 +106,8 @@ const AVATAR_COLORS = ["bg-[#3B82F6]", "bg-[#22C55E]", "bg-[#8664F2]", "bg-[#E19
 export default function AtlasWorkspace() {
   const { instance, accounts } = useMsal();
   const client = useMemo(() => atlasClient({ instance, accounts }), [instance, accounts]);
+  /** Resolve once per mount (not inline in JSX) so minifiers cannot negate an IIFE flag check. */
+  const sitUiV2 = useMemo(() => isSitUiV2Enabled(), []);
   const router = useRouter();
   const searchParams = useSearchParams();
   const { projects, loading: projectsLoading } = useProjects();
@@ -89,10 +133,112 @@ export default function AtlasWorkspace() {
   const [unsaved, setUnsaved] = useState<SessionSnapshot | null>(null);
   const [saveOpen, setSaveOpen] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [setupOpen, setSetupOpen] = useState(false);
+  const [setupUrl, setSetupUrl] = useState<string | null>(null);
+  const [replayOpen, setReplayOpen] = useState(false);
 
   const [focusNodeId, setFocusNodeId] = useState<string | null>(null);
   const [panelNodeId, setPanelNodeId] = useState<string | null>(null);
   const [connectFor, setConnectFor] = useState<CanvasSummary | null>(null);
+  const [phaseCOpen, setPhaseCOpen] = useState(false);
+  const [phaseCFlags, setPhaseCFlags] = useState({
+    visualDiff: false,
+    responsiveSheet: false,
+    shareExport: false,
+  });
+  const [changedNodeIds, setChangedNodeIds] = useState<string[]>([]);
+  const [changedSinceRelease, setChangedSinceRelease] = useState<string | null>(null);
+
+  // Swagger is connected per canvas and is independent of Jira (canvas.jiraProjectKey).
+  const [swagger, setSwagger] = useState<CanvasSwagger | null>(null);
+  const [gitConnected, setGitConnected] = useState(false);
+  const [gitCard, setGitCard] = useState<{
+    repo: string | null;
+    branch: string | null;
+    lastStatus: string | null;
+    lastSyncedAt: number | null;
+    lastError: string | null;
+    dirty: boolean;
+    syncing: boolean;
+    masterOff: boolean;
+  } | null>(null);
+  const [view, setView] = useState<"screens" | "api" | "sit">("screens");
+  const apiSpec = useApiSpec(swagger?.specUrl ?? null);
+  const apiSpecView = useApiSpecView(apiSpec);
+
+  const TABS = BASE_TABS;
+
+  useEffect(() => {
+    setSwagger(selectedId ? getCanvasSwagger(selectedId) : null);
+    setView("screens");
+    setChangedNodeIds([]);
+    setChangedSinceRelease(null);
+  }, [selectedId]);
+
+  const refreshGitStatus = useCallback(
+    (canvasId: string | null) => {
+      if (!canvasId) {
+        setGitConnected(false);
+        setGitCard(null);
+        return;
+      }
+      void Promise.all([
+        client.getCanvasGit(canvasId),
+        client.gitSyncAvailability().catch(() => ({ available: true as boolean })),
+      ])
+        .then(([st, avail]) => {
+          const masterOff = avail.available === false;
+          setGitConnected(Boolean(st.connected));
+          setGitCard({
+            repo: st.repo,
+            branch: st.branch,
+            lastStatus: st.lastStatus,
+            lastSyncedAt: st.lastSyncedAt,
+            lastError: st.lastError,
+            dirty: Boolean(st.dirty),
+            syncing: Boolean(st.syncing),
+            masterOff,
+          });
+        })
+        .catch(() => {
+          setGitConnected(false);
+          setGitCard(null);
+        });
+    },
+    [client],
+  );
+
+  useEffect(() => {
+    refreshGitStatus(selectedId);
+  }, [selectedId, refreshGitStatus]);
+
+  useEffect(() => {
+    const pid = project?.id || projectId;
+    if (!pid) return;
+    let cancelled = false;
+    void client
+      .getProjectFeatures(pid)
+      .then((r) => {
+        if (cancelled) return;
+        setPhaseCFlags({
+          visualDiff: Boolean(r.features.visualDiff),
+          responsiveSheet: Boolean(r.features.responsiveSheet),
+          shareExport: Boolean(r.features.shareExport),
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [client, project?.id, projectId]);
+
+  const onSwaggerChange = (conn: CanvasSwagger | null) => {
+    if (connectFor?.id === selectedId) {
+      setSwagger(conn);
+      setView(conn ? "api" : "screens");
+    }
+    setConnectFor(null);
+  };
 
   const clarifying = canvas?.clarifications?.some((c) => c.status === "queued" || c.status === "running") ?? false;
   const canvasId = canvas?.id;
@@ -129,9 +275,10 @@ export default function AtlasWorkspace() {
     }
   }, [client]);
 
+  const bypass = isLocalAuthBypassEnabled();
   useEffect(() => {
-    if (accounts.length) loadCanvases();
-  }, [accounts.length, loadCanvases]);
+    if (accounts.length || bypass) loadCanvases();
+  }, [accounts.length, bypass, loadCanvases]);
 
   const visible = useMemo(
     () => canvases.filter((c) => (!host || hostOf(c.startUrl) === host) && (!mineOnly || c.isMine)),
@@ -139,14 +286,34 @@ export default function AtlasWorkspace() {
   );
 
   const [online, setOnline] = useState<PresenceUser[]>([]);
+  const [myPresencePhoto, setMyPresencePhoto] = useState<string | null>(null);
   const presenceRoom = project ? `app-atlas:${project.id}` : null;
+
+  // Publish our own Graph face on presence so peers (e.g. BD seeing MS) get a photo, not just initials.
+  useEffect(() => {
+    let cancelled = false;
+    if (!accounts.length) {
+      setMyPresencePhoto(null);
+      return;
+    }
+    void fetchGraphProfilePhotoDataUrl(instance, accounts)
+      .then((url) => {
+        if (!cancelled) setMyPresencePhoto(url);
+      })
+      .catch(() => {
+        if (!cancelled) setMyPresencePhoto(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [instance, accounts, accounts[0]?.homeAccountId, accounts[0]?.localAccountId]);
 
   useEffect(() => {
     if (!presenceRoom || !accounts.length) return;
     let stopped = false;
     const beat = () =>
       client
-        .presence(presenceRoom)
+        .presence(presenceRoom, false, myPresencePhoto)
         .then((r) => !stopped && setOnline(r.users))
         .catch(() => {});
     beat();
@@ -157,7 +324,7 @@ export default function AtlasWorkspace() {
       setOnline([]);
       client.presence(presenceRoom, true).catch(() => {});
     };
-  }, [presenceRoom, accounts.length, client]);
+  }, [presenceRoom, accounts.length, client, myPresencePhoto]);
 
   const selectCanvas = useCallback(
     async (id: string | null) => {
@@ -168,7 +335,19 @@ export default function AtlasWorkspace() {
       if (canvas?.id === id) return;
       setCanvas(null);
       try {
-        setCanvas(await client.getCanvas(id));
+        const full = await client.getCanvas(id);
+        setCanvas(full);
+        // Hydrate browser mirror from App Atlas swagger binding.
+        if (full.swagger?.specUrl) {
+          const conn = setCanvasSwagger(id, {
+            specUrl: full.swagger.specUrl,
+            title: full.swagger.title,
+            connectedAt: full.swagger.connectedAt,
+            swaggerKey: full.swagger.swaggerKey,
+            specHash: full.swagger.specHash,
+          });
+          setSwagger(conn);
+        }
       } catch (err) {
         if (err instanceof AtlasError && err.status === 404) {
           setNotice("That canvas was deleted.");
@@ -182,6 +361,23 @@ export default function AtlasWorkspace() {
     [canvas?.id, client, loadCanvases],
   );
 
+  // Jira panel needs full issue text; upgrade from lite GET when a node is opened.
+  useEffect(() => {
+    if (!panelNodeId || !selectedId) return;
+    let cancelled = false;
+    void client
+      .getCanvas(selectedId, { view: "full" })
+      .then((full) => {
+        if (!cancelled) setCanvas(full);
+      })
+      .catch(() => {
+        /* keep lite canvas */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [panelNodeId, selectedId, client]);
+
   // Switching app clears a selection that belongs to another app.
   useEffect(() => {
     if (selectedId && !visible.some((c) => c.id === selectedId)) {
@@ -191,6 +387,7 @@ export default function AtlasWorkspace() {
   }, [visible, selectedId]);
 
   const startRecording = (snap: SessionSnapshot) => {
+    setExplorerOpen(false);
     localStorage.setItem(ACTIVE_SESSION_KEY, snap.id);
     setUnsaved(null);
     setRecording(snap);
@@ -198,8 +395,9 @@ export default function AtlasWorkspace() {
   };
 
   // A reload mid-recording reattaches to the running session, or offers to save it if it already stopped.
+  // Local AUTH_BYPASS has no MSAL accounts  -  still resume so Phase B harness / localhost can reattach.
   useEffect(() => {
-    if (!accounts.length) return;
+    if (!accounts.length && !bypass) return;
     const id = localStorage.getItem(ACTIVE_SESSION_KEY);
     if (!id) return;
     let cancelled = false;
@@ -210,6 +408,7 @@ export default function AtlasWorkspace() {
         if (LIVE_STATUSES.includes(snap.status)) {
           setRecording(snap);
           setTab("canvas");
+          setExplorerOpen(false);
         } else {
           localStorage.removeItem(ACTIVE_SESSION_KEY);
           if (snap.status !== "error" && snap.nodes.length) {
@@ -224,30 +423,54 @@ export default function AtlasWorkspace() {
     return () => {
       cancelled = true;
     };
-  }, [accounts.length, client]);
+  }, [accounts.length, bypass, client]);
 
-  const startSession = async () => {
-    if (!appUrl) return;
+  const openSessionSetup = (url?: string) => {
+    if (!(url || appUrl)) return;
+    setSetupUrl(url || appUrl);
+    setSetupOpen(true);
+  };
+
+  const startSessionWithPrefs = async (
+    prefs: SessionEmulationPrefs,
+    url = setupUrl || appUrl,
+    personaFields?: Parameters<typeof emulationBodyFromPrefs>[1],
+  ) => {
+    if (!url) return;
     setStarting(true);
     try {
       const viewer = localStorage.getItem(VIEWER_PREF_KEY) === "vnc" ? "vnc" : "auto";
-      startRecording(await client.startSession({ url: appUrl, devicePreset: "desktop", networkPreset: "none", viewer }));
+      startRecording(
+        await client.startSession({
+          url,
+          viewer,
+          projectId: project?.id || projectId || undefined,
+          ...emulationBodyFromPrefs(prefs, personaFields),
+          ...((personaFields as { savedLoginId?: string } | undefined)?.savedLoginId
+            ? { savedLoginId: String((personaFields as { savedLoginId?: string }).savedLoginId) }
+            : {}),
+        }),
+      );
+      setSetupOpen(false);
+      setSetupUrl(null);
     } catch (err) {
       setNotice(err instanceof Error ? err.message : "Could not start the browser.");
     } finally {
       setStarting(false);
     }
   };
-  const runQuick = () => void startSession();
+
+  const runQuick = () => openSessionSetup();
 
   const switchViewer = async (to: "vnc" | "auto") => {
     if (!recording) return;
     if (to === "vnc") localStorage.setItem(VIEWER_PREF_KEY, "vnc");
     else localStorage.removeItem(VIEWER_PREF_KEY);
+    const resumeUrl = recording.startUrl || appUrl;
     await client.discardSession(recording.id).catch(() => undefined);
     localStorage.removeItem(ACTIVE_SESSION_KEY);
     setRecording(null);
-    await startSession();
+    await startSessionWithPrefs(loadEmulationPrefs(), resumeUrl);
   };
 
   const onRecordingDone = useCallback((snap: SessionSnapshot) => {
@@ -267,7 +490,12 @@ export default function AtlasWorkspace() {
 
   const save = async (name: string, description: string) => {
     if (!unsaved) return;
-    const created = await client.saveCanvas({ sessionId: unsaved.id, name, description: description || undefined });
+    const created = await client.saveCanvas({
+      sessionId: unsaved.id,
+      name,
+      description: description || undefined,
+      projectId: project?.id || projectId || undefined,
+    });
     setSaveOpen(false);
     setUnsaved(null);
     setCanvases((prev) => [created, ...prev.filter((c) => c.id !== created.id)]);
@@ -291,6 +519,7 @@ export default function AtlasWorkspace() {
     if (!window.confirm(`Delete "${c.name}"? Its screenshots are deleted too. This can't be undone.`)) return;
     try {
       await client.deleteCanvas(c.id);
+      clearCanvasSwagger(c.id);
       setCanvases((prev) => prev.filter((x) => x.id !== c.id));
       if (selectedId === c.id) {
         setSelectedId(null);
@@ -302,25 +531,41 @@ export default function AtlasWorkspace() {
   };
 
   const canStart = !!appUrl && !recording && !starting;
-  const tabLabel = TABS.find((t) => t.id === tab)!.label;
+  const tabLabel = TABS.find((t) => t.id === tab)?.label ?? BASE_TABS.find((t) => t.id === tab)?.label ?? "App Atlas";
+  const apiSummary =
+    apiSpec.status === "ready" && apiSpec.data
+      ? `${apiSpecView.modules.length} Modules, ${apiSpec.data.endpoints.length} End-Points`
+      : apiSpec.status === "error"
+        ? "Unavailable"
+        : "Loading…";
 
   return (
     <div className="flex h-full flex-col bg-[#F7F7FA] dark:bg-[#0a0a0a]">
-      <div className="flex h-[56px] shrink-0 items-center justify-between border-b border-[#EEE] bg-white px-4 dark:border-[#1a1a1a] dark:bg-[#0a0a0a]">
-        <div className="flex min-w-0 items-center gap-4">
-          <div className="relative">
+      <div className="flex h-[56px] shrink-0 items-center justify-between gap-3 border-b border-[#EEE] bg-white px-4 dark:border-[#1a1a1a] dark:bg-[#0a0a0a]">
+        <div className="flex min-w-0 flex-1 items-center gap-4">
+          <div className="relative min-w-0 shrink">
             <button
               type="button"
               onClick={() => setProjectMenu((o) => !o)}
-              className="flex h-[34px] max-w-[340px] items-center gap-2 rounded-[8px] border border-[#E5E7EB] bg-[#F5F6F6] px-3 text-[13px] text-[#1F1F1F] dark:border-[#2a2a2a] dark:bg-[#141414] dark:text-[#ededed]"
-              title={appUrl || "No application URL"}
+              className="flex h-[34px] max-w-full items-center gap-2 rounded-[8px] border border-[#E5E7EB] bg-[#F5F6F6] px-3 text-[13px] text-[#1F1F1F] dark:border-[#2a2a2a] dark:bg-[#141414] dark:text-[#ededed]"
+              style={{ maxWidth: "min(720px, max(280px, 42vw))" }}
+              title={
+                project
+                  ? `${project.name}${appUrl ? ` · ${appUrl}` : ""}`
+                  : appUrl || "No application URL"
+              }
             >
-              <TbWorld size={15} className="shrink-0 text-[#5E6066]" />
-              <span className="truncate">
+              <TbWorld size={15} className="shrink-0 text-[#5E6066] dark:text-[#9ca3af]" />
+              <span className="flex min-w-0 items-baseline gap-1.5">
                 {project ? (
                   <>
-                    <span className="font-medium">{project.name}</span>
-                    {host && <span className="text-[#7E7E7E]"> · {host}</span>}
+                    {/* Name stays fully visible whenever the picker has room; host may shrink. */}
+                    <span className="shrink-0 font-medium whitespace-nowrap">{project.name}</span>
+                    {host && (
+                      <span className="min-w-0 truncate text-[#7E7E7E]" title={appUrl || host}>
+                        · {host}
+                      </span>
+                    )}
                   </>
                 ) : projectsLoading ? (
                   "Loading…"
@@ -328,10 +573,10 @@ export default function AtlasWorkspace() {
                   "No projects yet"
                 )}
               </span>
-              <TbChevronDown size={14} className="shrink-0 text-[#5E6066]" />
+              <TbChevronDown size={14} className="shrink-0 text-[#5E6066] dark:text-[#9ca3af]" />
             </button>
             {projectMenu && (
-              <div className="absolute top-10 left-0 z-40 w-[320px] rounded-[10px] border border-[#E6E1F5] bg-white py-1 shadow-lg dark:border-[#2a2a2a] dark:bg-[#141414]">
+              <div className="absolute top-10 left-0 z-40 w-[min(480px,90vw)] rounded-[10px] border border-[#E6E1F5] bg-white py-1 shadow-lg dark:border-[#2a2a2a] dark:bg-[#141414]">
                 {projects.length === 0 && <div className="px-3 py-2 text-[12px] text-[#7E7E7E]">No projects yet.</div>}
                 {projects.map((p) => (
                   <button
@@ -343,8 +588,8 @@ export default function AtlasWorkspace() {
                     }}
                     className={`block w-full px-3 py-2 text-left hover:bg-[#F9FAFC] dark:hover:bg-[#1a1a1a] ${p.id === project?.id ? "bg-[#F2EBFB] dark:bg-[#2a2440]" : ""}`}
                   >
-                    <div className="truncate text-[12.5px] font-medium text-[#1F1F1F] dark:text-[#ededed]">{p.name}</div>
-                    <div className="truncate text-[11px] text-[#7E7E7E]">{p.applicationUrl?.trim() || "No Application URL"}</div>
+                    <div className="break-words text-[12.5px] font-medium text-[#1F1F1F] dark:text-[#ededed]">{p.name}</div>
+                    <div className="break-all text-[11px] text-[#7E7E7E]">{p.applicationUrl?.trim() || "No Application URL"}</div>
                   </button>
                 ))}
                 <button
@@ -357,12 +602,17 @@ export default function AtlasWorkspace() {
               </div>
             )}
           </div>
-          <nav className="flex items-center gap-1">
+          <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
             {TABS.map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
                 type="button"
-                onClick={() => setTab(id)}
+                onClick={() => {
+                  setTab(id);
+                  if (id === "sit") setView("sit");
+                  else if (id === "api") setView("api");
+                  else if (id === "canvas") setView((v) => (v === "sit" || v === "api" ? "screens" : v));
+                }}
                 className={`flex h-[32px] items-center gap-1.5 rounded-[8px] px-3 text-[13px] ${
                   tab === id
                     ? "bg-[#F2EBFB] text-[#8664F2] dark:bg-[#2a2440]"
@@ -375,34 +625,66 @@ export default function AtlasWorkspace() {
             ))}
           </nav>
         </div>
-        <div className="flex shrink-0 items-center gap-4 text-[13px] text-[#1F1F1F] dark:text-[#ededed]">
-          <div className="h-[24px] w-px bg-[#E5E7EB] dark:bg-[#2a2a2a]" />
+        <div className="flex shrink-0 items-center gap-2 text-[13px] text-[#1F1F1F] dark:text-[#ededed]">
+          <div className="mx-1 h-[24px] w-px bg-[#E5E7EB] dark:bg-[#2a2a2a]" />
           <button
             type="button"
-            className={`flex items-center gap-1.5 hover:text-[#8664F2] ${mineOnly ? "text-[#8664F2]" : ""}`}
+            className={`inline-flex h-8 w-8 items-center justify-center rounded-full hover:bg-[#F4EFFE] hover:text-[#8664F2] ${mineOnly ? "bg-[#F4EFFE] text-[#8664F2]" : ""}`}
             onClick={() => setMineOnly((m) => !m)}
-            title={mineOnly ? "Showing only your canvases" : "Show only your canvases"}
+            title={mineOnly ? "Showing only your canvases — click for all" : "Show only your canvases"}
+            aria-label={mineOnly ? "My History on" : "History"}
+            aria-pressed={mineOnly}
           >
-            <TbHistory size={15} />
-            {mineOnly ? "My History" : "History"}
+            <TbHistory size={16} />
           </button>
-          <div className="flex -space-x-2" title={online.length ? `On this page now: ${online.map((u) => u.name || u.email).join(", ")}` : undefined}>
-            {online.slice(0, 3).map((u, i) => (
-              <span
-                key={u.id}
-                title={`${u.name || u.email}${u.email && u.name ? ` (${u.email})` : ""} · on this page now`}
-                className={`relative flex h-[28px] w-[28px] items-center justify-center rounded-full border-2 border-white text-[10px] font-semibold text-white dark:border-[#0a0a0a] ${AVATAR_COLORS[i % AVATAR_COLORS.length]}`}
+          {(() => {
+            // Presence User.id is Entra oid — match MSAL oid/localAccountId/email/name so you never appear twice.
+            const meIds = msalSelfKeys(instance.getActiveAccount() || accounts[0]);
+            const others = online.filter((u) => {
+              const id = (u.id || "").toLowerCase();
+              const email = (u.email || "").toLowerCase();
+              const name = (u.name || "").toLowerCase();
+              return !meIds.has(id) && !meIds.has(email) && !meIds.has(name);
+            });
+            const AVATAR = 32;
+            if (!others.length) return null;
+            return (
+              <div
+                className="flex items-center -space-x-2"
+                title={others.map((u) => u.name || "Someone").filter(Boolean).join(", ")}
               >
-                {initials(u.name || u.email)}
-                <span className="absolute -right-0.5 -bottom-0.5 h-[8px] w-[8px] rounded-full border-[1.5px] border-white bg-[#22C55E] dark:border-[#0a0a0a]" />
-              </span>
-            ))}
-            {online.length > 3 && (
-              <span className="flex h-[28px] w-[28px] items-center justify-center rounded-full border-2 border-white bg-[#E5E7EB] text-[10px] font-semibold text-[#4B5563] dark:border-[#0a0a0a]">
-                +{online.length - 3}
-              </span>
-            )}
-          </div>
+                {others.slice(0, 2).map((u, i) => (
+                  <span
+                    key={u.id}
+                    title={u.name || "On this page"}
+                    className={`relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-white text-[10px] font-semibold text-white dark:border-[#0a0a0a] ${u.photo ? "bg-[#E5E7EB]" : AVATAR_COLORS[i % AVATAR_COLORS.length]}`}
+                    style={{ width: AVATAR, height: AVATAR, minWidth: AVATAR, minHeight: AVATAR }}
+                  >
+                    {u.photo ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={u.photo} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      initials(u.name || "U")
+                    )}
+                    <span className="absolute -right-0.5 -bottom-0.5 h-[8px] w-[8px] rounded-full border-[1.5px] border-white bg-[#22C55E] dark:border-[#0a0a0a]" />
+                  </span>
+                ))}
+                {others.length > 2 ? (
+                  <span
+                    className="inline-flex shrink-0 items-center justify-center rounded-full border-2 border-white bg-[#E5E7EB] text-[10px] font-semibold text-[#4B5563] dark:border-[#0a0a0a]"
+                    style={{ width: AVATAR, height: AVATAR, minWidth: AVATAR, minHeight: AVATAR }}
+                    title={others
+                      .slice(2)
+                      .map((u) => u.name || "Someone")
+                      .join(", ")}
+                  >
+                    +{others.length - 2}
+                  </span>
+                ) : null}
+              </div>
+            );
+          })()}
+          <UserProfileMenu size={32} />
         </div>
       </div>
 
@@ -414,57 +696,129 @@ export default function AtlasWorkspace() {
       )}
 
       <div className="flex min-h-0 flex-1">
-        {tab === "canvas" && explorerOpen && (
+        {(tab === "canvas" || tab === "sit" || tab === "api") && !recording && (
           <Explorer
             canvases={visible}
             loading={canvasesLoading}
             selectedId={selectedId}
             canvas={canvas}
-            canSave={!!unsaved}
             canStart={canStart}
+            canReplay={Boolean(
+              canvas &&
+                (canvas.replay?.mp4Url ||
+                  canvas.replay?.gifUrl ||
+                  canvas.nodes.some(
+                    (n) => n.screenshotUrl || n.states.some((s) => s.screenshotUrl),
+                  )),
+            )}
             onSelect={(id) => selectCanvas(id === selectedId ? null : id)}
             onRename={rename}
             onDelete={remove}
             onNew={runQuick}
-            onRun={runQuick}
-            onSave={() => setSaveOpen(true)}
+            onReplay={() => {
+              setTab("canvas");
+              setView("screens");
+              setReplayOpen(true);
+            }}
             onCollapse={() => setExplorerOpen(false)}
+            onExpand={() => setExplorerOpen(true)}
+            collapsed={!explorerOpen}
             onFocusNode={setFocusNodeId}
-              onConnect={setConnectFor}
+            onConnect={setConnectFor}
+            swagger={swagger}
+            gitConnected={gitConnected}
+            gitCard={gitCard}
+            view={view}
+            apiSummary={apiSummary}
+            onView={(v) => {
+              setView(v);
+              if (v === "sit") setTab("sit");
+              else if (v === "api") setTab("api");
+              else setTab("canvas");
+            }}
           />
-        )}
-        {tab === "canvas" && !explorerOpen && (
-          <button
-            type="button"
-            onClick={() => setExplorerOpen(true)}
-            className="flex w-[28px] shrink-0 items-start justify-center border-r border-[#EEE] bg-white pt-3 text-[#5E6066] hover:text-[#8664F2] dark:border-[#1a1a1a] dark:bg-[#0a0a0a]"
-            title="Show explorer"
-          >
-            <TbChevronRight size={16} />
-          </button>
         )}
 
         <div className="relative min-w-0 flex-1">
-          {tab !== "canvas" ? (
+          {tab === "sit" || (tab === "canvas" && view === "sit") ? (
+            sitUiV2 ? (
+              <SitTestingViewV2
+                client={client}
+                canvasId={canvas?.id ?? null}
+                canvasName={canvas?.name}
+                projectName={project?.name}
+                canEdit={!!canvas?.isMine}
+              />
+            ) : (
+              <SitTestingView
+                client={client}
+                canvasId={canvas?.id ?? null}
+                canvasName={canvas?.name}
+              />
+            )
+          ) : tab === "api" || (tab === "canvas" && view === "api") ? (
+            swagger ? (
+              <ApiTestingView spec={apiSpec} onReload={apiSpec.reload} specUrl={swagger.specUrl} />
+            ) : (
+              <EmptyState
+                title="Connect Swagger to test APIs"
+                body={
+                  canvas
+                    ? "This canvas has no OpenAPI spec yet. Connect Swagger from the Explorer, then open API Testing again."
+                    : "Select a canvas in the Explorer, connect Swagger, then come back to API Testing."
+                }
+                action={
+                  canvas
+                    ? { label: "Connect apps", onClick: () => setConnectFor(canvas) }
+                    : undefined
+                }
+              />
+            )
+          ) : tab === "security" ? (
+            <SecurityOverview targetUrl={appUrl} projectName={project?.name} client={client} />
+          ) : tab === "performance" ? (
+            <PerformanceView canvas={canvas} />
+          ) : tab !== "canvas" ? (
             <EmptyState title={`${tabLabel} is coming soon`} body="This part of AppAtlas isn't available yet. Use Canvas to record and map your app." />
           ) : recording ? (
-            <RecordingView key={recording.id} client={client} initial={recording} onFinished={onRecordingDone} onSwitchViewer={switchViewer} onDiscarded={() => {
+            <RecordingView
+              key={recording.id}
+              client={client}
+              initial={recording}
+              onFinished={onRecordingDone}
+              onSwitchViewer={switchViewer}
+              onEditSetup={() => setSetupOpen(true)}
+              onDiscarded={() => {
                 localStorage.removeItem(ACTIVE_SESSION_KEY);
                 setRecording(null);
               }}
             />
           ) : canvas ? (
             <>
+              {(phaseCFlags.visualDiff || phaseCFlags.responsiveSheet || phaseCFlags.shareExport) && (
+                <div className="absolute top-3 right-4 z-10">
+                  <button
+                    type="button"
+                    data-testid="phase-c-tools"
+                    onClick={() => setPhaseCOpen(true)}
+                    className="rounded-[8px] border border-[#E6E1F5] bg-white px-3 py-1.5 text-[12px] font-medium text-[#8664F2] shadow-sm hover:border-[#8664F2] dark:border-[#2a2a2a] dark:bg-[#141414]"
+                  >
+                    Accessibility tools
+                  </button>
+                </div>
+              )}
               <CanvasFlow
                 key={canvas.id}
                 nodes={canvas.nodes}
                 edges={canvas.edges}
                 editable={canvas.isMine}
                 focusNodeId={focusNodeId}
+                changedNodeIds={changedNodeIds}
+                changedSinceRelease={changedSinceRelease}
                 selectedNodeId={panelNodeId}
                 onSelectNode={setPanelNodeId}
               />
-              <div className="pointer-events-none absolute top-3 left-4 rounded-[8px] bg-white/90 px-3 py-1.5 text-[11px] text-[#5E6066] shadow-sm dark:bg-[#141414]/90 dark:text-[#9ca3af]">
+              <div className="absolute top-3 left-4 z-10 flex items-center gap-2 rounded-[8px] bg-white/90 px-3 py-1.5 text-[11px] text-[#5E6066] shadow-sm dark:bg-[#141414]/90 dark:text-[#9ca3af]">
                 <span className="font-medium text-[#1F1F1F] dark:text-[#ededed]">{canvas.name}</span> · {canvas.owner.name}
                 {!canvas.isMine && " · view only"}
               </div>
@@ -476,6 +830,26 @@ export default function AtlasWorkspace() {
                   editable={canvas.isMine}
                   onClose={() => setPanelNodeId(null)}
                   onConnect={canvas.isMine ? () => setConnectFor(canvas) : undefined}
+                  onPostToTeams={
+                    canvas.isMine
+                      ? async (payload) => {
+                          await client.sendTeamsMessage(canvas.id, {
+                            issueKey: payload.issueKey,
+                            subject: payload.subject,
+                            text: payload.text,
+                            mentions: payload.mentions.map((m) => ({
+                              id: m.id,
+                              displayName: m.displayName,
+                            })),
+                          });
+                        }
+                      : undefined
+                  }
+                  loadTeamsMembers={
+                    canvas.isMine
+                      ? async () => (await client.listCanvasTeamMembers(canvas.id)).items
+                      : undefined
+                  }
                   onSaveNote={async (issueKey, text) => {
                     const note = await client.saveTicketNote(canvas.id, issueKey, text);
                     setCanvas((prev) =>
@@ -488,6 +862,14 @@ export default function AtlasWorkspace() {
                     );
                     return note;
                   }}
+                  onSetNodeTickets={
+                    canvas.isMine
+                      ? async (nid, issueKeys, note) => {
+                          const next = await client.setNodeTickets(canvas.id, nid, { issueKeys, note });
+                          setCanvas((prev) => (prev && prev.id === canvas.id ? { ...prev, ...next, clarifications: prev.clarifications } : prev));
+                        }
+                      : undefined
+                  }
                 />
               )}
             </>
@@ -512,12 +894,57 @@ export default function AtlasWorkspace() {
               }
             />
           )}
+          {replayOpen && canvas && <ReplayPlayer canvas={canvas} onClose={() => setReplayOpen(false)} />}
+          {phaseCOpen && canvas && (
+            <PhaseCToolsModal
+              client={client}
+              canvasId={canvas.id}
+              canvasName={canvas.name}
+              canvases={canvases}
+              flags={phaseCFlags}
+              onClose={() => setPhaseCOpen(false)}
+              onChangedNodes={(ids, label) => {
+                setChangedNodeIds(ids);
+                setChangedSinceRelease(label);
+              }}
+            />
+          )}
         </div>
       </div>
 
       {saveOpen && unsaved && <SaveExecutionModal onSave={save} onClose={() => setSaveOpen(false)} />}
+      {setupOpen && (
+        <SessionSetupModal
+          appUrl={setupUrl || appUrl}
+          projectId={project?.id ?? projectId}
+          canvasId={selectedId}
+          userId={accounts[0]?.localAccountId || accounts[0]?.homeAccountId || accounts[0]?.username || "anonymous"}
+          client={client}
+          loadConfig={() => client.getConfig()}
+          starting={starting}
+          onStart={(prefs, personaFields) => void startSessionWithPrefs(prefs, setupUrl || appUrl, personaFields)}
+          onClose={() => {
+            if (starting) return;
+            setSetupOpen(false);
+            setSetupUrl(null);
+          }}
+        />
+      )}
       {connectFor && (
-        <ConnectAppsModal client={client} canvas={connectFor} onConnected={onJiraConnected} onClose={() => setConnectFor(null)} />
+        <ConnectAppsModal
+          client={client}
+          canvas={connectFor}
+          swagger={getCanvasSwagger(connectFor.id)}
+          onSwaggerChange={onSwaggerChange}
+          onConnected={onJiraConnected}
+          onClose={() => setConnectFor(null)}
+          projectId={project?.id || projectId}
+          gitConnected={connectFor.id === selectedId ? gitConnected : false}
+          onGitChange={() => {
+            refreshGitStatus(connectFor.id);
+            setConnectFor(null);
+          }}
+        />
       )}
     </div>
   );
@@ -534,7 +961,7 @@ function EmptyState({
 }) {
   return (
     <div className="flex h-full flex-col items-center justify-center px-6 text-center">
-      <TbReportSearch size={44} className="mb-4 text-[#8664F2]" />
+      <TbListCheck size={44} className="mb-4 text-[#8664F2]" />
       <h2 className="mb-2 text-[24px] font-medium text-[#1F1F1F] dark:text-[#ededed]">{title}</h2>
       {body && <p className="max-w-[420px] text-[14px] leading-relaxed text-[#5E6066] dark:text-[#9ca3af]">{body}</p>}
       {action && (

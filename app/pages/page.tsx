@@ -30,8 +30,8 @@ import {
   getModelUsage,
   type ModelUsage,
 } from "../services/analytics";
-import { MODEL_STARTING_STATES } from "../constants/model-status";
 import { useModelStatus } from "../hooks/use-model-status";
+import { ModelStatusPill } from "../components/model-status-pill";
 import { useMsal } from "@azure/msal-react";
 
 const LAST_OPTION_SECONDS: Record<string, number> = {
@@ -68,13 +68,16 @@ export default function Home() {
   const [period, setPeriod] = useState<DropdownItem | null>(PERIODOPTIONS[0]);
   const [last, setLast] = useState<DropdownItem | null>(LASTOPTIONS[0]);
   const [stats, setStats] = useState<StatsResponse | null>(null);
+  const [statsError, setStatsError] = useState<string | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
   const [usage, setUsage] = useState<ModelUsage | null>(null);
   const [usageError, setUsageError] = useState(false);
   const [server, setServer] = useState<{
     Backend: boolean;
     database: boolean;
   } | null>(null);
-  const modelState = useModelStatus();
+  const [serverError, setServerError] = useState<string | null>(null);
+  const { mapped: modelMapped } = useModelStatus();
   const router = useRouter();
   const { accounts } = useMsal();
   const { projects } = useProjects();
@@ -86,11 +89,33 @@ export default function Home() {
   const lastValue = last?.value;
   const periodValue = period?.value;
 
+  const loadStats = useCallback(
+    async (silent = false) => {
+      if (!silent) setStatsLoading(true);
+      try {
+        const response = await getBusinessMetrics(LAST_OPTION_SECONDS[String(lastValue)] ?? 1800);
+        setStats(response?.data ?? null);
+        setStatsError(null);
+      } catch (error) {
+        setStatsError(error instanceof Error ? error.message : "Could not load usage stats");
+        if (!silent) setStats(null);
+      } finally {
+        if (!silent) setStatsLoading(false);
+      }
+    },
+    [lastValue],
+  );
+
   useEffect(() => {
-    getBusinessMetrics(LAST_OPTION_SECONDS[String(lastValue)] ?? 1800)
-      .then((response) => setStats(response?.data ?? null))
-      .catch((error) => console.log(error));
-  }, [lastValue]);
+    void loadStats(false);
+  }, [loadStats]);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible") void loadStats(true);
+    }, 20_000);
+    return () => clearInterval(id);
+  }, [loadStats]);
 
   useEffect(() => {
     setUsageError(false);
@@ -103,27 +128,27 @@ export default function Home() {
   }, [periodValue]);
 
   const fetchServerStatus = useCallback(async () => {
-    getServerStatus()
-      .then((response) => {
-        console.log("AI HUB HEALTH RESPONSE:", response);
-        setServer(response?.data?.details);
-      })
-      .catch((error) => console.log("AI HUB HEALTH ERROR:", error));
+    try {
+      const response = await getServerStatus();
+      setServer(response?.data?.details);
+      setServerError(null);
+    } catch (error) {
+      setServerError(error instanceof Error ? error.message : "Could not reach health endpoint");
+    }
   }, []);
 
   useEffect(() => {
     fetchUser();
-    fetchServerStatus();
+    void fetchServerStatus();
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible") void fetchServerStatus();
+    }, 30_000);
+    return () => clearInterval(id);
   }, [fetchUser, fetchServerStatus]);
 
   const backendDown =
     server !== null && (!server.Backend || !server.database);
-  const aiStatus =
-    !backendDown && modelState === "running"
-      ? { label: "Active", badge: "bg-[rgba(40,167,69,0.1)] text-[#28A745]", dot: "bg-[#28A745]" }
-      : !backendDown && modelState && MODEL_STARTING_STATES.includes(modelState)
-        ? { label: "Initializing", badge: "bg-[rgba(255,193,7,0.15)] text-[#B7791F]", dot: "bg-[#B7791F]" }
-        : { label: "Inactive", badge: "bg-[rgba(220,53,69,0.1)] text-[#DC3545]", dot: "bg-[#DC3545]" };
+  const pillStatus = backendDown ? "inactive" : modelMapped.ui;
 
   const totalRequests = sumPoints(stats?.total_invocations?.data);
   const inputTokens = sumPoints(stats?.tokens?.input);
@@ -167,17 +192,17 @@ export default function Home() {
             />
           </div>
 
-          <div
-            className={`h-[26px] ml-[15px] flex justify-center items-center px-[15px] rounded-[26px] text-[12px] font-[500] ${aiStatus.badge}`}
-            title={`Backend: ${server?.Backend ? "up" : "down"} · Database: ${
-              server?.database ? "up" : "down"
-            } · Model: ${modelState ?? "unknown"}`}
-          >
-            <div
-              className={`w-[5px] h-[5px] rounded-full mr-[8px] animate-pulse-blocking ${aiStatus.dot}`}
-            ></div>
-            AI Model {aiStatus.label}
-          </div>
+          <ModelStatusPill
+            status={pillStatus}
+            testId="home-ai-model-pill"
+            titleOverride={
+              backendDown
+                ? `Backend: ${server?.Backend ? "up" : "down"} · Database: ${
+                    server?.database ? "up" : "down"
+                  }`
+                : undefined
+            }
+          />
         </div>
 
         <div className="font-[500] text-sm mt-[15px] mb-[5px] dark:text-[#ededed]">Domain</div>
@@ -211,7 +236,7 @@ export default function Home() {
                   <div className="text-[#1F1F1F] dark:text-[#ededed] font-medium text-[18px]">
                     {item.label}
                   </div>
-                  <Image src={item.icon} width={40} alt="active-projects" />
+                  <Image src={item.icon} width={40} alt="active-projects" className="dark:invert" />
                 </div>
 
                 <div className="flex justify-between items-center mt-4 pt-3">
@@ -424,9 +449,14 @@ export default function Home() {
             </div>
           </div>
 
-          {usageError && (
-            <div className="-mt-[15px] mb-[30px] text-[12px] text-[#DC3545]">
-              Could not load usage from Hugging Face.
+          {(usageError || statsError || serverError || statsLoading) && (
+            <div className="-mt-[15px] mb-[30px] space-y-1 text-[12px]">
+              {statsLoading && !stats && <div className="text-[#7E7E7E]">Loading live stats…</div>}
+              {statsError && <div className="text-[#DC3545]">{statsError}</div>}
+              {usageError && (
+                <div className="text-[#DC3545]">Could not load usage from Hugging Face.</div>
+              )}
+              {serverError && <div className="text-[#DC3545]">{serverError}</div>}
             </div>
           )}
         </div>
