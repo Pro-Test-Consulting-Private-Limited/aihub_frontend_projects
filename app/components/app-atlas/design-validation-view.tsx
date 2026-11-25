@@ -134,22 +134,32 @@ export function DesignValidationView({
   }, [fileKey, frameId]);
 
   const thumbRequested = useRef<Set<string>>(new Set());
+  const thumbQueueBusy = useRef(false);
 
-  /** Lazy-load thumbnails for visible frames (batched). */
+  /** Lazy-load thumbnails slowly (Figma rate-limits /images). */
   const ensureThumbs = useCallback(
     async (ids: string[]) => {
-      if (!fileKey || ids.length === 0) return;
-      const missing = ids.filter((id) => !thumbRequested.current.has(id)).slice(0, 24);
+      if (!fileKey || ids.length === 0 || thumbQueueBusy.current) return;
+      const missing = ids.filter((id) => !thumbRequested.current.has(id)).slice(0, 6);
       if (missing.length === 0) return;
       missing.forEach((id) => thumbRequested.current.add(id));
+      thumbQueueBusy.current = true;
       setLoadingThumbs(true);
       try {
         const res = await fetch("/api/auth/figma/images", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ fileKey, ids: missing, scale: 1, format: "png" }),
+          body: JSON.stringify({ fileKey, ids: missing, scale: 1, format: "jpg" }),
         });
         const data = await res.json();
+        if (res.status === 429 || /rate limit/i.test(String(data.error || ""))) {
+          missing.forEach((id) => thumbRequested.current.delete(id));
+          setError(
+            data.error ||
+              "Figma rate limit exceeded — too many preview requests. Wait ~1 minute, then Refresh. Design checks still work without every thumbnail.",
+          );
+          return;
+        }
         if (!res.ok) {
           missing.forEach((id) => thumbRequested.current.delete(id));
           return;
@@ -159,6 +169,10 @@ export function DesignValidationView({
         missing.forEach((id) => thumbRequested.current.delete(id));
       } finally {
         setLoadingThumbs(false);
+        // Space out the next batch so we don't trip Figma again.
+        setTimeout(() => {
+          thumbQueueBusy.current = false;
+        }, 2500);
       }
     },
     [fileKey],
@@ -177,8 +191,14 @@ export function DesignValidationView({
   }, [nodes, nodeId]);
 
   useEffect(() => {
-    void ensureThumbs(filteredFrames.slice(0, 24).map((f) => f.frameId));
-  }, [filteredFrames, ensureThumbs]);
+    // Only prefetch a small first page of thumbs — selected frame is enough for compare.
+    const preferred = [
+      ...(frameId ? [frameId] : []),
+      ...filteredFrames.slice(0, 8).map((f) => f.frameId),
+    ];
+    const timer = setTimeout(() => void ensureThumbs(preferred), 400);
+    return () => clearTimeout(timer);
+  }, [filteredFrames, frameId, ensureThumbs]);
 
   const runChecksFromPat = async () => {
     if (!canvas?.id || !fileKey || !selectedFrame) return;

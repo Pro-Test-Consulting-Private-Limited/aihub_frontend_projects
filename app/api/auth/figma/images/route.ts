@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getFigmaImages, isFigmaIntegrationEnabled } from "@/lib/figma";
+import { FigmaApiError, getFigmaImages, isFigmaIntegrationEnabled } from "@/lib/figma";
 import { OAUTH_COOKIES } from "@/lib/oauth";
 
 export async function POST(req: NextRequest) {
@@ -17,15 +17,17 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const images = await getFigmaImages(token, fileKey, ids.slice(0, 20), {
-      scale: typeof body.scale === "number" ? body.scale : 2,
+    // Keep batches small — Figma /images is expensive and rate-limited.
+    const images = await getFigmaImages(token, fileKey, ids.slice(0, 6), {
+      scale: typeof body.scale === "number" ? body.scale : 1,
       format: body.format === "jpg" ? "jpg" : "png",
     });
     return NextResponse.json({ images });
   } catch (err) {
+    const status = err instanceof FigmaApiError ? err.status : 502;
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Could not export Figma images" },
-      { status: 502 },
+      { status: status === 429 ? 429 : status >= 400 && status < 600 ? status : 502 },
     );
   }
 }

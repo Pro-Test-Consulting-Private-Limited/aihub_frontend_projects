@@ -23,6 +23,15 @@ function figmaAuthHeaders(accessToken: string): Record<string, string> {
   return { Authorization: `Bearer ${token}`, Accept: "application/json" };
 }
 
+export class FigmaApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "FigmaApiError";
+    this.status = status;
+  }
+}
+
 async function figmaFetch(accessToken: string, path: string): Promise<Record<string, unknown>> {
   const res = await fetch(`${API_BASE}${path}`, {
     headers: figmaAuthHeaders(accessToken),
@@ -36,7 +45,13 @@ async function figmaFetch(accessToken: string, path: string): Promise<Record<str
         : typeof data.message === "string"
           ? data.message
           : `Figma API ${res.status}`;
-    throw new Error(msg);
+    if (res.status === 429 || /rate limit/i.test(msg)) {
+      throw new FigmaApiError(
+        "Figma rate limit exceeded — too many API calls. Wait about a minute, then Refresh. Thumbnails load slowly on purpose to avoid this.",
+        429,
+      );
+    }
+    throw new FigmaApiError(msg, res.status);
   }
   return data;
 }
