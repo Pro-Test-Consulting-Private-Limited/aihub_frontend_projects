@@ -3,36 +3,227 @@
 import { useEffect, useMemo, useState } from "react";
 import { TbAccessible, TbHeartbeat, TbTools } from "react-icons/tb";
 import type { AtlasClient } from "@/app/services/appatlas";
-import type { Canvas, CanvasSummary } from "@/app/interfaces/appatlas";
-import type { CanvasFigma } from "@/app/lib/canvas-figma";
-import { DesignValidationView } from "./design-validation-view";
+import { atlasUrl } from "@/app/services/appatlas";
+import type { A11yIssue, Canvas, CanvasNode, CanvasSummary } from "@/app/interfaces/appatlas";
 import { HealthPanel } from "./health-panel";
 import { PhaseCToolsPanel } from "./phase-c-tools";
 
 type Section = "health" | "wcag" | "tools";
 
+/** Runtime axe / screen health — no Figma required. */
+function collectA11yIssues(node: CanvasNode): A11yIssue[] {
+  const h = node.health;
+  if (!h) return [];
+  if (h.a11yIssues?.length) return h.a11yIssues;
+  return (h.a11ySummary || []).map((line): A11yIssue => {
+    const idx = line.indexOf(":");
+    return {
+      id: idx > 0 ? line.slice(0, idx).trim() : "a11y",
+      help: idx > 0 ? line.slice(idx + 1).trim() : line,
+      impact: null,
+      nodes: 1,
+    };
+  });
+}
+
+function ScreenRail({
+  nodes,
+  nodeId,
+  stateId,
+  onSelectNode,
+  onSelectState,
+}: {
+  nodes: CanvasNode[];
+  nodeId: string;
+  stateId: string;
+  onSelectNode: (id: string) => void;
+  onSelectState: (nodeId: string, stateId: string) => void;
+}) {
+  if (nodes.length === 0) {
+    return <div className="p-3 text-[12px] text-[#7E7E7E]">No screens on this canvas.</div>;
+  }
+
+  return (
+    <div className="space-y-2 p-2">
+      {nodes.map((n) => {
+        const active = n.id === nodeId;
+        const level = n.health?.level;
+        const dot =
+          level === "ok"
+            ? "bg-[#22C55E]"
+            : level === "warn"
+              ? "bg-[#F59E0B]"
+              : level === "bad"
+                ? "bg-[#EF4444]"
+                : "bg-[#D1D5DB]";
+        const primaryUrl = n.screenshotUrl ? atlasUrl(n.screenshotUrl) : "";
+        const a11yCount = n.health?.a11yViolations ?? 0;
+
+        return (
+          <div key={n.id} className="space-y-1.5">
+            <button
+              type="button"
+              onClick={() => onSelectNode(n.id)}
+              className={`w-full overflow-hidden rounded-[10px] border text-left transition ${
+                active && !stateId
+                  ? "border-[#8664f2] ring-2 ring-[#8664f2]/30"
+                  : active
+                    ? "border-[#8664f2]"
+                    : "border-[#E5E7EB] hover:border-[#C4B5FD] dark:border-[#2a2a2a]"
+              }`}
+            >
+              <div className="aspect-[4/3] bg-[#F8FAFC] dark:bg-[#0f0f0f]">
+                {primaryUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={primaryUrl}
+                    alt={n.title || n.path}
+                    className="h-full w-full object-cover object-top"
+                  />
+                ) : (
+                  <div className="flex h-full items-center justify-center text-[10px] text-[#9CA3AF]">No shot</div>
+                )}
+              </div>
+              <div className="flex items-start gap-2 p-2">
+                <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${dot}`} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[12px] font-medium text-[#1F1F1F] dark:text-[#ededed]">
+                    {n.path || n.title}
+                  </span>
+                  <span className="block truncate text-[10px] text-[#7E7E7E]">
+                    {n.title}
+                    {n.states.length > 0 ? ` · ${n.states.length} state${n.states.length === 1 ? "" : "s"}` : ""}
+                    {a11yCount > 0 ? ` · ${a11yCount} a11y` : ""}
+                  </span>
+                </span>
+              </div>
+            </button>
+
+            {active && n.states.length > 0 ? (
+              <div className="grid grid-cols-2 gap-1.5 px-0.5">
+                {n.states.map((s) => {
+                  const stSelected = stateId === s.id;
+                  const stUrl = s.screenshotUrl ? atlasUrl(s.screenshotUrl) : "";
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => onSelectState(n.id, s.id)}
+                      className={`overflow-hidden rounded-[8px] border text-left ${
+                        stSelected
+                          ? "border-[#8664f2] ring-1 ring-[#8664f2]/40"
+                          : "border-[#E5E7EB] dark:border-[#2a2a2a]"
+                      }`}
+                    >
+                      <div className="aspect-[4/3] bg-[#F8FAFC] dark:bg-[#0f0f0f]">
+                        {stUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={stUrl}
+                            alt={s.label || s.kind}
+                            className="h-full w-full object-cover object-top"
+                          />
+                        ) : (
+                          <div className="flex h-full items-center justify-center text-[9px] text-[#9CA3AF]">—</div>
+                        )}
+                      </div>
+                      <div className="truncate px-1.5 py-1 text-[10px] text-[#5E6066]">
+                        {s.label || s.kind || "State"}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function WcagRollup({ nodes, focusNodeId }: { nodes: CanvasNode[]; focusNodeId: string }) {
+  const rows = useMemo(() => {
+    return nodes
+      .map((n) => ({
+        node: n,
+        issues: collectA11yIssues(n),
+        violations: n.health?.a11yViolations ?? 0,
+      }))
+      .filter((r) => r.issues.length > 0 || r.violations > 0);
+  }, [nodes]);
+
+  const focus = rows.find((r) => r.node.id === focusNodeId) || rows[0] || null;
+
+  if (rows.length === 0) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center text-[13px] text-[#7E7E7E]">
+        <div className="text-[14px] font-medium text-[#1F1F1F] dark:text-[#ededed]">No WCAG findings yet</div>
+        <p className="max-w-md">
+          Accessibility rules (axe) are captured while you record — no Figma link required. Re-record with health
+          enabled if screens have no a11y data.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4 p-4">
+      <div>
+        <div className="text-[13px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">Recorded WCAG / axe findings</div>
+        <p className="mt-0.5 text-[12px] text-[#7E7E7E]">
+          From the live browser during crawl — not from Figma. {rows.length} screen
+          {rows.length === 1 ? "" : "s"} with issues.
+        </p>
+      </div>
+
+      <div className="flex flex-wrap gap-1.5">
+        {rows.map(({ node, violations }) => (
+          <span
+            key={node.id}
+            className={`rounded-full px-2.5 py-0.5 text-[11px] ${
+              node.id === focus?.node.id
+                ? "bg-[#8664f2] text-white"
+                : "bg-[#F3F4F6] text-[#5E6066] dark:bg-[#1a1a1a]"
+            }`}
+          >
+            {node.path || node.title}
+            {violations > 0 ? ` · ${violations}` : ""}
+          </span>
+        ))}
+      </div>
+
+      {focus ? <HealthPanel node={focus.node} /> : null}
+    </div>
+  );
+}
+
 export function AccessibilityView({
   client,
   canvas,
-  figma,
   canvases,
   phaseCFlags,
-  onConnectApps,
   onChangedNodes,
 }: {
   client: AtlasClient;
   canvas: Canvas | null;
-  figma: CanvasFigma | null;
   canvases: CanvasSummary[];
   phaseCFlags: { visualDiff: boolean; responsiveSheet: boolean; shareExport: boolean };
-  onConnectApps?: () => void;
   onChangedNodes: (ids: string[], releaseLabel: string | null) => void;
+  /** Kept for call-site compatibility; WCAG here does not use Figma. */
+  figma?: unknown;
+  onConnectApps?: () => void;
 }) {
   const [section, setSection] = useState<Section>("health");
   const [nodeId, setNodeId] = useState("");
+  const [stateId, setStateId] = useState("");
 
   const nodes = canvas?.nodes || [];
   const selected = useMemo(() => nodes.find((n) => n.id === nodeId) || null, [nodes, nodeId]);
+  const selectedState = useMemo(
+    () => selected?.states.find((s) => s.id === stateId) || null,
+    [selected, stateId],
+  );
 
   useEffect(() => {
     if (!nodeId && nodes[0]?.id) setNodeId(nodes[0].id);
@@ -46,6 +237,8 @@ export function AccessibilityView({
     );
   }
 
+  const showRail = section === "health" || section === "wcag";
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 p-3 md:p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -55,7 +248,7 @@ export function AccessibilityView({
             Accessibility
           </div>
           <div className="mt-0.5 text-[12px] text-[#7E7E7E]">
-            Screen health &amp; axe, Figma WCAG checks, and accessibility tools
+            Recorded screen health &amp; axe WCAG — no Figma required · plus accessibility tools
           </div>
         </div>
         <div className="flex flex-wrap gap-1.5">
@@ -83,62 +276,59 @@ export function AccessibilityView({
         </div>
       </div>
 
-      {section === "health" ? (
-        <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[240px_minmax(0,1fr)]">
-          <aside className="min-h-0 overflow-y-auto rounded-[12px] border border-[#E5E7EB] dark:border-[#2a2a2a]">
-            <div className="border-b border-[#F0F0F0] px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-[#6B7280] dark:border-[#1f1f1f]">
-              Screens
+      {showRail ? (
+        <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[280px_minmax(0,1fr)]">
+          <aside className="flex min-h-0 flex-col overflow-hidden rounded-[12px] border border-[#E5E7EB] dark:border-[#2a2a2a]">
+            <div className="shrink-0 border-b border-[#F0F0F0] px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-[#6B7280] dark:border-[#1f1f1f]">
+              Screens &amp; states
             </div>
-            {nodes.length === 0 ? (
-              <div className="p-3 text-[12px] text-[#7E7E7E]">No screens on this canvas.</div>
-            ) : (
-              nodes.map((n) => {
-                const active = n.id === nodeId;
-                const level = n.health?.level;
-                const dot =
-                  level === "ok" ? "bg-[#22C55E]" : level === "warn" ? "bg-[#F59E0B]" : level === "bad" ? "bg-[#EF4444]" : "bg-[#D1D5DB]";
-                return (
-                  <button
-                    key={n.id}
-                    type="button"
-                    onClick={() => setNodeId(n.id)}
-                    className={`flex w-full items-center gap-2 border-b border-[#F0F0F0] px-3 py-2.5 text-left dark:border-[#1f1f1f] ${
-                      active ? "bg-[#F3EEFF] dark:bg-[#1a1428]" : "hover:bg-[#F8F8F8] dark:hover:bg-[#141414]"
-                    }`}
-                  >
-                    <span className={`h-2 w-2 shrink-0 rounded-full ${dot}`} />
-                    <span className="min-w-0">
-                      <span className="block truncate text-[12.5px] font-medium text-[#1F1F1F] dark:text-[#ededed]">
-                        {n.path || n.title}
-                      </span>
-                      <span className="block truncate text-[10px] text-[#7E7E7E]">{n.title}</span>
-                    </span>
-                  </button>
-                );
-              })
-            )}
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <ScreenRail
+                nodes={nodes}
+                nodeId={nodeId}
+                stateId={stateId}
+                onSelectNode={(id) => {
+                  setNodeId(id);
+                  setStateId("");
+                }}
+                onSelectState={(nid, sid) => {
+                  setNodeId(nid);
+                  setStateId(sid);
+                }}
+              />
+            </div>
           </aside>
+
           <section className="min-h-0 overflow-y-auto rounded-[12px] border border-[#E5E7EB] dark:border-[#2a2a2a]">
-            {selected ? (
-              <HealthPanel node={selected} />
+            {section === "health" ? (
+              selected ? (
+                <div>
+                  {selectedState?.screenshotUrl ? (
+                    <div className="border-b border-[#F0F0F0] p-3 dark:border-[#1f1f1f]">
+                      <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#9ca3af]">
+                        Selected state · {selectedState.label || selectedState.kind}
+                      </div>
+                      <div className="overflow-hidden rounded-[10px] border border-[#E5E7EB] bg-[#F8FAFC] dark:border-[#2a2a2a] dark:bg-[#0f0f0f]">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={atlasUrl(selectedState.screenshotUrl)}
+                          alt={selectedState.label || selectedState.kind}
+                          className="max-h-[220px] w-full object-contain object-top"
+                        />
+                      </div>
+                    </div>
+                  ) : null}
+                  <HealthPanel node={selected} />
+                </div>
+              ) : (
+                <div className="flex h-full items-center justify-center p-8 text-[13px] text-[#7E7E7E]">
+                  Select a screen to see health and accessibility findings.
+                </div>
+              )
             ) : (
-              <div className="flex h-full items-center justify-center p-8 text-[13px] text-[#7E7E7E]">
-                Select a screen to see health and accessibility findings.
-              </div>
+              <WcagRollup nodes={nodes} focusNodeId={nodeId} />
             )}
           </section>
-        </div>
-      ) : null}
-
-      {section === "wcag" ? (
-        <div className="min-h-0 flex-1 overflow-hidden rounded-[12px] border border-[#E5E7EB] dark:border-[#2a2a2a]">
-          <DesignValidationView
-            client={client}
-            canvas={canvas}
-            figma={figma}
-            onConnectApps={onConnectApps}
-            panel="accessibility"
-          />
         </div>
       ) : null}
 
