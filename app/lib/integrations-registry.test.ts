@@ -37,6 +37,8 @@ describe("integrations registry", () => {
     for (const t of listIntegrationProviders()) {
       expect(t.canvasConnect).toBe(isCanvasConnectProvider(t.id));
     }
+    const figma = getIntegrationProvider("figma");
+    expect(figma?.canvasConnect).toBe(false);
   });
 
   it("uses honest GitHub description (no heal/main marketing)", () => {

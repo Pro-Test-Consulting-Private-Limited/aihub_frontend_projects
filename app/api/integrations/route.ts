@@ -7,7 +7,7 @@ import {
   type IntegrationProvider,
 } from "@/app/lib/integrations-db";
 
-const ALLOWED: IntegrationProvider[] = ["jira", "github", "swagger", "teams"];
+const ALLOWED: IntegrationProvider[] = ["jira", "github", "swagger", "teams", "figma"];
 
 function isProvider(value: string): value is IntegrationProvider {
   return (ALLOWED as string[]).includes(value);

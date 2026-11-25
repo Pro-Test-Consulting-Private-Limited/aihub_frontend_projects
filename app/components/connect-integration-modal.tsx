@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Modal from "./modal";
 
-type Provider = "jira" | "github" | "swagger";
+type Provider = "jira" | "github" | "swagger" | "figma";
 
 export default function ConnectIntegrationModal({
   provider,
@@ -14,7 +14,15 @@ export default function ConnectIntegrationModal({
   onClose: () => void;
   onConnected: (
     provider: Provider,
-    meta?: { title?: string; specUrl?: string; username?: string; siteName?: string },
+    meta?: {
+      title?: string;
+      specUrl?: string;
+      username?: string;
+      siteName?: string;
+      handle?: string;
+      email?: string;
+      userId?: string;
+    },
   ) => void;
 }) {
   const [siteUrl, setSiteUrl] = useState("");
@@ -23,6 +31,7 @@ export default function ConnectIntegrationModal({
   const [githubOrgUrl, setGithubOrgUrl] = useState("");
   const [specUrl, setSpecUrl] = useState("");
   const [swaggerToken, setSwaggerToken] = useState("");
+  const [figmaToken, setFigmaToken] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -31,7 +40,9 @@ export default function ConnectIntegrationModal({
       ? "Connect Jira"
       : provider === "github"
         ? "Connect GitHub"
-        : "Connect Swagger";
+        : provider === "figma"
+          ? "Connect Figma"
+          : "Connect Swagger";
 
   const handleSubmit = async () => {
     if (!provider) return;
@@ -51,7 +62,9 @@ export default function ConnectIntegrationModal({
       const body =
         provider === "jira"
           ? { siteUrl, email, apiToken }
-          : { specUrl, token: swaggerToken || undefined };
+          : provider === "figma"
+            ? { accessToken: figmaToken }
+            : { specUrl, token: swaggerToken || undefined };
 
       const res = await fetch(`/api/auth/${provider}/connect`, {
         method: "POST",
@@ -69,6 +82,9 @@ export default function ConnectIntegrationModal({
         specUrl: data.specUrl,
         username: data.username,
         siteName: data.siteName,
+        handle: data.handle,
+        email: data.email,
+        userId: data.userId,
       });
       onClose();
     } catch {
@@ -90,7 +106,9 @@ export default function ConnectIntegrationModal({
           ? "Use your Jira Cloud site, Atlassian email, and an API token. The app will verify the account and mark Jira as connected."
           : provider === "github"
             ? "Enter your GitHub organization URL, then continue to sign in with GitHub."
-            : "Paste an OpenAPI / Swagger JSON or YAML URL. Swagger UI pages like /docs are OK — we'll resolve the JSON. Add a bearer token only if the spec is private."}
+            : provider === "figma"
+              ? "Paste a Figma personal access token. We verify it against your Figma account and mark Figma as connected on Integrations."
+              : "Paste an OpenAPI / Swagger JSON or YAML URL. Swagger UI pages like /docs are OK — we'll resolve the JSON. Add a bearer token only if the spec is private."}
       </p>
 
       {provider === "jira" ? (
@@ -147,6 +165,27 @@ export default function ConnectIntegrationModal({
           <p className="text-[12px] text-[#7E7E7E] dark:text-[#9ca3af]">
             Example: https://github.com/Pro-Test-Consulting-Private-Limited
           </p>
+        </div>
+      ) : provider === "figma" ? (
+        <div className="flex flex-col gap-3">
+          <label className="text-[12px] font-[600] text-[#1F1F1F] dark:text-[#ededed]">
+            Personal access token
+            <input
+              type="password"
+              value={figmaToken}
+              onChange={(e) => setFigmaToken(e.target.value)}
+              placeholder="figd_…"
+              className="mt-1 w-full h-[38px] px-3 rounded-[8px] border border-[rgba(94,96,102,0.3)] dark:border-[#2a2a2a] bg-white dark:bg-[#1a1a1a] text-[13px] outline-none"
+            />
+          </label>
+          <a
+            href="https://www.figma.com/developers/api#access-tokens"
+            target="_blank"
+            rel="noreferrer"
+            className="text-[12px] text-[#2684FF]"
+          >
+            Create a Figma personal access token
+          </a>
         </div>
       ) : (
         <div className="flex flex-col gap-3">

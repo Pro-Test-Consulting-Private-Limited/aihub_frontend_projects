@@ -17,10 +17,10 @@ import { getFreshIdToken, getGraphAccessToken } from "@/app/lib/auth-client";
 import { SiJira } from "react-icons/si";
 import {
   INTEGRATION_CATEGORIES,
-  type CanvasConnectProvider,
+  type AccountIntegrationProvider,
 } from "@/app/lib/integrations-registry";
 
-type LiveProvider = CanvasConnectProvider;
+type LiveProvider = AccountIntegrationProvider;
 
 type CardStatus = "connected" | "disconnected" | "needs_reconnect" | "error";
 
@@ -101,6 +101,7 @@ function IntegrationsContent() {
     github,
     swagger,
     teams,
+    figma,
     loading,
     probing,
     refresh,
@@ -268,6 +269,32 @@ function IntegrationsContent() {
       };
     }
 
+    if (tool.provider === "figma") {
+      const status = healthToCard(figma.health);
+      const who = figma.handle ? ` as @${figma.handle}` : figma.email ? ` as ${figma.email}` : "";
+      return {
+        ...tool,
+        status,
+        healthDetail: figma.detail,
+        checkedAt: figma.checkedAt,
+        description:
+          status === "connected"
+            ? `Active on Figma${who}. ${tool.description}`
+            : status === "needs_reconnect"
+              ? figma.detail ||
+                "Figma session expired or was revoked. Reconnect to restore Design Validation."
+              : status === "error"
+                ? figma.detail || "Could not reach Figma to verify the connection."
+                : tool.description,
+        buttons:
+          status === "connected"
+            ? ["Disconnect Figma", "Check connection"]
+            : status === "needs_reconnect" || status === "error"
+              ? ["Reconnect Figma", "Disconnect Figma"]
+              : ["Connect Figma"],
+      };
+    }
+
     return tool;
   };
 
@@ -378,7 +405,24 @@ function IntegrationsContent() {
               { name: "GitHub", status: healthToCard(github.health), detail: github.detail, checkedAt: github.checkedAt, site: github.org ? `${github.org}${github.username ? ` (@${github.username})` : ""}` : github.username ? `@${github.username}` : null },
               { name: "Swagger", status: healthToCard(swagger.health), detail: null, checkedAt: null, site: swagger.title },
               { name: "Teams", status: healthToCard(teams.health), detail: null, checkedAt: null, site: teams.label },
-            ] as const
+              ...(process.env.NEXT_PUBLIC_FIGMA_INTEGRATION === "1"
+                ? [
+                    {
+                      name: "Figma",
+                      status: healthToCard(figma.health),
+                      detail: figma.detail,
+                      checkedAt: figma.checkedAt,
+                      site: figma.handle ? `@${figma.handle}` : figma.email,
+                    },
+                  ]
+                : []),
+            ] as Array<{
+              name: string;
+              status: CardStatus;
+              detail: string | null;
+              checkedAt: number | null;
+              site: string | null;
+            }>
           ).map((row) => (
             <div
               key={row.name}
@@ -434,7 +478,11 @@ function IntegrationsContent() {
                 const isBusy = busy === tool.id || busy === tool.provider || busy === "check";
                 const isGreenCard =
                   tool.status === "connected" &&
-                  (tool.id === "jira" || tool.id === "github" || tool.id === "swagger" || tool.id === "teams");
+                  (tool.id === "jira" ||
+                    tool.id === "github" ||
+                    tool.id === "swagger" ||
+                    tool.id === "teams" ||
+                    tool.id === "figma");
                 const isWarnCard = tool.status === "needs_reconnect" || tool.status === "error";
                 return (
                   <div
@@ -551,11 +599,30 @@ function IntegrationsContent() {
                   },
                 },
               ]);
+            } else if (connected === "figma") {
+              await saveProviders([
+                {
+                  provider: "figma",
+                  meta: {
+                    handle: meta?.handle || null,
+                    email: meta?.email || null,
+                    userId: meta?.userId || null,
+                  },
+                },
+              ]);
             }
           } catch {
             await refresh();
           }
-          toast.success(connected === "swagger" ? "Swagger connected" : "Jira connected");
+          toast.success(
+            connected === "swagger"
+              ? "Swagger connected"
+              : connected === "figma"
+                ? meta?.handle
+                  ? `Figma connected as @${meta.handle}`
+                  : "Figma connected"
+                : "Jira connected",
+          );
         }}
       />
     </div>

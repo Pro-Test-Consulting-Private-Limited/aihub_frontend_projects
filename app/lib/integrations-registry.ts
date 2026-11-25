@@ -6,6 +6,9 @@ import { FaMicrosoft, FaAws, FaSlack, FaBook, FaCode } from "react-icons/fa";
 /** Providers that can be linked at canvas level today. */
 export type CanvasConnectProvider = "jira" | "swagger" | "teams" | "github";
 
+/** Account-level Integrations (cookies / vault). Includes Figma before canvas connect exists. */
+export type AccountIntegrationProvider = CanvasConnectProvider | "figma";
+
 export type IntegrationProviderId =
   | CanvasConnectProvider
   | "linear"
@@ -18,6 +21,10 @@ export type IntegrationProviderId =
   | "figma"
   | "slack";
 
+/** DEV (and flagged envs) expose Figma on the Integrations page. */
+const FIGMA_ACCOUNT_ENABLED =
+  process.env.NEXT_PUBLIC_FIGMA_INTEGRATION === "1" || process.env.FIGMA_INTEGRATION === "1";
+
 export type IntegrationProviderDef = {
   id: IntegrationProviderId;
   name: string;
@@ -26,7 +33,7 @@ export type IntegrationProviderDef = {
   Icon: IconType;
   color: string;
   /** Account-level live status on Integrations (OAuth / vault). */
-  accountProvider?: CanvasConnectProvider;
+  accountProvider?: AccountIntegrationProvider;
   /** Can open a canvas connect step in the modal. */
   canvasConnect: boolean;
 };
@@ -161,10 +168,12 @@ export const INTEGRATION_CATEGORIES: IntegrationCategoryDef[] = [
       {
         id: "figma",
         name: "Figma",
-        description: "Compare UI specs against crawled screenshots.",
+        description:
+          "Connect your Figma account to validate UI specs against crawled screenshots (Design Validation).",
         connectButton: "Connect Figma",
         Icon: SiFigma,
         color: "#F24E1E",
+        accountProvider: FIGMA_ACCOUNT_ENABLED ? "figma" : undefined,
         canvasConnect: false,
       },
     ],

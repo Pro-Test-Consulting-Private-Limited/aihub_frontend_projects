@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useMsal } from "@azure/msal-react";
 import { getFreshIdToken } from "@/app/lib/auth-client";
 
-export type IntegrationProvider = "jira" | "github" | "swagger" | "teams";
+export type IntegrationProvider = "jira" | "github" | "swagger" | "teams" | "figma";
 
 /** Live probe result for tools that hold secrets in cookies. */
 export type ConnectionHealth = "disconnected" | "active" | "expired" | "error" | "unknown";
@@ -50,6 +50,16 @@ export type TeamsStatus = {
   detail: string | null;
 };
 
+export type FigmaStatus = {
+  connected: boolean;
+  health: ConnectionHealth;
+  handle: string | null;
+  email: string | null;
+  userId: string | null;
+  detail: string | null;
+  checkedAt: number | null;
+};
+
 const EMPTY_JIRA: JiraStatus = {
   connected: false,
   health: "disconnected",
@@ -85,6 +95,16 @@ const EMPTY_TEAMS: TeamsStatus = {
   detail: null,
 };
 
+const EMPTY_FIGMA: FigmaStatus = {
+  connected: false,
+  health: "disconnected",
+  handle: null,
+  email: null,
+  userId: null,
+  detail: null,
+  checkedAt: null,
+};
+
 export function useIntegrationStatus(opts?: { live?: boolean; refreshMs?: number }) {
   /** Live probe hits Jira/GitHub APIs  -  opt in for Integrations hub and Connect-to-canvas. */
   const live = opts?.live === true;
@@ -94,6 +114,7 @@ export function useIntegrationStatus(opts?: { live?: boolean; refreshMs?: number
   const [github, setGithub] = useState<GitHubStatus>(EMPTY_GITHUB);
   const [swagger, setSwagger] = useState<SwaggerStatus>(EMPTY_SWAGGER);
   const [teams, setTeams] = useState<TeamsStatus>(EMPTY_TEAMS);
+  const [figma, setFigma] = useState<FigmaStatus>(EMPTY_FIGMA);
   const [stored, setStored] = useState<StoredIntegration[]>([]);
   const [loading, setLoading] = useState(true);
   const [probing, setProbing] = useState(false);
@@ -114,11 +135,12 @@ export function useIntegrationStatus(opts?: { live?: boolean; refreshMs?: number
     try {
       const headers = await authHeaders();
       const q = live ? "?live=1" : "";
-      const [dbRes, jiraRes, githubRes, swaggerRes] = await Promise.all([
+      const [dbRes, jiraRes, githubRes, swaggerRes, figmaRes] = await Promise.all([
         fetch("/api/integrations", { cache: "no-store", headers }),
         fetch(`/api/auth/jira/status${q}`, { cache: "no-store" }),
         fetch(`/api/auth/github/status${q}`, { cache: "no-store" }),
         fetch("/api/auth/swagger/status", { cache: "no-store" }),
+        fetch(`/api/auth/figma/status${q}`, { cache: "no-store" }),
       ]);
 
       let dbIntegrations: StoredIntegration[] = [];
@@ -133,11 +155,13 @@ export function useIntegrationStatus(opts?: { live?: boolean; refreshMs?: number
       const cookieSwagger = swaggerRes.ok
         ? await swaggerRes.json()
         : EMPTY_SWAGGER;
+      const cookieFigma = figmaRes.ok ? await figmaRes.json() : EMPTY_FIGMA;
 
       const dbJira = dbIntegrations.find((i) => i.provider === "jira");
       const dbGithub = dbIntegrations.find((i) => i.provider === "github");
       const dbSwagger = dbIntegrations.find((i) => i.provider === "swagger");
       const dbTeams = dbIntegrations.find((i) => i.provider === "teams");
+      const dbFigma = dbIntegrations.find((i) => i.provider === "figma");
 
       // Cookie/live health wins. DB-only "connected" without working cookies → needs reconnect.
       const jiraHealth: ConnectionHealth = cookieJira.health
@@ -223,6 +247,37 @@ export function useIntegrationStatus(opts?: { live?: boolean; refreshMs?: number
           (typeof dbTeams?.meta?.label === "string" ? dbTeams.meta.label : null) ||
           (dbTeams ? "Microsoft Teams" : null),
         detail: null,
+      });
+
+      const figmaHealth: ConnectionHealth = cookieFigma.health
+        ? cookieFigma.health
+        : cookieFigma.connected
+          ? "active"
+          : dbFigma
+            ? "expired"
+            : "disconnected";
+
+      setFigma({
+        connected: Boolean(cookieFigma.connected || dbFigma),
+        health: figmaHealth,
+        handle:
+          cookieFigma.handle ||
+          (typeof dbFigma?.meta?.handle === "string" ? dbFigma.meta.handle : null) ||
+          null,
+        email:
+          cookieFigma.email ||
+          (typeof dbFigma?.meta?.email === "string" ? dbFigma.meta.email : null) ||
+          null,
+        userId:
+          cookieFigma.userId ||
+          (typeof dbFigma?.meta?.userId === "string" ? dbFigma.meta.userId : null) ||
+          null,
+        detail:
+          cookieFigma.detail ||
+          (figmaHealth === "expired" && dbFigma && !cookieFigma.connected
+            ? "Saved as connected, but no working Figma session in this browser. Reconnect."
+            : null),
+        checkedAt: cookieFigma.checkedAt ?? null,
       });
     } catch (err) {
       console.error("Failed to load integration status", err);
@@ -315,6 +370,7 @@ export function useIntegrationStatus(opts?: { live?: boolean; refreshMs?: number
     github,
     swagger,
     teams,
+    figma,
     swaggerConnected: swagger.connected,
     stored,
     loading,
