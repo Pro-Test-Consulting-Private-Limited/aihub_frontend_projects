@@ -16,21 +16,20 @@ type DiffPair = {
   changed: boolean;
 };
 
-export function PhaseCToolsModal({
+type PhaseCFlags = { visualDiff: boolean; responsiveSheet: boolean; shareExport: boolean };
+
+/** Shared body for Accessibility tools (embedded page or modal). */
+export function PhaseCToolsPanel({
   client,
   canvasId,
-  canvasName,
   canvases,
   flags,
-  onClose,
   onChangedNodes,
 }: {
   client: AtlasClient;
   canvasId: string;
-  canvasName: string;
   canvases: CanvasSummary[];
-  flags: { visualDiff: boolean; responsiveSheet: boolean; shareExport: boolean };
-  onClose: () => void;
+  flags: PhaseCFlags;
   onChangedNodes: (ids: string[], releaseLabel: string | null) => void;
 }) {
   const baselines = useMemo(() => canvases.filter((c) => c.id !== canvasId), [canvases, canvasId]);
@@ -121,10 +120,19 @@ export function PhaseCToolsModal({
   };
 
   const pair = pairs?.[active];
+  const anyFlag = flags.visualDiff || flags.responsiveSheet || flags.shareExport;
+
+  if (!anyFlag) {
+    return (
+      <div className="rounded-[12px] border border-dashed border-[#E5E7EB] p-6 text-center text-[13px] text-[#7E7E7E] dark:border-[#2a2a2a]">
+        Accessibility tools are off for this project. Enable Visual diff, Contact sheet, or Share &amp; export in project feature flags.
+      </div>
+    );
+  }
 
   return (
-    <Modal title={`Accessibility tools · ${canvasName}`} onClose={onClose} width={720}>
-      <div className="mt-3 flex gap-2 text-[12px]">
+    <div className="min-h-0">
+      <div className="mt-1 flex flex-wrap gap-2 text-[12px]">
         {flags.visualDiff && (
           <button type="button" className={tab === "diff" ? primaryButton : outlineButton} onClick={() => setTab("diff")}>
             Visual diff
@@ -381,6 +389,36 @@ export function PhaseCToolsModal({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+export function PhaseCToolsModal({
+  client,
+  canvasId,
+  canvasName,
+  canvases,
+  flags,
+  onClose,
+  onChangedNodes,
+}: {
+  client: AtlasClient;
+  canvasId: string;
+  canvasName: string;
+  canvases: CanvasSummary[];
+  flags: PhaseCFlags;
+  onClose: () => void;
+  onChangedNodes: (ids: string[], releaseLabel: string | null) => void;
+}) {
+  return (
+    <Modal title={`Accessibility tools · ${canvasName}`} onClose={onClose} width={720}>
+      <PhaseCToolsPanel
+        client={client}
+        canvasId={canvasId}
+        canvases={canvases}
+        flags={flags}
+        onChangedNodes={onChangedNodes}
+      />
     </Modal>
   );
 }

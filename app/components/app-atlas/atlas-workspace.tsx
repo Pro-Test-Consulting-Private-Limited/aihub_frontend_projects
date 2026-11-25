@@ -17,7 +17,8 @@ import {
   TbListCheck,
   TbGitBranch,
   TbLoader2,
-  TbPalette,
+  TbPhoto,
+  TbAccessible,
 } from "react-icons/tb";
 import { useProjects } from "@/app/lib/projectsStore";
 import type { Canvas, CanvasSummary, PresenceUser, SessionSnapshot } from "@/app/interfaces/appatlas";
@@ -30,7 +31,6 @@ import { SaveExecutionModal } from "./save-execution-modal";
 import { SessionSetupModal } from "./session-setup-modal";
 import { RecordingView } from "./recording-view";
 import { ReplayPlayer } from "./replay-player";
-import { PhaseCToolsModal } from "./phase-c-tools";
 import {
   emulationBodyFromPrefs,
   loadEmulationPrefs,
@@ -88,19 +88,25 @@ const DesignValidationView = dynamic(
   () => import("./design-validation-view").then((m) => m.DesignValidationView),
   { ssr: false, loading: () => tabFallback },
 );
+const AccessibilityView = dynamic(
+  () => import("./accessibility-view").then((m) => m.AccessibilityView),
+  { ssr: false, loading: () => tabFallback },
+);
 
+/** Order: Canvas, API, SIT, Visual Testing, Accessibility, CI/CD, Coverage, Security, Performance, Reports */
 const BASE_TABS = [
   { id: "canvas", label: "Canvas", icon: TbLayoutGrid },
   { id: "api", label: "API Testing", icon: TbNetwork },
   { id: "sit", label: "SIT Testing", icon: TbListCheck },
+  ...(FIGMA_DV_ENABLED
+    ? ([{ id: "visual", label: "Visual Testing", icon: TbPhoto }] as const)
+    : []),
+  { id: "accessibility", label: "Accessibility", icon: TbAccessible },
   { id: "cicd", label: "CI/CD", icon: TbGitBranch, trial: "cicdPage" as const },
   { id: "coverage", label: "Coverage", icon: TbChartLine },
-  ...(FIGMA_DV_ENABLED
-    ? ([{ id: "design", label: "Design Validation", icon: TbPalette }] as const)
-    : []),
-  { id: "reports", label: "Reports", icon: TbReportSearch },
   { id: "security", label: "Security", icon: TbShieldCheck },
   { id: "performance", label: "Performance", icon: TbBrandSpeedtest },
+  { id: "reports", label: "Reports", icon: TbReportSearch },
 ] as const;
 
 type TabId = (typeof BASE_TABS)[number]["id"];
@@ -166,7 +172,6 @@ export default function AtlasWorkspace() {
   const [focusNodeId, setFocusNodeId] = useState<string | null>(null);
   const [panelNodeId, setPanelNodeId] = useState<string | null>(null);
   const [connectFor, setConnectFor] = useState<CanvasSummary | null>(null);
-  const [phaseCOpen, setPhaseCOpen] = useState(false);
   const [phaseCFlags, setPhaseCFlags] = useState({
     visualDiff: false,
     responsiveSheet: false,
@@ -859,13 +864,31 @@ export default function AtlasWorkspace() {
                 setTab("canvas");
               }}
             />
-          ) : tab === "design" ? (
+          ) : tab === "visual" ? (
             <DesignValidationView
               client={client}
               canvas={canvas}
               figma={figma}
               onConnectApps={() => canvas && setConnectFor(canvas)}
+              panel="visual"
             />
+          ) : tab === "accessibility" ? (
+            <AccessibilityView
+              client={client}
+              canvas={canvas}
+              figma={figma}
+              canvases={canvases}
+              phaseCFlags={phaseCFlags}
+              onConnectApps={() => canvas && setConnectFor(canvas)}
+              onChangedNodes={(ids, label) => {
+                setChangedNodeIds(ids);
+                setChangedSinceRelease(label);
+              }}
+            />
+          ) : tab === "security" ? (
+            <SecurityOverview targetUrl={appUrl} projectName={project?.name} client={client} />
+          ) : tab === "performance" ? (
+            <PerformanceView canvas={canvas} />
           ) : tab === "reports" ? (
             <ReportsView
               client={client}
@@ -876,10 +899,6 @@ export default function AtlasWorkspace() {
                 setTab("sit");
               }}
             />
-          ) : tab === "security" ? (
-            <SecurityOverview targetUrl={appUrl} projectName={project?.name} client={client} />
-          ) : tab === "performance" ? (
-            <PerformanceView canvas={canvas} />
           ) : tab !== "canvas" ? (
             <EmptyState title={`${tabLabel} is coming soon`} body="This part of AppAtlas isn't available yet. Use Canvas to record and map your app." />
           ) : recording ? (
@@ -897,18 +916,6 @@ export default function AtlasWorkspace() {
             />
           ) : canvas ? (
             <>
-              {(phaseCFlags.visualDiff || phaseCFlags.responsiveSheet || phaseCFlags.shareExport) && (
-                <div className="absolute top-3 right-4 z-10">
-                  <button
-                    type="button"
-                    data-testid="phase-c-tools"
-                    onClick={() => setPhaseCOpen(true)}
-                    className="rounded-[8px] border border-[#E6E1F5] bg-white px-3 py-1.5 text-[12px] font-medium text-[#8664F2] shadow-sm hover:border-[#8664F2] dark:border-[#2a2a2a] dark:bg-[#141414]"
-                  >
-                    Accessibility tools
-                  </button>
-                </div>
-              )}
               <CanvasFlow
                 key={canvas.id}
                 nodes={canvas.nodes}
@@ -997,20 +1004,6 @@ export default function AtlasWorkspace() {
             />
           )}
           {replayOpen && canvas && <ReplayPlayer canvas={canvas} onClose={() => setReplayOpen(false)} />}
-          {phaseCOpen && canvas && (
-            <PhaseCToolsModal
-              client={client}
-              canvasId={canvas.id}
-              canvasName={canvas.name}
-              canvases={canvases}
-              flags={phaseCFlags}
-              onClose={() => setPhaseCOpen(false)}
-              onChangedNodes={(ids, label) => {
-                setChangedNodeIds(ids);
-                setChangedSinceRelease(label);
-              }}
-            />
-          )}
         </div>
       </div>
 

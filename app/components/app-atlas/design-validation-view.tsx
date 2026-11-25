@@ -33,14 +33,18 @@ export function DesignValidationView({
   canvas,
   figma,
   onConnectApps,
+  /** visual = Figma↔Canvas compare; accessibility = WCAG checks / audits / plugin */
+  panel = "visual",
 }: {
   client: AtlasClient;
   canvas: Canvas | null;
   figma: CanvasFigma | null;
   onConnectApps?: () => void;
+  panel?: "visual" | "accessibility";
 }) {
   const { instance, accounts } = useMsal();
-  const [mode, setMode] = useState<"compare" | "audits" | "plugin">("compare");
+  const isVisual = panel === "visual";
+  const [mode, setMode] = useState<"compare" | "audits" | "plugin">(isVisual ? "compare" : "compare");
   const [audits, setAudits] = useState<FigmaAudit[]>([]);
   const [selected, setSelected] = useState<FigmaAudit | null>(null);
   const [frames, setFrames] = useState<FrameRow[]>([]);
@@ -312,7 +316,7 @@ export function DesignValidationView({
   if (!canvas) {
     return (
       <div className="flex h-full items-center justify-center p-8 text-[13px] text-[#7E7E7E]">
-        Select a canvas to review Design Validation.
+        Select a canvas to review {isVisual ? "Visual Testing" : "Accessibility checks"}.
       </div>
     );
   }
@@ -338,13 +342,21 @@ export function DesignValidationView({
     );
   }
 
+  const modeButtons = isVisual
+    ? ([["compare", "Figma ↔ Canvas"]] as const)
+    : ([
+        ["compare", "WCAG checks"],
+        ["audits", "Saved audits"],
+        ["plugin", "In-Figma plugin"],
+      ] as const);
+
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 p-3 md:p-4">
+    <div className={`flex min-h-0 flex-col gap-3 ${isVisual ? "h-full p-3 md:p-4" : "h-full"}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <div className="flex items-center gap-2 text-[15px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">
             <SiFigma size={18} color="#F24E1E" />
-            Design Validation
+            {isVisual ? "Visual Testing" : "WCAG / design checks"}
           </div>
           <div className="mt-0.5 text-[12px] text-[#7E7E7E]">
             {fileName || linked.fileName || linked.fileKey}
@@ -353,13 +365,7 @@ export function DesignValidationView({
           </div>
         </div>
         <div className="flex flex-wrap gap-1.5">
-          {(
-            [
-              ["compare", "Figma ↔ Canvas"],
-              ["audits", "Saved audits"],
-              ["plugin", "In-Figma plugin"],
-            ] as const
-          ).map(([id, label]) => (
+          {modeButtons.map(([id, label]) => (
             <button
               key={id}
               type="button"
@@ -390,12 +396,12 @@ export function DesignValidationView({
 
       {error ? <div className="text-[12px] text-[#D97706]">{error}</div> : null}
 
-      {mode === "plugin" ? (
+      {mode === "plugin" && !isVisual ? (
         <div className="rounded-[12px] border border-[#E5E7EB] bg-[#FAFAFA] p-5 text-[13px] dark:border-[#2a2a2a] dark:bg-[#101010]">
           <div className="font-semibold">Designer flow (optional)</div>
           <p className="mt-2 text-[#7E7E7E]">
-            Use the AppAtlas Figma plugin for in-Figma WCAG feedback. QA visual compare uses PAT on this tab and does
-            not need the plugin.
+            Use the AppAtlas Figma plugin for in-Figma WCAG feedback while designing. Recorded-screen health and axe
+            results live under Health on this Accessibility tab.
           </p>
         </div>
       ) : null}
@@ -674,28 +680,32 @@ export function DesignValidationView({
                 )}
               </div>
               <div className="shrink-0 space-y-2 border-t border-[#F0F0F0] p-3 dark:border-[#1f1f1f]">
-                <button
-                  type="button"
-                  disabled={!!busy || !selectedFrame}
-                  onClick={() => void runChecksFromPat()}
-                  className="w-full rounded-[8px] bg-[#8664f2] px-3 py-2 text-[12.5px] font-medium text-white disabled:opacity-60"
-                >
-                  {busy === "checks" ? "Running checks…" : "Run design checks"}
-                </button>
-                <button
-                  type="button"
-                  disabled={!!busy || !selectedFrame || !nodeId}
-                  onClick={() => void runVisualDiff()}
-                  className="w-full rounded-[8px] border border-[#8664f2] px-3 py-2 text-[12.5px] font-medium text-[#8664f2] disabled:opacity-60"
-                >
-                  {busy === "diff" ? "Comparing…" : "Run visual comparison"}
-                </button>
+                {!isVisual ? (
+                  <button
+                    type="button"
+                    disabled={!!busy || !selectedFrame}
+                    onClick={() => void runChecksFromPat()}
+                    className="w-full rounded-[8px] bg-[#8664f2] px-3 py-2 text-[12.5px] font-medium text-white disabled:opacity-60"
+                  >
+                    {busy === "checks" ? "Running checks…" : "Run WCAG / design checks"}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={!!busy || !selectedFrame || !nodeId}
+                    onClick={() => void runVisualDiff()}
+                    className="w-full rounded-[8px] bg-[#8664f2] px-3 py-2 text-[12.5px] font-medium text-white disabled:opacity-60"
+                  >
+                    {busy === "diff" ? "Comparing…" : "Run visual comparison"}
+                  </button>
+                )}
               </div>
             </div>
           </aside>
 
           {/* Main workspace */}
           <section className="flex min-h-0 min-w-0 flex-col gap-3">
+            {isVisual ? (
             <div className="min-h-[320px] flex-1 overflow-hidden rounded-[12px] border border-[#E5E7EB] bg-[#FAFAFA] p-2 dark:border-[#2a2a2a] dark:bg-[#0f0f0f] md:min-h-0">
               {diff ? (
                 <DesignValidationCompare
@@ -716,8 +726,17 @@ export function DesignValidationView({
                 </div>
               )}
             </div>
+            ) : liveScore == null && !(liveFindings && liveFindings.length) ? (
+            <div className="flex min-h-[200px] flex-1 flex-col items-center justify-center gap-2 rounded-[12px] border border-dashed border-[#E5E7EB] p-6 text-center text-[13px] text-[#7E7E7E] dark:border-[#2a2a2a]">
+              <div className="text-[14px] font-medium text-[#1F1F1F] dark:text-[#ededed]">WCAG findings</div>
+              <p className="max-w-md">
+                Pick a Figma frame, then run WCAG / design checks. Findings appear below. Saved audits and the in-Figma
+                plugin are in the tabs above.
+              </p>
+            </div>
+            ) : null}
 
-            {(liveScore != null || (liveFindings && liveFindings.length > 0)) && (
+            {!isVisual && (liveScore != null || (liveFindings && liveFindings.length > 0)) && (
               <div className="max-h-[240px] shrink-0 overflow-hidden rounded-[12px] border border-[#E5E7EB] dark:border-[#2a2a2a]">
                 <button
                   type="button"
@@ -781,7 +800,7 @@ export function DesignValidationView({
       {mode === "audits" ? (
         audits.length === 0 && !loading ? (
           <div className="rounded-[12px] border border-dashed border-[#E5E7EB] p-6 text-center text-[13px] text-[#7E7E7E] dark:border-[#2a2a2a]">
-            No saved audits yet. Run design checks from Figma ↔ Canvas.
+            No saved audits yet. Run WCAG / design checks from this tab.
           </div>
         ) : (
           <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[280px_1fr]">

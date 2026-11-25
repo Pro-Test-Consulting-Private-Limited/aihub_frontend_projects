@@ -15,7 +15,6 @@ import {
 } from "react-icons/tb";
 import type { Canvas, CanvasClarification, JiraIssue, JiraNodeMatch, TicketNote } from "@/app/interfaces/appatlas";
 import { isLocalAuthBypassEnabled } from "@/app/lib/auth-bypass";
-import { HealthPanel } from "./health-panel";
 import { PostToTeamsModal, type PostToTeamsPayload } from "./post-to-teams-modal";
 import { ReportBugModal } from "./report-bug-modal";
 import { atlasClient } from "@/app/services/appatlas";
@@ -105,7 +104,6 @@ export function JiraPanel({
   const node = canvas.nodes.find((n) => n.id === nodeId);
   const mapping = canvas.jira;
   const [filter, setFilter] = useState<Bucket | null>(null);
-  const [drawerTab, setDrawerTab] = useState<"requirements" | "health">("requirements");
   const [panelWidth, setPanelWidth] = useState(360);
   const dragRef = useRef<{ startX: number; startW: number } | null>(null);
   const clarifications = useMemo(
@@ -200,32 +198,7 @@ export function JiraPanel({
         </button>
       </div>
 
-      <div className="flex gap-1 border-b border-[#EEE] px-3 pt-2 dark:border-[#1a1a1a]">
-        {(
-          [
-            { id: "requirements" as const, label: "Requirements" },
-            { id: "health" as const, label: "Health" },
-          ] as const
-        ).map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setDrawerTab(t.id)}
-            className={`rounded-t-[6px] px-3 py-1.5 text-[12px] font-medium ${
-              drawerTab === t.id
-                ? "bg-[#F4EFFE] text-[#5B3FD1]"
-                : "text-[#7E7E7E] hover:text-[#1F1F1F] dark:hover:text-white"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {drawerTab === "health" ? (
-        <div className="flex-1 overflow-y-auto">{node ? <HealthPanel node={node} /> : null}</div>
-      ) : (
-        <div className="flex-1 overflow-y-auto px-4 py-3">
+      <div className="flex-1 overflow-y-auto px-4 py-3">
           <div className="mb-3 flex items-center gap-2 text-[15px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">
             <SiJira size={16} color="#2684FF" /> Jira Tickets
             {mapping && <span className="text-[11px] font-normal text-[#7E7E7E]">· {mapping.projectKey}</span>}
@@ -286,8 +259,7 @@ export function JiraPanel({
               ))}
             </>
           )}
-        </div>
-      )}
+      </div>
     </div>
   );
 }
