@@ -48,7 +48,6 @@ import {
   ticketsFromKeys,
   viewWorkingKeys,
   workbookWithMergedRows,
-  workingSetKeys,
 } from "@/app/lib/sit-scope";
 import {
   EDITED_TOGGLE_TOOLTIP,
@@ -235,13 +234,9 @@ export function SitTestingViewV2({
       const items = saved.items || [];
       setHistory(items);
       const allTickets = tickets.epics.flatMap((e) => e.tickets);
-      let persisted = loadPersistedSelectedKeys(canvasId);
-      if (!persisted.length) {
-        persisted = workingSetKeys(
-          [],
-          items.flatMap((h) => h.sourceIssueKeys || []),
-        );
-      }
+      // Empty persistence = no Generate selection. Do NOT seed every workbook
+      // ticket (that made "Selected N" mirror "All tickets N" on first prod load).
+      const persisted = loadPersistedSelectedKeys(canvasId);
       const nextSelected = ticketsFromKeys(allTickets, persisted);
       setSelected(nextSelected);
       savePersistedSelectedKeys(nextSelected.map((t) => t.key), canvasId);
@@ -867,6 +862,13 @@ export function SitTestingViewV2({
     return rowsForTicket(allWorkingRows, ticketFilter);
   }, [allWorkingRows, ticketFilter, workingKeys, selected]);
 
+  /** Cases belonging to Generate selection (Selected pill count — not the active view filter). */
+  const selectedCaseCount = useMemo(() => {
+    const set = new Set(selected.map((t) => normalizeTicketKey(t.key)));
+    if (!set.size) return 0;
+    return allWorkingRows.filter((r) => set.has(ticketKeyOf(r))).length;
+  }, [allWorkingRows, selected]);
+
   const scopeSummary = useMemo(() => buildScopeSummary(scopeRows, workingKeys), [scopeRows, workingKeys]);
 
   useEffect(() => {
@@ -1383,7 +1385,7 @@ export function SitTestingViewV2({
                         : "border border-[#e2e6ef] bg-white"
                     }`}
                   >
-                    Selected {scopeRows.length}
+                    Selected {selectedCaseCount}
                   </button>
                 ) : null}
                 {workingKeys.map((k) => {
