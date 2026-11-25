@@ -44,6 +44,7 @@ import {
   savePersistedScope,
   savePersistedSelectedKeys,
   sortTicketKeys,
+  ticketBelongsToProject,
   ticketKeyOf,
   ticketsFromKeys,
   viewWorkingKeys,
@@ -222,6 +223,20 @@ export function SitTestingViewV2({
     setLoading(true);
     setError(null);
     setPageError(null);
+    // No canvas selected: never load cross-canvas workbooks or leave a stale Jira note.
+    if (!canvasId) {
+      setEpics([]);
+      setProjectKey(null);
+      setNote("Select a canvas that is connected to Jira.");
+      setSitNotConfigured(false);
+      setHistory([]);
+      setWorkbook(null);
+      setRowWorkbookId({});
+      setSelected([]);
+      setTicketFilter("all");
+      setLoading(false);
+      return;
+    }
     try {
       const [tickets, saved] = await Promise.all([
         client.listSitTickets(canvasId),
@@ -229,7 +244,10 @@ export function SitTestingViewV2({
       ]);
       setEpics(tickets.epics);
       setProjectKey(tickets.projectKey);
-      setNote(tickets.note ?? null);
+      // Ignore the null-canvas note if we have an id (stale/race responses).
+      const nextNote =
+        tickets.note === "Select a canvas that is connected to Jira." ? null : tickets.note ?? null;
+      setNote(nextNote);
       if (tickets.model?.state === "unconfigured") setSitNotConfigured(true);
       const items = saved.items || [];
       setHistory(items);
@@ -841,8 +859,30 @@ export function SitTestingViewV2({
     setStreamRowOwners(next);
   }, [streamWorkbook, generatingKeys]);
 
+  /** Pills / M: only keys in this canvas Jira project (drop legacy WALLET-* etc.). */
+  const projectScopedKeys = useMemo(
+    () =>
+      projectKey
+        ? workingKeys.filter((k) => ticketBelongsToProject(k, projectKey))
+        : workingKeys,
+    [workingKeys, projectKey],
+  );
+
   /** R14-01: single summary for All tickets, pills, Unassigned, popup loaded counts. */
-  const workingSummary = useMemo(() => buildScopeSummary(allWorkingRows, workingKeys), [allWorkingRows, workingKeys]);
+  const workingSummary = useMemo(
+    () => buildScopeSummary(allWorkingRows, projectScopedKeys, projectKey),
+    [allWorkingRows, projectScopedKeys, projectKey],
+  );
+
+  const isUnassignedRow = useCallback(
+    (r: SitSheetRow) => {
+      const k = ticketKeyOf(r);
+      if (!k) return true;
+      if (projectKey && !ticketBelongsToProject(k, projectKey)) return true;
+      return false;
+    },
+    [projectKey],
+  );
 
   /** Ticket-scope rows for flag / source / status counts (never search/type). */
   const scopeRows = useMemo(() => {
@@ -853,14 +893,10 @@ export function SitTestingViewV2({
       return allWorkingRows.filter((r) => set.has(ticketKeyOf(r)));
     }
     if (ticketFilter === "__unassigned__") {
-      const keySet = new Set(workingKeys);
-      return allWorkingRows.filter((r) => {
-        const k = ticketKeyOf(r);
-        return !k || !keySet.has(k);
-      });
+      return allWorkingRows.filter(isUnassignedRow);
     }
     return rowsForTicket(allWorkingRows, ticketFilter);
-  }, [allWorkingRows, ticketFilter, workingKeys, selected]);
+  }, [allWorkingRows, ticketFilter, selected, isUnassignedRow]);
 
   /** Cases belonging to Generate selection (Selected pill count — not the active view filter). */
   const selectedCaseCount = useMemo(() => {
@@ -869,7 +905,10 @@ export function SitTestingViewV2({
     return allWorkingRows.filter((r) => set.has(ticketKeyOf(r))).length;
   }, [allWorkingRows, selected]);
 
-  const scopeSummary = useMemo(() => buildScopeSummary(scopeRows, workingKeys), [scopeRows, workingKeys]);
+  const scopeSummary = useMemo(
+    () => buildScopeSummary(scopeRows, projectScopedKeys, projectKey),
+    [scopeRows, projectScopedKeys, projectKey],
+  );
 
   useEffect(() => {
     if (process.env.NODE_ENV === "production") return;
@@ -929,7 +968,7 @@ export function SitTestingViewV2({
           const set = new Set(selected.map((t) => normalizeTicketKey(t.key)));
           return set.has(ticketKeyOf(r));
         }
-        if (ticketFilter === "__unassigned__") return !ticketKeyOf(r);
+        if (ticketFilter === "__unassigned__") return isUnassignedRow(r);
         return ticketKeyOf(r) === ticketFilter;
       });
       warnFlagCountMismatch(flagged, badge, scopedFiltered.length);
@@ -940,7 +979,7 @@ export function SitTestingViewV2({
         s.kind !== "test-cases" ? s : { ...s, rows: filtered },
       ),
     };
-  }, [scopedWorkbook, deadFlag, selectedIssueIds, flagSummary, ticketFilter]);
+  }, [scopedWorkbook, deadFlag, selectedIssueIds, flagSummary, ticketFilter, selected, isUnassignedRow]);
 
   /** R7-03 / R12-01: Y in "Showing X of Y" is the current ticket scope (All or DW-x). */
   const toolbarTotalCount = useMemo(() => scopeRows.length, [scopeRows]);
@@ -949,11 +988,7 @@ export function SitTestingViewV2({
       displayWorkbook?.sheets.find((s) => s.kind === "test-cases")?.rows.filter((r) => r.cells.deleted !== "1") ||
       [];
     if (ticketFilter === "__unassigned__") {
-      const keySet = new Set(workingKeys);
-      list = list.filter((r) => {
-        const k = ticketKeyOf(r);
-        return !k || !keySet.has(k);
-      });
+      list = list.filter(isUnassignedRow);
     } else if (ticketFilter === "__selected__") {
       const set = new Set(selected.map((t) => normalizeTicketKey(t.key)));
       list = list.filter((r) => set.has(ticketKeyOf(r)));
@@ -978,7 +1013,17 @@ export function SitTestingViewV2({
       );
     }
     return list.length;
-  }, [displayWorkbook, ticketFilter, typeFilter, statusFilter, originFilter, editedOnly, search, workingKeys]);
+  }, [
+    displayWorkbook,
+    ticketFilter,
+    typeFilter,
+    statusFilter,
+    originFilter,
+    editedOnly,
+    search,
+    selected,
+    isUnassignedRow,
+  ]);
 
   /** R13: origin chip counts over ticket scope only (not search/type/status/flagged/edited). */
   const counts = useMemo(() => {
@@ -1394,7 +1439,7 @@ export function SitTestingViewV2({
                     Selected {selectedCaseCount}
                   </button>
                 ) : null}
-                {workingKeys.map((k) => {
+                {projectScopedKeys.map((k) => {
                   const count = workingSummary.byTicket[k] ?? 0;
                   const isSel = selected.some((s) => normalizeTicketKey(s.key) === k);
                   // Hide zero-case pills unless selected for Generate or actively filtered.
@@ -2002,7 +2047,7 @@ export function SitTestingViewV2({
             <p className="text-[13px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">Add test case to which ticket?</p>
             <p className="mt-1 text-[12px] text-[#5b647a]">Pick a ticket in the working set. Cases are never created without a key.</p>
             <ul className="mt-3 max-h-64 space-y-1 overflow-y-auto">
-              {workingKeys.map((k) => (
+              {projectScopedKeys.map((k) => (
                 <li key={k}>
                   <button
                     type="button"

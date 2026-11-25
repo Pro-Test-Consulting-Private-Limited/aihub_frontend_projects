@@ -7,6 +7,7 @@ import {
   liveCaseCount,
   mergeWorkbooksForKeys,
   sortTicketKeys,
+  ticketBelongsToProject,
   ticketKeyOf,
   workingSetKeys,
 } from "./sit-scope";
@@ -90,6 +91,31 @@ describe("R14 ticketKeyOf", () => {
     expect(ticketKeyOf({ cells: { requirementId: " dw-11 ", issueKey: "" } })).toBe("DW-11");
     expect(ticketKeyOf({ cells: { requirementId: "", issueKey: "dw-9" } })).toBe("DW-9");
     expect(ticketKeyOf({ cells: { requirementId: "", issueKey: "" } })).toBe("");
+  });
+});
+
+describe("project-scoped foreign keys", () => {
+  it("ticketBelongsToProject keeps DW-* for project DW and rejects WALLET-*", () => {
+    expect(ticketBelongsToProject("DW-6", "DW")).toBe(true);
+    expect(ticketBelongsToProject("dw-14", "DW")).toBe(true);
+    expect(ticketBelongsToProject("WALLET-101", "DW")).toBe(false);
+    expect(ticketBelongsToProject("WALLET-101", null)).toBe(true);
+  });
+
+  it("buildScopeSummary folds foreign keys into Unassigned when projectKey is set", () => {
+    const rows = [
+      row("a", "DW-6"),
+      row("b", "DW-6"),
+      row("c", "WALLET-101"),
+      row("d", "", { requirementId: "", issueKey: "" }),
+    ];
+    const s = buildScopeSummary(rows, ["DW-6", "WALLET-101"], "DW");
+    expect(s.byTicket["DW-6"]).toBe(2);
+    expect(s.byTicket["WALLET-101"]).toBeUndefined();
+    expect(s.workingKeys).toEqual(["DW-6"]);
+    expect(s.unassigned).toBe(2);
+    expect(s.total).toBe(4);
+    expect(checkScopeInvariants(s)).toEqual([]);
   });
 });
 

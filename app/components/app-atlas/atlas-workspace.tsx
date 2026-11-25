@@ -785,7 +785,7 @@ export default function AtlasWorkspace() {
             sitUiV2 ? (
               <SitTestingViewV2
                 client={client}
-                canvasId={canvas?.id ?? null}
+                canvasId={canvas?.id ?? selectedId}
                 canvasName={canvas?.name}
                 projectName={project?.name}
                 canEdit={!!canvas?.isMine}
@@ -793,7 +793,7 @@ export default function AtlasWorkspace() {
             ) : (
               <SitTestingView
                 client={client}
-                canvasId={canvas?.id ?? null}
+                canvasId={canvas?.id ?? selectedId}
                 canvasName={canvas?.name}
                 focusWorkbookId={sitFocus?.workbookId}
                 focusTicketKey={sitFocus?.ticketKey}

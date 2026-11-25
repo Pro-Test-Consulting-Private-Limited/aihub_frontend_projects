@@ -39,8 +39,17 @@ type AppId = IntegrationProviderId;
 
 function healthLabel(health: ConnectionHealth, linkedOnCanvas: boolean): string {
   if (health === "active") return linkedOnCanvas ? "Active · linked to this canvas" : "Active · ready to connect";
-  if (health === "expired") return "Expired · reconnect in Integrations";
-  if (health === "error") return "Error · check Integrations";
+  // Canvas mapping can still work for SIT while the user session/cookie is expired.
+  if (health === "expired") {
+    return linkedOnCanvas
+      ? "Linked to this canvas · reconnect account in Integrations"
+      : "Expired · reconnect in Integrations";
+  }
+  if (health === "error") {
+    return linkedOnCanvas
+      ? "Linked to this canvas · fix connection in Integrations"
+      : "Error · check Integrations";
+  }
   return "Not integrated · open Integrations";
 }
 
@@ -154,9 +163,15 @@ export function ConnectAppsModal({
                     (app.id === "github" && gitConnected);
                   const selected = picked === app.id;
                   const expired = health === "expired";
+                  const errored = health === "error";
+                  /** Mapping still on canvas; account session may need reconnect — don't look "unlinked". */
+                  const linkedNeedsReconnect = linkedOnCanvas && (expired || errored);
                   const gitAdminOff = app.id === "github" && gitAvailable === false;
                   const needsIntegrate =
-                    mappable && !gitAdminOff && (health === "disconnected" || health === "error" || expired);
+                    mappable &&
+                    !gitAdminOff &&
+                    (health === "disconnected" || ((expired || errored) && !linkedOnCanvas));
+                  const showLinked = linkedOnCanvas && (ok || linkedNeedsReconnect);
 
                   const statusText = gitAdminOff
                     ? "Not enabled by your admin"
@@ -172,7 +187,7 @@ export function ConnectAppsModal({
                   const onAppClick = () => {
                     if (!mappable) return;
                     if (gitAdminOff) return;
-                    if (needsIntegrate) {
+                    if (needsIntegrate || linkedNeedsReconnect) {
                       router.push("/integrations");
                       return;
                     }
@@ -192,7 +207,7 @@ export function ConnectAppsModal({
                         className={`relative flex h-[56px] w-[56px] items-center justify-center rounded-[10px] bg-white shadow-sm transition dark:bg-[#1a1a1a] ${
                           selected && ok
                             ? "scale-105 border-2 border-[#8664F2] ring-2 ring-[#8664F2]/35"
-                            : ok
+                            : ok || linkedNeedsReconnect
                               ? "border-2 border-[#22C55E] hover:scale-105"
                               : expired
                                 ? "border-2 border-[#F59E0B] hover:ring-2 hover:ring-[#F59E0B]/30"
@@ -208,7 +223,13 @@ export function ConnectAppsModal({
                             title={statusText}
                           />
                         )}
-                        {expired && (
+                        {linkedNeedsReconnect && (
+                          <span
+                            className="absolute -right-1 -top-1 h-[12px] w-[12px] rounded-full border-2 border-white bg-[#F59E0B]"
+                            title={statusText}
+                          />
+                        )}
+                        {expired && !linkedOnCanvas && (
                           <span
                             className="absolute -right-1 -top-1 h-[12px] w-[12px] rounded-full border-2 border-white bg-[#F59E0B]"
                             title={statusText}
@@ -222,7 +243,7 @@ export function ConnectAppsModal({
                             +
                           </span>
                         )}
-                        {linkedOnCanvas && ok && (
+                        {showLinked && (
                           <span
                             className="absolute -bottom-1 left-1/2 h-[3px] w-[18px] -translate-x-1/2 rounded-full bg-[#2563EB]"
                             title="Linked to this canvas"
