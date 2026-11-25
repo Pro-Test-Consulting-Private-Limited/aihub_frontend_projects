@@ -403,7 +403,8 @@ export function mergeStreamIntoScope(
 }
 
 /** Persist helpers — scoped per canvas when canvasId is provided. */
-export const SIT_SELECTED_KEYS = "sit_v2_selected_keys";
+/** r17c: bump drops accidental “select all tickets” seeds from empty-persist fallback. */
+export const SIT_SELECTED_KEYS = "sit_v2_selected_keys_r17c";
 export const SIT_SCOPE_PILL = "sit_v2_scope_pill";
 export const SIT_MODE_KEY = "sit_v2_mode";
 
