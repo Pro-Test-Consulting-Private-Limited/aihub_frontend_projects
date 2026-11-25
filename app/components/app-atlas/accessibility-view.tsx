@@ -4,27 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import { TbAccessible, TbHeartbeat, TbTools } from "react-icons/tb";
 import type { AtlasClient } from "@/app/services/appatlas";
 import { atlasUrl } from "@/app/services/appatlas";
-import type { A11yIssue, Canvas, CanvasNode, CanvasSummary } from "@/app/interfaces/appatlas";
+import type { Canvas, CanvasNode, CanvasSummary } from "@/app/interfaces/appatlas";
 import { HealthPanel } from "./health-panel";
 import { PhaseCToolsPanel } from "./phase-c-tools";
+import { WcagPanel } from "./wcag-panel";
 
 type Section = "health" | "wcag" | "tools";
-
-/** Runtime axe / screen health — no Figma required. */
-function collectA11yIssues(node: CanvasNode): A11yIssue[] {
-  const h = node.health;
-  if (!h) return [];
-  if (h.a11yIssues?.length) return h.a11yIssues;
-  return (h.a11ySummary || []).map((line): A11yIssue => {
-    const idx = line.indexOf(":");
-    return {
-      id: idx > 0 ? line.slice(0, idx).trim() : "a11y",
-      help: idx > 0 ? line.slice(idx + 1).trim() : line,
-      impact: null,
-      nodes: 1,
-    };
-  });
-}
 
 function ScreenRail({
   nodes,
@@ -142,62 +127,6 @@ function ScreenRail({
   );
 }
 
-function WcagRollup({ nodes, focusNodeId }: { nodes: CanvasNode[]; focusNodeId: string }) {
-  const rows = useMemo(() => {
-    return nodes
-      .map((n) => ({
-        node: n,
-        issues: collectA11yIssues(n),
-        violations: n.health?.a11yViolations ?? 0,
-      }))
-      .filter((r) => r.issues.length > 0 || r.violations > 0);
-  }, [nodes]);
-
-  const focus = rows.find((r) => r.node.id === focusNodeId) || rows[0] || null;
-
-  if (rows.length === 0) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center text-[13px] text-[#7E7E7E]">
-        <div className="text-[14px] font-medium text-[#1F1F1F] dark:text-[#ededed]">No WCAG findings yet</div>
-        <p className="max-w-md">
-          Accessibility rules (axe) are captured while you record — no Figma link required. Re-record with health
-          enabled if screens have no a11y data.
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4 p-4">
-      <div>
-        <div className="text-[13px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">Recorded WCAG / axe findings</div>
-        <p className="mt-0.5 text-[12px] text-[#7E7E7E]">
-          From the live browser during crawl — not from Figma. {rows.length} screen
-          {rows.length === 1 ? "" : "s"} with issues.
-        </p>
-      </div>
-
-      <div className="flex flex-wrap gap-1.5">
-        {rows.map(({ node, violations }) => (
-          <span
-            key={node.id}
-            className={`rounded-full px-2.5 py-0.5 text-[11px] ${
-              node.id === focus?.node.id
-                ? "bg-[#8664f2] text-white"
-                : "bg-[#F3F4F6] text-[#5E6066] dark:bg-[#1a1a1a]"
-            }`}
-          >
-            {node.path || node.title}
-            {violations > 0 ? ` · ${violations}` : ""}
-          </span>
-        ))}
-      </div>
-
-      {focus ? <HealthPanel node={focus.node} /> : null}
-    </div>
-  );
-}
-
 export function AccessibilityView({
   client,
   canvas,
@@ -248,7 +177,7 @@ export function AccessibilityView({
             Accessibility
           </div>
           <div className="mt-0.5 text-[12px] text-[#7E7E7E]">
-            Recorded screen health &amp; axe WCAG — no Figma required · plus accessibility tools
+            Health (runtime) · WCAG 2.1 A/AA (axe) · tools — no Figma required
           </div>
         </div>
         <div className="flex flex-wrap gap-1.5">
@@ -300,33 +229,29 @@ export function AccessibilityView({
           </aside>
 
           <section className="min-h-0 overflow-y-auto rounded-[12px] border border-[#E5E7EB] dark:border-[#2a2a2a]">
-            {section === "health" ? (
-              selected ? (
-                <div>
-                  {selectedState?.screenshotUrl ? (
-                    <div className="border-b border-[#F0F0F0] p-3 dark:border-[#1f1f1f]">
-                      <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#9ca3af]">
-                        Selected state · {selectedState.label || selectedState.kind}
-                      </div>
-                      <div className="overflow-hidden rounded-[10px] border border-[#E5E7EB] bg-[#F8FAFC] dark:border-[#2a2a2a] dark:bg-[#0f0f0f]">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={atlasUrl(selectedState.screenshotUrl)}
-                          alt={selectedState.label || selectedState.kind}
-                          className="max-h-[220px] w-full object-contain object-top"
-                        />
-                      </div>
+            {selected ? (
+              <div>
+                {selectedState?.screenshotUrl ? (
+                  <div className="border-b border-[#F0F0F0] p-3 dark:border-[#1f1f1f]">
+                    <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#9ca3af]">
+                      Selected state · {selectedState.label || selectedState.kind}
                     </div>
-                  ) : null}
-                  <HealthPanel node={selected} />
-                </div>
-              ) : (
-                <div className="flex h-full items-center justify-center p-8 text-[13px] text-[#7E7E7E]">
-                  Select a screen to see health and accessibility findings.
-                </div>
-              )
+                    <div className="overflow-hidden rounded-[10px] border border-[#E5E7EB] bg-[#F8FAFC] dark:border-[#2a2a2a] dark:bg-[#0f0f0f]">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={atlasUrl(selectedState.screenshotUrl)}
+                        alt={selectedState.label || selectedState.kind}
+                        className="max-h-[220px] w-full object-contain object-top"
+                      />
+                    </div>
+                  </div>
+                ) : null}
+                {section === "health" ? <HealthPanel node={selected} /> : <WcagPanel node={selected} />}
+              </div>
             ) : (
-              <WcagRollup nodes={nodes} focusNodeId={nodeId} />
+              <div className="flex h-full items-center justify-center p-8 text-[13px] text-[#7E7E7E]">
+                Select a screen to see {section === "health" ? "health" : "WCAG 2.1"} findings.
+              </div>
             )}
           </section>
         </div>

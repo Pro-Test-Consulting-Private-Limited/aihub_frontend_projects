@@ -230,6 +230,8 @@ export type A11yIssue = {
   failureSummary?: string;
   screenshotUrl?: string;
   nodeDetails?: A11yNodeDetail[];
+  /** axe tags such as wcag2aa / wcag21aa when captured. */
+  tags?: string[];
 };
 
 export type SessionHealthSummary = {

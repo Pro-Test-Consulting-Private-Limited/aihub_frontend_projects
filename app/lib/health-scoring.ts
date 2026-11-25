@@ -111,6 +111,24 @@ export const METRIC_HELP: Record<string, { title: string; body: string; scoring?
   },
 };
 
+/** Official WCAG 2.1 recommendation. */
+export const WCAG_21_SPEC_URL = "https://www.w3.org/TR/WCAG21/";
+
+/** Map WCAG criterion number → TR/WCAG21 fragment. */
+const WCAG_21_FRAGMENTS: Record<string, string> = {
+  "1.1.1": "non-text-content",
+  "1.3.1": "info-and-relationships",
+  "1.4.3": "contrast-minimum",
+  "2.4.4": "link-purpose-in-context",
+  "3.3.2": "labels-or-instructions",
+  "4.1.2": "name-role-value",
+};
+
+export function wcag21CriterionUrl(wcagId: string): string {
+  const frag = WCAG_21_FRAGMENTS[wcagId];
+  return frag ? `${WCAG_21_SPEC_URL}#${frag}` : WCAG_21_SPEC_URL;
+}
+
 /** Glossary shown in the Health help overlay and issue popups. */
 export const A11Y_RULE_GUIDE: Array<{
   id: string;
@@ -201,3 +219,24 @@ export const A11Y_RULE_GUIDE: Array<{
     fix: "Set meaningful alt, or alt=\"\" for decorative images.",
   },
 ];
+
+/** Resolve WCAG 2.1 criterion metadata for an axe rule id. */
+export function wcagMetaForRule(ruleId: string): {
+  wcagId: string;
+  wcagName: string;
+  wcagLevel: string;
+  href: string;
+  title: string;
+} | null {
+  const guide = A11Y_RULE_GUIDE.find((g) => g.id === ruleId);
+  if (guide?.wcagId && guide.wcagName && guide.wcagLevel) {
+    return {
+      wcagId: guide.wcagId,
+      wcagName: guide.wcagName,
+      wcagLevel: guide.wcagLevel,
+      href: wcag21CriterionUrl(guide.wcagId),
+      title: guide.title,
+    };
+  }
+  return null;
+}
