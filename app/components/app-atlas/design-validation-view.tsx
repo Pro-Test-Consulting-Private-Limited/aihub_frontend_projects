@@ -1,13 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMsal } from "@azure/msal-react";
 import { SiFigma } from "react-icons/si";
-import { TbRefresh } from "react-icons/tb";
+import { TbLayoutGrid, TbList, TbRefresh, TbSearch } from "react-icons/tb";
 import { getFreshIdToken } from "@/app/lib/auth-client";
-import { atlasUrl, type AtlasClient } from "@/app/services/appatlas";
+import { type AtlasClient } from "@/app/services/appatlas";
 import type { Canvas, FigmaAudit, FigmaFinding } from "@/app/interfaces/appatlas";
 import type { CanvasFigma } from "@/app/lib/canvas-figma";
+import { DesignValidationCompare } from "./design-validation-compare";
 
 type FrameRow = {
   pageId: string;
@@ -47,13 +48,20 @@ export function DesignValidationView({
   const [frameId, setFrameId] = useState("");
   const [nodeId, setNodeId] = useState("");
   const [stateId, setStateId] = useState("");
+  const [pageFilter, setPageFilter] = useState<string>("all");
+  const [frameQuery, setFrameQuery] = useState("");
+  const [frameView, setFrameView] = useState<"grid" | "list">("grid");
+  const [thumbs, setThumbs] = useState<Record<string, string>>({});
+  const [loadingThumbs, setLoadingThumbs] = useState(false);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [dryRun, setDryRun] = useState<{ summary: string; description: string; labels: string[] } | null>(null);
   const [liveFindings, setLiveFindings] = useState<FigmaFinding[] | null>(null);
   const [liveScore, setLiveScore] = useState<number | null>(null);
+  const [activeFindingId, setActiveFindingId] = useState<string | null>(null);
   const [diff, setDiff] = useState<DiffResult | null>(null);
+  const [findingsOpen, setFindingsOpen] = useState(true);
 
   const linked = figma || canvas?.figma || null;
   const fileKey = linked?.fileKey || "";
@@ -61,6 +69,21 @@ export function DesignValidationView({
   const nodes = canvas?.nodes || [];
   const selectedNode = useMemo(() => nodes.find((n) => n.id === nodeId) || null, [nodes, nodeId]);
   const selectedFrame = useMemo(() => frames.find((f) => f.frameId === frameId) || null, [frames, frameId]);
+
+  const pages = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const f of frames) map.set(f.pageId, f.pageName);
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+  }, [frames]);
+
+  const filteredFrames = useMemo(() => {
+    const q = frameQuery.trim().toLowerCase();
+    return frames.filter((f) => {
+      if (pageFilter !== "all" && f.pageId !== pageFilter) return false;
+      if (!q) return true;
+      return `${f.pageName} ${f.frameName}`.toLowerCase().includes(q);
+    });
+  }, [frames, pageFilter, frameQuery]);
 
   const authHeaders = useCallback(async () => {
     const token = await getFreshIdToken(instance, accounts);
@@ -103,14 +126,43 @@ export function DesignValidationView({
       if (!frameId && data.frames?.[0]?.frameId) setFrameId(data.frames[0].frameId);
     } catch (e) {
       setError(
-        e instanceof Error
-          ? e.message
-          : "Could not read Figma. Reconnect your PAT on Integrations.",
+        e instanceof Error ? e.message : "Could not read Figma. Reconnect your PAT on Integrations.",
       );
     } finally {
       setBusy(null);
     }
   }, [fileKey, frameId]);
+
+  const thumbRequested = useRef<Set<string>>(new Set());
+
+  /** Lazy-load thumbnails for visible frames (batched). */
+  const ensureThumbs = useCallback(
+    async (ids: string[]) => {
+      if (!fileKey || ids.length === 0) return;
+      const missing = ids.filter((id) => !thumbRequested.current.has(id)).slice(0, 24);
+      if (missing.length === 0) return;
+      missing.forEach((id) => thumbRequested.current.add(id));
+      setLoadingThumbs(true);
+      try {
+        const res = await fetch("/api/auth/figma/images", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fileKey, ids: missing, scale: 1, format: "png" }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          missing.forEach((id) => thumbRequested.current.delete(id));
+          return;
+        }
+        setThumbs((prev) => ({ ...prev, ...(data.images || {}) }));
+      } catch {
+        missing.forEach((id) => thumbRequested.current.delete(id));
+      } finally {
+        setLoadingThumbs(false);
+      }
+    },
+    [fileKey],
+  );
 
   useEffect(() => {
     void refreshAudits();
@@ -124,12 +176,17 @@ export function DesignValidationView({
     if (!nodeId && nodes[0]?.id) setNodeId(nodes[0].id);
   }, [nodes, nodeId]);
 
+  useEffect(() => {
+    void ensureThumbs(filteredFrames.slice(0, 24).map((f) => f.frameId));
+  }, [filteredFrames, ensureThumbs]);
+
   const runChecksFromPat = async () => {
     if (!canvas?.id || !fileKey || !selectedFrame) return;
     setBusy("checks");
     setError("");
     setLiveFindings(null);
     setLiveScore(null);
+    setFindingsOpen(true);
     try {
       const headers = await authHeaders();
       const res = await fetch("/api/auth/figma/run-checks", {
@@ -161,7 +218,6 @@ export function DesignValidationView({
     if (!canvas?.id || !fileKey || !selectedFrame || !nodeId) return;
     setBusy("diff");
     setError("");
-    setDiff(null);
     try {
       const imgRes = await fetch("/api/auth/figma/images", {
         method: "POST",
@@ -220,8 +276,7 @@ export function DesignValidationView({
         <SiFigma size={28} color="#F24E1E" />
         <div className="text-[15px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">No Figma file linked</div>
         <p className="max-w-md text-[13px] text-[#7E7E7E]">
-          Connect Figma with a PAT on Integrations, then link a file on this canvas. AppAtlas will read frames via the
-          Figma API — no plugin required for visual compare.
+          Connect Figma with a PAT on Integrations, then link a file on this canvas.
         </p>
         {onConnectApps ? (
           <button
@@ -237,7 +292,7 @@ export function DesignValidationView({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 p-4">
+    <div className="flex h-full min-h-0 flex-col gap-3 p-3 md:p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <div className="flex items-center gap-2 text-[15px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">
@@ -245,7 +300,9 @@ export function DesignValidationView({
             Design Validation
           </div>
           <div className="mt-0.5 text-[12px] text-[#7E7E7E]">
-            {fileName || linked.fileName || linked.fileKey} · PAT reads designs from Figma
+            {fileName || linked.fileName || linked.fileKey}
+            {selectedFrame ? ` · ${selectedFrame.pageName} / ${selectedFrame.frameName}` : ""}
+            {selectedNode ? ` ↔ ${selectedNode.title || selectedNode.path}` : ""}
           </div>
         </div>
         <div className="flex flex-wrap gap-1.5">
@@ -288,161 +345,310 @@ export function DesignValidationView({
 
       {mode === "plugin" ? (
         <div className="rounded-[12px] border border-[#E5E7EB] bg-[#FAFAFA] p-5 text-[13px] dark:border-[#2a2a2a] dark:bg-[#101010]">
-          <div className="font-semibold text-[#1F1F1F] dark:text-[#ededed]">Designer flow (optional)</div>
+          <div className="font-semibold">Designer flow (optional)</div>
           <p className="mt-2 text-[#7E7E7E]">
-            Use the AppAtlas Figma plugin when someone is designing <em>inside Figma</em> and wants WCAG-style feedback
-            on the selected frame immediately. Pairing code comes from Connect apps → Figma.
-          </p>
-          <ol className="mt-3 list-decimal space-y-1 pl-5 text-[#4B5563] dark:text-[#9ca3af]">
-            <li>Import <code className="text-[12px]">figma-plugin/manifest.json</code> as a Figma Development plugin</li>
-            <li>Generate a pairing code on this canvas</li>
-            <li>Select a frame → Validate → findings also land here under Saved audits</li>
-          </ol>
-          <p className="mt-3 text-[#7E7E7E]">
-            For QA in AppAtlas after a crawl, stay on <strong>Figma ↔ Canvas</strong> — that uses your PAT and does not
-            need the plugin.
+            Use the AppAtlas Figma plugin for in-Figma WCAG feedback. QA visual compare uses PAT on this tab and does
+            not need the plugin.
           </p>
         </div>
       ) : null}
 
       {mode === "compare" ? (
-        <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-2">
-          <div className="space-y-3 overflow-y-auto rounded-[12px] border border-[#E5E7EB] p-4 dark:border-[#2a2a2a]">
-            <div className="text-[12px] font-semibold uppercase tracking-wide text-[#6B7280]">From Figma (PAT)</div>
-            <label className="block text-[12px] font-medium">
-              Frame
-              <select
-                className="mt-1 w-full rounded-[8px] border border-[#E5E7EB] bg-white px-2 py-2 text-[13px] dark:border-[#2a2a2a] dark:bg-[#141414]"
-                value={frameId}
-                onChange={(e) => setFrameId(e.target.value)}
-              >
-                {frames.length === 0 ? <option value="">No frames loaded</option> : null}
-                {frames.map((f) => (
-                  <option key={f.frameId} value={f.frameId}>
-                    {f.pageName} / {f.frameName}
-                    {f.width ? ` (${Math.round(f.width)}×${Math.round(f.height || 0)})` : ""}
-                  </option>
-                ))}
-              </select>
-            </label>
+        <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[320px_minmax(0,1fr)]">
+          {/* Left rail: frame explorer + mapping */}
+          <aside className="flex min-h-0 flex-col gap-3 overflow-hidden">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[12px] border border-[#E5E7EB] dark:border-[#2a2a2a]">
+              <div className="shrink-0 space-y-2 border-b border-[#F0F0F0] p-3 dark:border-[#1f1f1f]">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-[#6B7280]">
+                    Frame explorer
+                  </div>
+                  <div className="flex gap-1">
+                    <button
+                      type="button"
+                      title="Grid"
+                      onClick={() => setFrameView("grid")}
+                      className={`rounded p-1 ${frameView === "grid" ? "bg-[#F3EEFF] text-[#8664f2]" : "text-[#9CA3AF]"}`}
+                    >
+                      <TbLayoutGrid size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      title="List"
+                      onClick={() => setFrameView("list")}
+                      className={`rounded p-1 ${frameView === "list" ? "bg-[#F3EEFF] text-[#8664f2]" : "text-[#9CA3AF]"}`}
+                    >
+                      <TbList size={14} />
+                    </button>
+                  </div>
+                </div>
+                <div className="relative">
+                  <TbSearch className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[#9CA3AF]" size={14} />
+                  <input
+                    value={frameQuery}
+                    onChange={(e) => setFrameQuery(e.target.value)}
+                    placeholder="Search frames"
+                    className="w-full rounded-[8px] border border-[#E5E7EB] bg-white py-1.5 pl-7 pr-2 text-[12.5px] dark:border-[#2a2a2a] dark:bg-[#141414]"
+                  />
+                </div>
+                <div className="flex gap-1 overflow-x-auto pb-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setPageFilter("all")}
+                    className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] ${
+                      pageFilter === "all" ? "bg-[#8664f2] text-white" : "bg-[#F3F4F6] text-[#5E6066] dark:bg-[#1a1a1a]"
+                    }`}
+                  >
+                    All pages
+                  </button>
+                  {pages.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setPageFilter(p.id)}
+                      className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] ${
+                        pageFilter === p.id
+                          ? "bg-[#8664f2] text-white"
+                          : "bg-[#F3F4F6] text-[#5E6066] dark:bg-[#1a1a1a]"
+                      }`}
+                    >
+                      {p.name}
+                    </button>
+                  ))}
+                </div>
+                {loadingThumbs || busy === "frames" ? (
+                  <div className="text-[11px] text-[#9CA3AF]">
+                    {busy === "frames" ? "Loading frames…" : "Loading thumbnails…"}
+                  </div>
+                ) : null}
+              </div>
 
-            <div className="text-[12px] font-semibold uppercase tracking-wide text-[#6B7280]">Canvas screen</div>
-            <label className="block text-[12px] font-medium">
-              Screen / node
-              <select
-                className="mt-1 w-full rounded-[8px] border border-[#E5E7EB] bg-white px-2 py-2 text-[13px] dark:border-[#2a2a2a] dark:bg-[#141414]"
-                value={nodeId}
-                onChange={(e) => {
-                  setNodeId(e.target.value);
-                  setStateId("");
-                }}
-              >
-                {nodes.map((n) => (
-                  <option key={n.id} value={n.id}>
-                    {n.title || n.path || n.id}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {selectedNode && selectedNode.states.length > 0 ? (
+              <div className="min-h-0 flex-1 overflow-y-auto p-2">
+                {filteredFrames.length === 0 ? (
+                  <div className="p-3 text-[12px] text-[#7E7E7E]">No frames match.</div>
+                ) : frameView === "grid" ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    {filteredFrames.map((f) => {
+                      const selected = f.frameId === frameId;
+                      return (
+                        <button
+                          key={f.frameId}
+                          type="button"
+                          onClick={() => setFrameId(f.frameId)}
+                          className={`overflow-hidden rounded-[10px] border text-left transition ${
+                            selected
+                              ? "border-[#8664f2] ring-2 ring-[#8664f2]/35"
+                              : "border-[#E5E7EB] hover:border-[#C4B5FD] dark:border-[#2a2a2a]"
+                          }`}
+                        >
+                          <div className="aspect-[4/3] bg-[#F8FAFC] dark:bg-[#0f0f0f]">
+                            {thumbs[f.frameId] ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={thumbs[f.frameId]}
+                                alt={f.frameName}
+                                className="h-full w-full object-cover object-top"
+                              />
+                            ) : (
+                              <div className="flex h-full items-center justify-center text-[10px] text-[#9CA3AF]">
+                                Preview
+                              </div>
+                            )}
+                          </div>
+                          <div className="space-y-0.5 p-2">
+                            <div className="truncate text-[12px] font-medium text-[#1F1F1F] dark:text-[#ededed]">
+                              {f.frameName}
+                            </div>
+                            <div className="truncate text-[10px] text-[#7E7E7E]">
+                              {f.pageName}
+                              {f.width ? ` · ${Math.round(f.width)}×${Math.round(f.height || 0)}` : ""}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    {filteredFrames.map((f) => {
+                      const selected = f.frameId === frameId;
+                      return (
+                        <button
+                          key={f.frameId}
+                          type="button"
+                          onClick={() => setFrameId(f.frameId)}
+                          className={`flex w-full items-center gap-2 rounded-[8px] border px-2 py-1.5 text-left ${
+                            selected
+                              ? "border-[#8664f2] bg-[#F3EEFF] dark:bg-[#1a1428]"
+                              : "border-transparent hover:bg-[#F8F8F8] dark:hover:bg-[#141414]"
+                          }`}
+                        >
+                          <div className="h-10 w-14 shrink-0 overflow-hidden rounded bg-[#F3F4F6] dark:bg-[#1a1a1a]">
+                            {thumbs[f.frameId] ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={thumbs[f.frameId]} alt="" className="h-full w-full object-cover object-top" />
+                            ) : null}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="truncate text-[12.5px] font-medium">{f.frameName}</div>
+                            <div className="truncate text-[10px] text-[#7E7E7E]">
+                              {f.pageName}
+                              {f.width ? ` · ${Math.round(f.width)}×${Math.round(f.height || 0)}` : ""}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="shrink-0 space-y-2 rounded-[12px] border border-[#E5E7EB] p-3 dark:border-[#2a2a2a]">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-[#6B7280]">Canvas mapping</div>
               <label className="block text-[12px] font-medium">
-                State (optional)
+                Screen / node
                 <select
                   className="mt-1 w-full rounded-[8px] border border-[#E5E7EB] bg-white px-2 py-2 text-[13px] dark:border-[#2a2a2a] dark:bg-[#141414]"
-                  value={stateId}
-                  onChange={(e) => setStateId(e.target.value)}
+                  value={nodeId}
+                  onChange={(e) => {
+                    setNodeId(e.target.value);
+                    setStateId("");
+                  }}
                 >
-                  <option value="">Primary screenshot</option>
-                  {selectedNode.states.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.label || s.kind || s.id}
+                  {nodes.map((n) => (
+                    <option key={n.id} value={n.id}>
+                      {n.title || n.path || n.id}
                     </option>
                   ))}
                 </select>
               </label>
-            ) : null}
-
-            <div className="flex flex-wrap gap-2 pt-1">
-              <button
-                type="button"
-                disabled={!!busy || !selectedFrame}
-                onClick={() => void runChecksFromPat()}
-                className="rounded-[8px] bg-[#8664f2] px-3 py-2 text-[12.5px] font-medium text-white disabled:opacity-60"
-              >
-                {busy === "checks" ? "Running checks…" : "Run design checks (WCAG-style)"}
-              </button>
-              <button
-                type="button"
-                disabled={!!busy || !selectedFrame || !nodeId}
-                onClick={() => void runVisualDiff()}
-                className="rounded-[8px] border border-[#8664f2] px-3 py-2 text-[12.5px] font-medium text-[#8664f2] disabled:opacity-60"
-              >
-                {busy === "diff" ? "Comparing…" : "Visual diff vs screen"}
-              </button>
-            </div>
-          </div>
-
-          <div className="min-h-0 space-y-3 overflow-y-auto rounded-[12px] border border-[#E5E7EB] p-4 dark:border-[#2a2a2a]">
-            {liveScore != null ? (
-              <div>
-                <div className="mb-2 text-[13px] font-semibold">
-                  Design score {liveScore}
-                  <span className="ml-2 text-[11px] font-normal text-[#7E7E7E]">from Figma API + PAT</span>
-                </div>
-                {(liveFindings || []).length === 0 ? (
-                  <div className="text-[12.5px] text-[#166534]">No findings on this frame.</div>
-                ) : (
-                  <div className="space-y-2">
-                    {(liveFindings || []).map((f) => (
-                      <div key={f.id} className="rounded-[8px] border border-[#ECECEC] p-2.5 text-[12.5px] dark:border-[#2a2a2a]">
-                        <span className="mr-2 text-[10px] font-semibold uppercase text-[#92400E]">{f.severity}</span>
-                        <span className="font-medium">{f.title}</span>
-                        <div className="mt-1 text-[#6B7280]">{f.detail}</div>
-                      </div>
+              {selectedNode && selectedNode.states.length > 0 ? (
+                <label className="block text-[12px] font-medium">
+                  State
+                  <select
+                    className="mt-1 w-full rounded-[8px] border border-[#E5E7EB] bg-white px-2 py-2 text-[13px] dark:border-[#2a2a2a] dark:bg-[#141414]"
+                    value={stateId}
+                    onChange={(e) => setStateId(e.target.value)}
+                  >
+                    <option value="">Primary screenshot</option>
+                    {selectedNode.states.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.label || s.kind || s.id}
+                      </option>
                     ))}
-                  </div>
-                )}
+                  </select>
+                </label>
+              ) : null}
+              <div className="flex flex-col gap-2 pt-1">
+                <button
+                  type="button"
+                  disabled={!!busy || !selectedFrame}
+                  onClick={() => void runChecksFromPat()}
+                  className="rounded-[8px] bg-[#8664f2] px-3 py-2 text-[12.5px] font-medium text-white disabled:opacity-60"
+                >
+                  {busy === "checks" ? "Running checks…" : "Run design checks"}
+                </button>
+                <button
+                  type="button"
+                  disabled={!!busy || !selectedFrame || !nodeId}
+                  onClick={() => void runVisualDiff()}
+                  className="rounded-[8px] border border-[#8664f2] px-3 py-2 text-[12.5px] font-medium text-[#8664f2] disabled:opacity-60"
+                >
+                  {busy === "diff" ? "Comparing…" : "Run visual comparison"}
+                </button>
               </div>
-            ) : null}
+            </div>
+          </aside>
 
-            {diff ? (
-              <div>
-                <div className="mb-2 text-[13px] font-semibold">
-                  Visual diff · {diff.percentChanged}% changed
-                  {diff.changed ? " · differences found" : " · closely matches"}
+          {/* Main workspace */}
+          <section className="flex min-h-0 min-w-0 flex-col gap-3">
+            <div className="min-h-[320px] flex-1 overflow-hidden rounded-[12px] border border-[#E5E7EB] bg-[#FAFAFA] p-2 dark:border-[#2a2a2a] dark:bg-[#0f0f0f] md:min-h-0">
+              {diff ? (
+                <DesignValidationCompare
+                  figmaUrl={diff.figmaUrl}
+                  recordedUrl={diff.recordedUrl}
+                  diffUrl={diff.diffUrl}
+                  percentChanged={diff.percentChanged}
+                />
+              ) : (
+                <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-[13px] text-[#7E7E7E]">
+                  <div className="text-[14px] font-medium text-[#1F1F1F] dark:text-[#ededed]">
+                    Visual comparison workspace
+                  </div>
+                  <p className="max-w-md">
+                    Select a frame and canvas screen, then run visual comparison. Modes (side-by-side, overlay, onion,
+                    swipe, difference map) appear here without regenerating images when you switch.
+                  </p>
                 </div>
-                <div className="grid grid-cols-3 gap-2">
-                  {(
-                    [
-                      ["Figma", diff.figmaUrl],
-                      ["Recorded", diff.recordedUrl],
-                      ["Diff", diff.diffUrl],
-                    ] as const
-                  ).map(([label, url]) => (
-                    <div key={label} className="overflow-hidden rounded-[8px] border border-[#E5E7EB] dark:border-[#2a2a2a]">
-                      <div className="bg-[#F8FAFC] px-2 py-1 text-[10px] font-semibold uppercase text-[#6B7280] dark:bg-[#141414]">
-                        {label}
-                      </div>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={atlasUrl(url)} alt={label} className="aspect-[3/4] w-full object-contain bg-white" />
-                    </div>
-                  ))}
-                </div>
+              )}
+            </div>
+
+            {(liveScore != null || (liveFindings && liveFindings.length > 0)) && (
+              <div className="max-h-[240px] shrink-0 overflow-hidden rounded-[12px] border border-[#E5E7EB] dark:border-[#2a2a2a]">
+                <button
+                  type="button"
+                  onClick={() => setFindingsOpen((v) => !v)}
+                  className="flex w-full items-center justify-between border-b border-[#F0F0F0] px-3 py-2 text-left dark:border-[#1f1f1f]"
+                >
+                  <span className="text-[13px] font-semibold">
+                    Design score {liveScore ?? "—"}
+                    <span className="ml-2 text-[11px] font-normal text-[#7E7E7E]">
+                      {(liveFindings || []).length} finding{(liveFindings || []).length === 1 ? "" : "s"}
+                    </span>
+                  </span>
+                  <span className="text-[11px] text-[#8664f2]">{findingsOpen ? "Hide" : "Show"}</span>
+                </button>
+                {findingsOpen ? (
+                  <div className="max-h-[190px] space-y-1.5 overflow-y-auto p-2">
+                    {(liveFindings || []).length === 0 ? (
+                      <div className="p-2 text-[12.5px] text-[#166534]">No findings on this frame.</div>
+                    ) : (
+                      (liveFindings || []).map((f) => (
+                        <button
+                          key={f.id}
+                          type="button"
+                          onClick={() => setActiveFindingId(f.id)}
+                          className={`w-full rounded-[8px] border p-2.5 text-left text-[12.5px] ${
+                            activeFindingId === f.id
+                              ? "border-[#8664f2] bg-[#F3EEFF] dark:bg-[#1a1428]"
+                              : "border-[#ECECEC] dark:border-[#2a2a2a]"
+                          }`}
+                        >
+                          <span
+                            className={`mr-2 text-[10px] font-semibold uppercase ${
+                              f.severity === "error"
+                                ? "text-[#991B1B]"
+                                : f.severity === "warn"
+                                  ? "text-[#92400E]"
+                                  : "text-[#4B5563]"
+                            }`}
+                          >
+                            {f.severity}
+                          </span>
+                          <span className="font-medium">{f.title}</span>
+                          <div className="mt-1 text-[#6B7280]">{f.detail}</div>
+                          {f.nodeName ? (
+                            <div className="mt-1 text-[10.5px] text-[#9CA3AF]">
+                              Node: {f.nodeName}
+                              {f.nodeId ? ` (${f.nodeId})` : ""}
+                            </div>
+                          ) : null}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                ) : null}
               </div>
-            ) : !liveFindings ? (
-              <div className="text-[13px] text-[#7E7E7E]">
-                Pick a Figma frame and a crawled screen, then run design checks and/or visual diff. Frames are loaded
-                with your Figma PAT — the plugin is only needed for in-Figma feedback while designing.
-              </div>
-            ) : null}
-          </div>
+            )}
+          </section>
         </div>
       ) : null}
 
       {mode === "audits" ? (
         audits.length === 0 && !loading ? (
-          <div className="rounded-[12px] border border-dashed border-[#E5E7EB] bg-[#FAFAFA] p-6 text-center text-[13px] text-[#7E7E7E] dark:border-[#2a2a2a] dark:bg-[#101010]">
-            No saved audits yet. Run design checks from the Figma ↔ Canvas tab (or from the plugin).
+          <div className="rounded-[12px] border border-dashed border-[#E5E7EB] p-6 text-center text-[13px] text-[#7E7E7E] dark:border-[#2a2a2a]">
+            No saved audits yet. Run design checks from Figma ↔ Canvas.
           </div>
         ) : (
           <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[280px_1fr]">
@@ -459,7 +665,7 @@ export function DesignValidationView({
                     selected?.id === a.id ? "bg-[#F3EEFF] dark:bg-[#1a1428]" : "hover:bg-[#F8F8F8] dark:hover:bg-[#141414]"
                   }`}
                 >
-                  <div className="text-[13px] font-medium text-[#1F1F1F] dark:text-[#ededed]">{a.frameName}</div>
+                  <div className="text-[13px] font-medium">{a.frameName}</div>
                   <div className="text-[11px] text-[#7E7E7E]">
                     Score {a.score} · {new Date(a.createdAt).toLocaleString()}
                   </div>
