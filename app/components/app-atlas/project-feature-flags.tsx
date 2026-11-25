@@ -14,6 +14,7 @@ type Flags = {
   visualDiff: boolean;
   responsiveSheet: boolean;
   shareExport: boolean;
+  securityPassive: boolean;
 };
 
 const PHASE_A: { key: keyof Flags; title: string; body: string }[] = [
@@ -32,6 +33,14 @@ const PHASE_C: { key: keyof Flags; title: string; body: string }[] = [
   { key: "visualDiff", title: "Visual diff", body: "Compare screens across two canvases/releases with slider and % changed." },
   { key: "responsiveSheet", title: "Responsive contact sheet", body: "Phone / tablet / laptop captures with overflow warnings." },
   { key: "shareExport", title: "Share & export", body: "Read-only share link with expiry and PDF canvas poster." },
+];
+
+const PHASE_SECURITY: { key: keyof Flags; title: string; body: string }[] = [
+  {
+    key: "securityPassive",
+    title: "Canvas posture (passive)",
+    body: "Analyse redacted response metadata from recordings. Also needs the org kill-switch on the logs dashboard, a host allowlist, and env dev/test/staging.",
+  },
 ];
 
 const ENVS = ["dev", "test", "staging", "production", "unknown"] as const;
@@ -105,6 +114,7 @@ export function ProjectFeatureFlags({ projectId }: { projectId: string }) {
   const [flags, setFlags] = useState<Flags | null>(null);
   const [environment, setEnvironment] = useState<string>("unknown");
   const [defaults, setDefaults] = useState<Flags | null>(null);
+  const [hosts, setHosts] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -124,7 +134,9 @@ export function ProjectFeatureFlags({ projectId }: { projectId: string }) {
           visualDiff: Boolean((r.features as Flags).visualDiff),
           responsiveSheet: Boolean((r.features as Flags).responsiveSheet),
           shareExport: Boolean((r.features as Flags).shareExport),
+          securityPassive: Boolean((r.features as Flags).securityPassive),
         });
+        setHosts((r.securityTargetHosts || []).join(", "));
         setEnvironment((r as { environment?: string }).environment || "unknown");
         setDefaults({
           persona: r.defaults.persona,
@@ -136,6 +148,7 @@ export function ProjectFeatureFlags({ projectId }: { projectId: string }) {
           visualDiff: Boolean((r.defaults as Flags).visualDiff),
           responsiveSheet: Boolean((r.defaults as Flags).responsiveSheet),
           shareExport: Boolean((r.defaults as Flags).shareExport),
+          securityPassive: Boolean((r.defaults as Flags).securityPassive),
         });
       })
       .catch((err: unknown) => {
@@ -146,11 +159,19 @@ export function ProjectFeatureFlags({ projectId }: { projectId: string }) {
     };
   }, [client, projectId]);
 
-  const persist = async (nextFlags: Flags, nextEnv: string) => {
+  const persist = async (nextFlags: Flags, nextEnv: string, nextHosts = hosts) => {
     setSaving(true);
     setError(null);
     try {
-      const r = await client.setProjectFeatures(projectId, { ...nextFlags, environment: nextEnv });
+      const securityTargetHosts = nextHosts
+        .split(/[,\s]+/)
+        .map((h) => h.trim().toLowerCase())
+        .filter(Boolean);
+      const r = await client.setProjectFeatures(projectId, {
+        ...nextFlags,
+        environment: nextEnv,
+        securityTargetHosts,
+      });
       setFlags({
         persona: r.features.persona,
         replay: r.features.replay,
@@ -161,7 +182,9 @@ export function ProjectFeatureFlags({ projectId }: { projectId: string }) {
         visualDiff: Boolean(r.features.visualDiff),
         responsiveSheet: Boolean(r.features.responsiveSheet),
         shareExport: Boolean(r.features.shareExport),
+        securityPassive: Boolean(r.features.securityPassive),
       });
+      setHosts((r.securityTargetHosts || securityTargetHosts).join(", "));
       setEnvironment(r.environment || nextEnv);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Save failed");
@@ -270,6 +293,45 @@ export function ProjectFeatureFlags({ projectId }: { projectId: string }) {
                 onToggle={() => void toggle(row.key)}
               />
             ))}
+          </div>
+
+          <div
+            data-testid="security-posture-features"
+            style={{
+              marginTop: 18,
+              paddingTop: 14,
+              borderTop: "1px solid var(--line)",
+            }}
+          >
+            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>Security posture</div>
+            <p style={{ fontSize: 12, color: "#6B7280", marginBottom: 12 }}>
+              Org kill-switch lives on the App Atlas logs dashboard (Canvases → Security tab → Canvas posture). Project
+              flag and allowlist are here. Default OFF.
+            </p>
+            {PHASE_SECURITY.map((row) => (
+              <ToggleRow
+                key={row.key}
+                title={row.title}
+                body={row.body}
+                on={flags[row.key]}
+                disabled={saving}
+                onToggle={() => void toggle(row.key)}
+              />
+            ))}
+            <label style={{ display: "block", fontSize: 13, marginTop: 8 }}>
+              <span style={{ fontWeight: 600 }}>Target host allowlist</span>
+              <input
+                value={hosts}
+                disabled={saving}
+                placeholder="ai-hub-dev.protestcorp.com, 127.0.0.1"
+                onChange={(e) => setHosts(e.target.value)}
+                onBlur={() => void persist(flags, environment, hosts)}
+                style={{ display: "block", marginTop: 6, width: "100%", padding: "8px 10px", borderRadius: 8 }}
+              />
+              <span style={{ fontSize: 12, color: "#6B7280" }}>
+                Comma-separated hostnames. Empty deny-all. Only these hosts are captured (never bodies or cookie values).
+              </span>
+            </label>
           </div>
         </>
       )}

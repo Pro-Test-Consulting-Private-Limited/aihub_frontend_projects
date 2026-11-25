@@ -317,11 +317,11 @@ export function CanvasPosture({
           title="Canvas posture is off"
           body={
             !orgOn
-              ? "The organisation flag securityPosturePassive is off. Enable it in settings for demos only."
+              ? "The organisation flag securityPosturePassive is off. Enable it on the App Atlas logs dashboard: Canvases page → Security tab → Org: Canvas posture (passive)."
               : !projectOn
-                ? "This project does not have securityPassive enabled. Flags stay off by default."
+                ? "This project does not have securityPassive enabled. Turn it on under the project AppAtlas features → Security posture (default off)."
                 : hosts.length === 0
-                  ? "No allowlisted hosts. Add securityTargetHosts for the harness hostname before capturing."
+                  ? "No allowlisted hosts. Add securityTargetHosts under project AppAtlas features → Security posture before capturing."
                   : `Environment lock: posture runs only in dev, test, or staging (current: ${env}).`
           }
           icon={<TbLock size={28} />}
