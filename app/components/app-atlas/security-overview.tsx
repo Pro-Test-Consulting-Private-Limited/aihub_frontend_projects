@@ -1,11 +1,17 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import { TbDeviceMobile, TbServer } from "react-icons/tb";
 import { SECURITY_CATEGORIES, type CheckMode, type SecurityCategory, type SecurityCheck } from "@/app/lib/security-checklist";
 import { isLiveRunnable, liveKindFor, type LiveKind } from "@/app/lib/security-live-checks";
 import type { AtlasClient } from "@/app/services/appatlas";
 import { SecurityCheckSession } from "./security-check-session";
+
+const CanvasPosture = dynamic(() => import("./canvas-posture").then((m) => m.CanvasPosture), {
+  ssr: false,
+  loading: () => <div className="p-6 text-[13px] text-[#7E7E7E]">Loading Canvas posture…</div>,
+});
 
 const AUTO = "text-[#16A34A] border-[#16A34A] bg-[#F0FDF4] dark:bg-[#0f2418]";
 const GUIDED = "text-[#D97706] border-[#D97706] bg-[#FFFBEB] dark:bg-[#2a2008]";
@@ -44,11 +50,18 @@ export function SecurityOverview({
   targetUrl,
   projectName,
   client,
+  canvasId,
+  projectId,
+  onFocusNode,
 }: {
   targetUrl?: string | null;
   projectName?: string | null;
   client: AtlasClient;
+  canvasId?: string | null;
+  projectId?: string | null;
+  onFocusNode?: (nodeId: string) => void;
 }) {
+  const [mode, setMode] = useState<"plan" | "posture">("plan");
   const [selectedId, setSelectedId] = useState(SECURITY_CATEGORIES[0].id);
   const [filter, setFilter] = useState<"all" | CheckMode>("all");
   const [liveEnabled, setLiveEnabled] = useState(true);
@@ -100,6 +113,35 @@ export function SecurityOverview({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
+      <div className="shrink-0 border-b border-[#EEE] px-6 pt-3 dark:border-[#1a1a1a]">
+        <div className="inline-flex rounded-[8px] border border-[#E5E7EB] p-0.5 dark:border-[#2a2a2a]" role="tablist" aria-label="Security view">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === "plan"}
+            onClick={() => setMode("plan")}
+            className={`rounded-[6px] px-3 py-1.5 text-[12.5px] ${mode === "plan" ? "bg-[#8664F2] font-semibold text-white" : "text-[#5E6066] dark:text-[#9ca3af]"}`}
+          >
+            Plan
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === "posture"}
+            onClick={() => setMode("posture")}
+            className={`rounded-[6px] px-3 py-1.5 text-[12.5px] ${mode === "posture" ? "bg-[#8664F2] font-semibold text-white" : "text-[#5E6066] dark:text-[#9ca3af]"}`}
+          >
+            Canvas posture
+          </button>
+        </div>
+      </div>
+
+      {mode === "posture" ? (
+        <div className="min-h-0 flex-1">
+          <CanvasPosture client={client} canvasId={canvasId ?? null} projectId={projectId ?? null} onFocusNode={onFocusNode} />
+        </div>
+      ) : (
+      <>
       <header className="shrink-0 border-b border-[#EEE] px-6 py-4 dark:border-[#1a1a1a]">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="min-w-0">
@@ -233,6 +275,8 @@ export function SecurityOverview({
           </ul>
         </section>
       </div>
+      </>
+      )}
     </div>
   );
 }

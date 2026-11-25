@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Canvas posture screenshot harness</title>
+  <style>
+    :root { --bg:#fff; --fg:#1F1F1F; --muted:#7E7E7E; --border:#E5E7EB; --card:#fff; --accent:#8664F2; }
+    html.dark { --bg:#0a0a0a; --fg:#ededed; --muted:#9ca3af; --border:#2a2a2a; --card:#141414; }
+    body { margin:0; font-family: Inter, system-ui, sans-serif; background:var(--bg); color:var(--fg); }
+    .page { padding:24px; max-width:1280px; margin:0 auto; }
+    .banner { background:#FFFBEB; color:#92400E; text-align:center; padding:8px; font-size:12px; font-weight:600; border-bottom:1px solid #F59E0B66; }
+    html.dark .banner { background:#2a2008; color:#fde68a; }
+    h1 { font-size:16px; margin:0 0 12px; }
+    h2 { font-size:13px; margin:20px 0 8px; }
+    .row { display:flex; gap:16px; flex-wrap:wrap; }
+    .card { border:1px solid var(--border); border-radius:12px; background:var(--card); padding:16px; }
+    .ring { width:110px; height:110px; border-radius:50%; border:8px solid #E5E7EB; border-top-color:#DC2626; display:flex; align-items:center; justify-content:center; flex-direction:column; }
+    html.dark .ring { border-color:#2a2a2a; border-top-color:#DC2626; }
+    .bar { height:12px; border-radius:999px; overflow:hidden; display:flex; background:#E5E7EB; }
+    .bar span { display:block; height:100%; }
+    .stat { min-width:120px; border:1px solid var(--border); border-radius:10px; padding:10px 12px; }
+    .stat b { font-size:20px; display:block; }
+    .heat { display:grid; grid-template-columns:repeat(10,1fr); gap:8px; }
+    .tile { border:1px solid var(--border); border-radius:8px; padding:8px; background:color-mix(in srgb, #DC2626 45%, transparent); }
+    .strip { display:flex; gap:8px; overflow:auto; }
+    .screen { width:140px; border:1px solid var(--border); border-radius:10px; padding:8px; }
+    .thumb { height:72px; background:#F5F6F6; border-radius:6px; }
+    html.dark .thumb { background:#1a1a1a; }
+    table { width:100%; border-collapse:collapse; font-size:12.5px; }
+    th,td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--border); }
+    .chip { display:inline-block; padding:2px 6px; border-radius:4px; font-size:10px; font-weight:700; text-transform:uppercase; }
+    .high { background:#FEE2E2; color:#991B1B; }
+    .med { background:#FEF3C7; color:#92400E; }
+    .drawer { position:fixed; right:0; top:0; bottom:0; width:400px; border-left:1px solid var(--border); background:var(--card); padding:16px; box-shadow:0 0 40px #0002; }
+    .tabs button { margin-right:6px; border:1px solid var(--border); background:transparent; color:var(--fg); border-radius:6px; padding:4px 8px; font-size:12px; }
+    .tabs button.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+    .matrix td button { border:0; border-radius:4px; padding:2px 6px; font-size:10px; }
+    .missing { background:#FEE2E2; color:#991B1B; }
+    .present { background:#DCFCE7; color:#166534; }
+    .empty { border:1px dashed var(--border); border-radius:12px; padding:40px; text-align:center; color:var(--muted); }
+    .node { width:240px; border:1.5px solid #7BC47F; border-radius:10px; background:var(--card); padding:8px; }
+    .sec { background:#FEE2E2; color:#991B1B; border-radius:4px; font-size:9px; padding:2px 6px; font-weight:600; }
+    .panel { margin-bottom:32px; scroll-margin-top:16px; }
+  </style>
+</head>
+<body>
+  <div class="banner">Sample data, not from a real scan</div>
+  <div class="page">
+    <div class="panel" id="hero">
+      <h1>Canvas posture · hero summary</h1>
+      <div class="row">
+        <div class="card row" style="align-items:center">
+          <div class="ring"><b style="font-size:28px">F</b><span style="font-size:12px;color:var(--muted)">1/100</span></div>
+          <div>
+            <div style="font-weight:600">Posture score</div>
+            <div style="font-size:11px;color:var(--muted);max-width:220px">score = clamp(0,100, round(100 - sum(severity weights)))</div>
+            <div style="margin-top:8px;font-size:12px"><span style="color:#DC2626">↑ 14 new</span> · <span style="color:#16A34A">↓ 0 fixed</span></div>
+          </div>
+        </div>
+        <div class="card" style="flex:1;min-width:240px">
+          <div style="font-size:12px;font-weight:600;margin-bottom:8px">Severity breakdown</div>
+          <div class="bar"><span style="width:40%;background:#DC2626"></span><span style="width:30%;background:#D97706"></span><span style="width:20%;background:#2563EB"></span><span style="width:10%;background:#6B7280"></span></div>
+        </div>
+        <div class="row">
+          <div class="stat"><span style="font-size:10px;color:var(--muted)">Screens scanned</span><b>3</b></div>
+          <div class="stat"><span style="font-size:10px;color:var(--muted)">Requests analysed</span><b>128</b></div>
+          <div class="stat"><span style="font-size:10px;color:var(--muted)">Third-party</span><b>4</b></div>
+          <div class="stat"><span style="font-size:10px;color:var(--muted)">Cookies</span><b>2</b></div>
+          <div class="stat"><span style="font-size:10px;color:var(--muted)">Open findings</span><b>14</b></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" id="owasp">
+      <h2>OWASP Top 10 heatmap</h2>
+      <div class="heat">
+        <div class="tile"><b>A01</b><div>2</div></div>
+        <div class="tile"><b>A02</b><div>0</div></div>
+        <div class="tile"><b>A05</b><div>9</div></div>
+        <div class="tile"><b>A07</b><div>2</div></div>
+        <div class="tile"><b>A08</b><div>1</div></div>
+        <div class="tile" style="background:transparent"><b>A03</b><div>0</div></div>
+        <div class="tile" style="background:transparent"><b>A04</b><div>0</div></div>
+        <div class="tile" style="background:transparent"><b>A06</b><div>0</div></div>
+        <div class="tile" style="background:transparent"><b>A09</b><div>0</div></div>
+        <div class="tile" style="background:transparent"><b>A10</b><div>0</div></div>
+      </div>
+    </div>
+
+    <div class="panel" id="screens">
+      <h2>Per-screen risk strip</h2>
+      <div class="strip">
+        <div class="screen"><div class="thumb"></div><div style="font-size:11px;margin-top:6px">/</div><span class="chip high">high</span> 8</div>
+        <div class="screen"><div class="thumb"></div><div style="font-size:11px;margin-top:6px">/login</div><span class="chip med">medium</span> 4</div>
+        <div class="screen"><div class="thumb"></div><div style="font-size:11px;margin-top:6px">/home</div><span class="chip high">high</span> 2</div>
+      </div>
+    </div>
+
+    <div class="panel" id="findings">
+      <h2>Findings table (filters: severity=high, OWASP=A05)</h2>
+      <table>
+        <thead><tr><th></th><th>Severity</th><th>Finding</th><th>OWASP</th><th>Confidence</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>☐</td><td><span class="chip high">high</span></td><td>Missing Strict-Transport-Security</td><td>A05:2021</td><td>high</td><td>open</td></tr>
+          <tr><td>☐</td><td><span class="chip high">high</span></td><td>Missing Content-Security-Policy</td><td>A05:2021</td><td>high</td><td>open</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="panel" id="headers">
+      <h2>Security headers matrix</h2>
+      <table class="matrix">
+        <tr><th>Screen</th><th>HSTS</th><th>CSP</th><th>XFO</th><th>XCTO</th></tr>
+        <tr><td>/</td><td><button class="missing">missing</button></td><td><button class="missing">missing</button></td><td><button class="missing">missing</button></td><td><button class="missing">missing</button></td></tr>
+        <tr><td>/login</td><td><button class="missing">missing</button></td><td><button class="present">present</button></td><td><button class="present">present</button></td><td><button class="present">present</button></td></tr>
+      </table>
+    </div>
+
+    <div class="panel" id="csp">
+      <h2>CSP analyzer</h2>
+      <div class="card"><span class="chip med">sev 40</span> <code>script-src</code><p style="color:var(--muted);font-size:12px">Missing Content-Security-Policy on document responses.</p></div>
+    </div>
+
+    <div class="panel" id="cookies">
+      <h2>Cookie inspector</h2>
+      <table>
+        <tr><th>Name</th><th>Flags</th><th>Lifetime</th></tr>
+        <tr><td>session</td><td><span class="chip high">Secure off</span> <span class="chip med">HttpOnly off</span></td><td>86400s</td></tr>
+      </table>
+    </div>
+
+    <div class="panel" id="thirdparty">
+      <h2>Third-party inventory</h2>
+      <table>
+        <tr><th>Domain</th><th>Requests</th><th>Types</th><th>SRI</th></tr>
+        <tr><td>cdn.example.com</td><td>12</td><td>script</td><td>unknown</td></tr>
+      </table>
+    </div>
+
+    <div class="panel" id="diff">
+      <h2>Scan diff</h2>
+      <div class="row">
+        <div class="card" style="flex:1"><b style="color:#DC2626">New · 14</b><div style="font-size:12px;margin-top:6px">Missing HSTS…</div></div>
+        <div class="card" style="flex:1"><b style="color:#16A34A">Fixed · 0</b></div>
+        <div class="card" style="flex:1"><b style="color:var(--muted)">Unchanged · 0</b></div>
+      </div>
+    </div>
+
+    <div class="panel" id="empty">
+      <h2>Empty / flag-off states</h2>
+      <div class="empty"><b style="color:var(--fg)">Canvas posture is off</b><p>The organisation flag securityPosturePassive is off. Enable it in settings for demos only.</p></div>
+    </div>
+
+    <div class="panel" id="node">
+      <h2>Node badge on canvas</h2>
+      <div class="node">
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:600">
+          <span>/</span>
+          <span class="sec">Sec · 8</span>
+        </div>
+        <div class="thumb" style="margin-top:8px"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="drawer" id="drawer">
+    <div style="display:flex;justify-content:space-between"><b>Missing Strict-Transport-Security</b><span>×</span></div>
+    <div class="tabs" style="margin:12px 0">
+      <button class="active" data-tab="overview">Overview</button>
+      <button data-tab="evidence">Evidence</button>
+      <button data-tab="remediation">Remediation</button>
+      <button data-tab="history">History</button>
+    </div>
+    <div id="overview">Without HSTS, browsers can be tricked into using plain HTTP on a later visit.<div style="margin-top:8px"><span class="chip high">A05:2021</span> <span class="chip med">CWE-319</span></div></div>
+    <div id="evidence" hidden><pre style="font-size:11px;background:#F5F6F6;padding:8px;border-radius:8px">{ "url": "http://127.0.0.1:9876/", "header": "strict-transport-security", "status": "missing" }</pre></div>
+    <div id="remediation" hidden><pre style="font-size:12px;white-space:pre-wrap">Send Strict-Transport-Security: max-age=31536000; includeSubDomains on HTTPS responses.
+Example:
+Strict-Transport-Security: max-age=31536000; includeSubDomains</pre></div>
+    <div id="history" hidden>First seen · now<br/>Status · open</div>
+  </div>
+  <script>
+    const params = new URLSearchParams(location.search);
+    if (params.get('theme') === 'dark') document.documentElement.classList.add('dark');
+    const tab = params.get('tab');
+    if (tab) {
+      document.querySelectorAll('.drawer [data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+      ['overview','evidence','remediation','history'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.hidden = id !== tab;
+      });
+    }
+    if (params.get('hideDrawer') === '1') document.getElementById('drawer').style.display = 'none';
+  </script>
+</body>
+</html>

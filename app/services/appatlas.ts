@@ -26,6 +26,8 @@ import type {
   SitJobsList,
   SitModelStatus,
   SitWorkbook,
+  SecurityFinding,
+  SecurityScan,
   TicketNote,
 } from "@/app/interfaces/appatlas";
 import type { StartSessionOptions } from "@/app/lib/session-emulation";
@@ -114,8 +116,10 @@ export function atlasClient({ instance, accounts }: Msal) {
           visualDiff?: boolean;
           responsiveSheet?: boolean;
           shareExport?: boolean;
+          securityPassive?: boolean;
         };
         environment?: string;
+        securityTargetHosts?: string[];
         defaults: {
           persona: boolean;
           replay: boolean;
@@ -126,6 +130,7 @@ export function atlasClient({ instance, accounts }: Msal) {
           visualDiff?: boolean;
           responsiveSheet?: boolean;
           shareExport?: boolean;
+          securityPassive?: boolean;
         };
       }>(`/project-features/${encodeURIComponent(projectId)}`),
     setProjectFeatures: (
@@ -140,6 +145,8 @@ export function atlasClient({ instance, accounts }: Msal) {
         visualDiff: boolean;
         responsiveSheet: boolean;
         shareExport: boolean;
+        securityPassive: boolean;
+        securityTargetHosts: string[];
         environment: string;
       }>,
     ) =>
@@ -155,8 +162,10 @@ export function atlasClient({ instance, accounts }: Msal) {
           visualDiff: boolean;
           responsiveSheet: boolean;
           shareExport: boolean;
+          securityPassive: boolean;
         };
         environment: string;
+        securityTargetHosts?: string[];
       }>(`/project-features/${encodeURIComponent(projectId)}`, json("PUT", body)),
     armSimulate: (sessionId: string, body: { method: string; path: string; mode: string }) =>
       request<import("@/app/interfaces/appatlas").SessionSnapshot>(
@@ -759,6 +768,34 @@ export function atlasClient({ instance, accounts }: Msal) {
     },
 
     getSettings: () => request<AtlasSettings>("/settings"),
+
+    listSecurityScans: (canvasId: string) =>
+      request<{ items: SecurityScan[] }>(`/canvases/${encodeURIComponent(canvasId)}/security/scans`),
+    runSecurityScan: (canvasId: string, body: { sample?: boolean; sessionId?: string } = {}) =>
+      request<{ scan: SecurityScan; findings: SecurityFinding[] }>(
+        `/canvases/${encodeURIComponent(canvasId)}/security/scans`,
+        json("POST", body),
+      ),
+    listSecurityFindings: (canvasId: string, scanId?: string) =>
+      request<{ items: SecurityFinding[] }>(
+        `/canvases/${encodeURIComponent(canvasId)}/security/findings${scanId ? `?scanId=${encodeURIComponent(scanId)}` : ""}`,
+      ),
+    patchSecurityFinding: (canvasId: string, findingId: string, body: { status: string }) =>
+      request<SecurityFinding>(
+        `/canvases/${encodeURIComponent(canvasId)}/security/findings/${encodeURIComponent(findingId)}`,
+        json("PATCH", body),
+      ),
+    getSecurityDiff: (canvasId: string) =>
+      request<{
+        previous: SecurityScan | null;
+        latest: SecurityScan | null;
+        diff: { added: SecurityFinding[]; fixed: SecurityFinding[]; unchanged: SecurityFinding[] } | null;
+      }>(`/canvases/${encodeURIComponent(canvasId)}/security/diff`),
+    dryRunSecurityFindingJira: (canvasId: string, findingId: string) =>
+      request<{ dryRun: true; issue: { summary: string; description: string; labels: string[] } }>(
+        `/canvases/${encodeURIComponent(canvasId)}/security/findings/${encodeURIComponent(findingId)}/jira-dry-run`,
+        json("POST", {}),
+      ),
 
     /** Canvas GitHub trial (logs `cicdCanvasTrial`)  -  secondary; prefer CI/CD page. */
     connectGithub: (

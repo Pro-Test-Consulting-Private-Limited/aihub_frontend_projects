@@ -179,6 +179,9 @@ export default function AtlasWorkspace() {
   });
   const [changedNodeIds, setChangedNodeIds] = useState<string[]>([]);
   const [changedSinceRelease, setChangedSinceRelease] = useState<string | null>(null);
+  const [postureByNode, setPostureByNode] = useState<
+    Record<string, { worst: "info" | "low" | "medium" | "high" | "critical"; count: number }>
+  >({});
 
   // Swagger is connected per canvas and is independent of Jira (canvas.jiraProjectKey).
   const [swagger, setSwagger] = useState<CanvasSwagger | null>(null);
@@ -314,6 +317,30 @@ export default function AtlasWorkspace() {
     }, 5000);
     return () => clearInterval(timer);
   }, [canvasId, clarifying, client, mergeClarifications]);
+
+  useEffect(() => {
+    if (!canvasId) {
+      setPostureByNode({});
+      return;
+    }
+    let cancelled = false;
+    client
+      .listSecurityScans(canvasId)
+      .then((r) => {
+        const ready = r.items.find((s) => s.status === "ready");
+        const map: Record<string, { worst: "info" | "low" | "medium" | "high" | "critical"; count: number }> = {};
+        for (const row of ready?.summary?.perScreen || []) {
+          map[row.nodeId] = { worst: row.worst, count: row.count };
+        }
+        if (!cancelled) setPostureByNode(map);
+      })
+      .catch(() => {
+        if (!cancelled) setPostureByNode({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canvasId, client, tab]);
 
   const onJiraConnected = (updated: Canvas) => {
     setCanvases((prev) => prev.map((x) => (x.id === updated.id ? { ...x, jiraProjectKey: updated.jiraProjectKey } : x)));
@@ -886,7 +913,18 @@ export default function AtlasWorkspace() {
               }}
             />
           ) : tab === "security" ? (
-            <SecurityOverview targetUrl={appUrl} projectName={project?.name} client={client} />
+            <SecurityOverview
+              targetUrl={appUrl}
+              projectName={project?.name}
+              client={client}
+              canvasId={canvas?.id ?? selectedId}
+              projectId={project?.id ?? projectId}
+              onFocusNode={(nodeId) => {
+                setFocusNodeId(nodeId);
+                setPanelNodeId(nodeId);
+                setTab("canvas");
+              }}
+            />
           ) : tab === "performance" ? (
             <PerformanceView canvas={canvas} />
           ) : tab === "reports" ? (
@@ -926,6 +964,7 @@ export default function AtlasWorkspace() {
                 changedSinceRelease={changedSinceRelease}
                 selectedNodeId={panelNodeId}
                 onSelectNode={setPanelNodeId}
+                postureByNode={postureByNode}
               />
               <div className="absolute top-3 left-4 z-10 flex items-center gap-2 rounded-[8px] bg-white/90 px-3 py-1.5 text-[11px] text-[#5E6066] shadow-sm dark:bg-[#141414]/90 dark:text-[#9ca3af]">
                 <span className="font-medium text-[#1F1F1F] dark:text-[#ededed]">{canvas.name}</span> · {canvas.owner.name}

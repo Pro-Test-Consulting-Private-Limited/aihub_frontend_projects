@@ -12,6 +12,8 @@ export type ScreenNodeData = {
   onOpenShot: (url: string) => void;
   /** Phase C: set when visual-diff found a change vs a named release. */
   changedSinceRelease?: string | null;
+  /** Optional Canvas posture rollup from latest scan. */
+  posture?: { worst: "info" | "low" | "medium" | "high" | "critical"; count: number } | null;
 };
 
 export type AtlasScreenNode = Node<ScreenNodeData, "screen">;
@@ -22,9 +24,17 @@ export const NODE_HEIGHT = 250;
 const MAX_CHIPS = 5;
 
 export function ScreenNode({ data }: NodeProps<AtlasScreenNode>) {
-  const { screen, dimmed, selected, onOpenShot, changedSinceRelease } = data;
+  const { screen, dimmed, selected, onOpenShot, changedSinceRelease, posture } = data;
   const chips = screen.pageObjects.slice(0, MAX_CHIPS);
   const more = screen.pageObjects.length - chips.length;
+  const postureTone =
+    posture?.worst === "critical" || posture?.worst === "high"
+      ? "bg-[#FEE2E2] text-[#991B1B]"
+      : posture?.worst === "medium"
+        ? "bg-[#FEF3C7] text-[#92400E]"
+        : posture?.worst === "low"
+          ? "bg-[#DBEAFE] text-[#1E40AF]"
+          : "bg-[#F3F4F6] text-[#4B5563] dark:bg-[#2a2a2a] dark:text-[#9ca3af]";
 
   return (
     <div
@@ -39,6 +49,14 @@ export function ScreenNode({ data }: NodeProps<AtlasScreenNode>) {
           {screen.path}
         </div>
         <div className="ml-2 flex shrink-0 items-center gap-1">
+          {posture && posture.count > 0 && (
+            <span
+              title={`Posture: ${posture.count} finding(s), worst ${posture.worst}`}
+              className={`rounded-[4px] px-1.5 py-0.5 text-[9px] font-medium ${postureTone}`}
+            >
+              Sec · {posture.count}
+            </span>
+          )}
           {screen.health && <HealthBadge health={screen.health} />}
           {changedSinceRelease && (
             <span

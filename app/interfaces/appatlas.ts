@@ -624,8 +624,83 @@ export type AtlasSettings = {
   shareDataAcrossEnvironments?: boolean;
   securityLiveChecks: boolean;
   securityCheckEnabled: Record<string, boolean>;
+  /** Org kill-switch for Canvas posture (default OFF). */
+  securityPosturePassive?: boolean;
   cicdPageTrial: boolean;
   cicdCanvasTrial: boolean;
+};
+
+export type SecuritySeverity = "info" | "low" | "medium" | "high" | "critical";
+
+export type SecurityScanSummary = {
+  formula?: string;
+  score?: number;
+  grade?: string;
+  bySeverity?: Record<string, number>;
+  byOwasp?: Record<string, { count: number; worst: SecuritySeverity }>;
+  perScreen?: Array<{
+    nodeId: string;
+    path: string;
+    title: string;
+    screenshotUrl: string | null;
+    count: number;
+    worst: SecuritySeverity;
+  }>;
+  headersMatrix?: Array<{
+    nodeId: string;
+    path: string;
+    headers: Record<string, { status: string; value: string | null }>;
+  }>;
+  cookies?: Array<Record<string, unknown>>;
+  thirdParty?: Array<{
+    domain: string;
+    resourceTypes: string[];
+    count: number;
+    screens: string[];
+    sriStatus: string;
+  }>;
+  cspBreakdown?: Array<{ directive: string; severity: number; description: string; nodeId: string | null }>;
+  traffic?: Record<string, { byType: Record<string, number>; byStatus: Record<string, number>; total: number }>;
+  stats?: {
+    screensScanned: number;
+    requestsAnalysed: number;
+    thirdPartyDomains: number;
+    cookies: number;
+    openFindings: number;
+  };
+  rulesetVersion?: string;
+  sample?: boolean;
+};
+
+export type SecurityScan = {
+  id: string;
+  canvasId: string;
+  sessionId: string | null;
+  status: string;
+  rulesetVersion: string;
+  summary: SecurityScanSummary;
+  createdById: string | null;
+  createdByName: string | null;
+  createdAt: number;
+  finishedAt: number | null;
+};
+
+export type SecurityFinding = {
+  id: string;
+  canvasId: string;
+  scanId: string;
+  nodeId: string | null;
+  stateId: string | null;
+  checkId: string;
+  severity: SecuritySeverity;
+  confidence: string;
+  owaspCategory: string | null;
+  cwe: string | null;
+  title: string;
+  remediation: string | null;
+  evidence: Record<string, unknown>;
+  status: string;
+  createdAt: number;
 };
 
 export type SitTicketGenerationMeta = {

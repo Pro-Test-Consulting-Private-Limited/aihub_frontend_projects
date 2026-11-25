@@ -80,6 +80,8 @@ type Props = {
   /** Phase C visual-diff: node ids that changed vs a release. */
   changedNodeIds?: string[];
   changedSinceRelease?: string | null;
+  /** Optional Canvas posture rollup per screen node. */
+  postureByNode?: Record<string, { worst: "info" | "low" | "medium" | "high" | "critical"; count: number }>;
 };
 
 type Preview = { url: string; title: string };
@@ -93,6 +95,7 @@ function Flow({
   onSelectNode,
   changedNodeIds,
   changedSinceRelease,
+  postureByNode,
 }: Props) {
   const [filter, setFilter] = useState<LegendFilter>(null);
   const [legendOpen, setLegendOpen] = useState(false);
@@ -124,9 +127,10 @@ function Flow({
           selected: (selectedNodeId ?? focusNodeId) === screen.id,
           onOpenShot: (url: string) => setPreview({ url, title: screen.title || screen.path }),
           changedSinceRelease: changedSet.has(screen.id) ? changedSinceRelease || "baseline" : null,
+          posture: postureByNode?.[screen.id] || null,
         },
       })),
-    [nodes, positions, hl, focusNodeId, selectedNodeId, changedSet, changedSinceRelease],
+    [nodes, positions, hl, focusNodeId, selectedNodeId, changedSet, changedSinceRelease, postureByNode],
   );
 
   const flowEdges = useMemo<Edge[]>(
