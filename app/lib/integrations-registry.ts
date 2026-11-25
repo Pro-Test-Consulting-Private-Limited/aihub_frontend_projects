@@ -4,10 +4,10 @@ import { VscAzureDevops } from "react-icons/vsc";
 import { FaMicrosoft, FaAws, FaSlack, FaBook, FaCode } from "react-icons/fa";
 
 /** Providers that can be linked at canvas level today. */
-export type CanvasConnectProvider = "jira" | "swagger" | "teams" | "github";
+export type CanvasConnectProvider = "jira" | "swagger" | "teams" | "github" | "figma";
 
-/** Account-level Integrations (cookies / vault). Includes Figma before canvas connect exists. */
-export type AccountIntegrationProvider = CanvasConnectProvider | "figma";
+/** Account-level Integrations (cookies / vault). */
+export type AccountIntegrationProvider = CanvasConnectProvider;
 
 export type IntegrationProviderId =
   | CanvasConnectProvider
@@ -174,7 +174,7 @@ export const INTEGRATION_CATEGORIES: IntegrationCategoryDef[] = [
         Icon: SiFigma,
         color: "#F24E1E",
         accountProvider: FIGMA_ACCOUNT_ENABLED ? "figma" : undefined,
-        canvasConnect: false,
+        canvasConnect: FIGMA_ACCOUNT_ENABLED,
       },
     ],
   },
@@ -205,7 +205,9 @@ export const INTEGRATION_CATEGORIES: IntegrationCategoryDef[] = [
   },
 ];
 
-export const CANVAS_CONNECT_IDS: CanvasConnectProvider[] = ["jira", "swagger", "teams", "github"];
+export const CANVAS_CONNECT_IDS: CanvasConnectProvider[] = FIGMA_ACCOUNT_ENABLED
+  ? ["jira", "swagger", "teams", "github", "figma"]
+  : ["jira", "swagger", "teams", "github"];
 
 export function listIntegrationProviders(): IntegrationProviderDef[] {
   return INTEGRATION_CATEGORIES.flatMap((c) => c.tools);

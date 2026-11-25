@@ -32,13 +32,12 @@ describe("integrations registry", () => {
     expect(ids).toContain("linear");
   });
 
-  it("marks only jira/swagger/teams/github as canvas-connectable", () => {
-    expect(CANVAS_CONNECT_IDS).toEqual(["jira", "swagger", "teams", "github"]);
+  it("marks jira/swagger/teams/github as canvas-connectable (figma when flagged)", () => {
+    expect(CANVAS_CONNECT_IDS).toContain("jira");
+    expect(CANVAS_CONNECT_IDS).toContain("github");
     for (const t of listIntegrationProviders()) {
       expect(t.canvasConnect).toBe(isCanvasConnectProvider(t.id));
     }
-    const figma = getIntegrationProvider("figma");
-    expect(figma?.canvasConnect).toBe(false);
   });
 
   it("uses honest GitHub description (no heal/main marketing)", () => {

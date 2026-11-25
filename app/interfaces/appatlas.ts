@@ -294,6 +294,15 @@ export type CanvasDeviceProfile = {
   userAgent?: string;
 };
 
+/** Figma file linked on a canvas for Design Validation. */
+export type CanvasFigmaBinding = {
+  fileKey: string;
+  fileName: string | null;
+  fileUrl: string;
+  connectedAt: number;
+  connectedBy?: { id: string; name: string } | null;
+};
+
 export type CanvasSummary = {
   id: string;
   name: string;
@@ -313,6 +322,8 @@ export type CanvasSummary = {
   pageObjects: number;
   thumbnailUrl: string | null;
   jiraProjectKey: string | null;
+  /** Linked Figma file for Design Validation, when configured. */
+  figma?: CanvasFigmaBinding | null;
   /** Linked Teams channel (Phase 1), when configured. */
   teams?: CanvasTeams | null;
   /** Device W×H profile stamped when the recording was saved. */
@@ -328,6 +339,35 @@ export type CanvasSwaggerBinding = {
   connectedAt: number;
   swaggerKey: string;
   specHash: string | null;
+};
+
+export type FigmaFinding = {
+  id: string;
+  ruleId: string;
+  severity: "error" | "warn" | "info";
+  title: string;
+  detail: string;
+  nodeId: string | null;
+  nodeName: string | null;
+  evidence: Record<string, unknown>;
+};
+
+export type FigmaAudit = {
+  id: string;
+  canvasId: string;
+  fileKey: string;
+  pageId: string | null;
+  pageName: string | null;
+  frameId: string;
+  frameName: string;
+  screenNodeId: string | null;
+  score: number;
+  status: "ready" | "failed";
+  rulesetVersion: string;
+  summary: { errors: number; warns: number; infos: number };
+  findings: FigmaFinding[];
+  createdAt: number;
+  createdBy: { id: string; name: string } | null;
 };
 
 export type Canvas = CanvasSummary & {
@@ -354,6 +394,7 @@ export type Canvas = CanvasSummary & {
   swagger?: CanvasSwaggerBinding | null;
   /** Org-wide API chain (identities + dependencies); not shown in product UI. */
   swaggerChain?: unknown;
+  figma?: CanvasFigmaBinding | null;
 };
 
 export type ClarificationQuestion = {

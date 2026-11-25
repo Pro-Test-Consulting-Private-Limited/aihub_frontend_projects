@@ -16,9 +16,10 @@ import {
   TbListCheck,
   TbPlus,
 } from "react-icons/tb";
-import { SiGithub, SiJira, SiSwagger } from "react-icons/si";
+import { SiFigma, SiGithub, SiJira, SiSwagger } from "react-icons/si";
 import type { Canvas, CanvasSummary } from "@/app/interfaces/appatlas";
 import type { CanvasSwagger } from "@/app/lib/canvas-swagger";
+import type { CanvasFigma } from "@/app/lib/canvas-figma";
 import { gitSyncDotClass, gitSyncTone, repoNameOnly, type GitSyncStatusInput } from "@/app/lib/git-sync-ui";
 
 const iconButton =
@@ -47,6 +48,8 @@ type Props = {
   onConnect: (c: CanvasSummary) => void;
   /** Swagger spec connected to the selected canvas. Independent of Jira. */
   swagger: CanvasSwagger | null;
+  /** Figma file linked for Design Validation. */
+  figma?: CanvasFigma | null;
   gitConnected?: boolean;
   gitCard?: {
     repo: string | null;
@@ -249,7 +252,8 @@ export function Explorer(props: Props) {
                       />
                     </div>
                   )}
-                  {active && (c.isMine || c.jiraProjectKey || props.swagger || props.gitConnected) && (
+                  {active &&
+                    (c.isMine || c.jiraProjectKey || props.swagger || props.gitConnected || props.figma) && (
                     <div className="mt-2.5 flex flex-col gap-1.5">
                       {c.jiraProjectKey && (
                         <ConnectedAppButton
@@ -272,7 +276,16 @@ export function Explorer(props: Props) {
                       {props.gitConnected && (
                         <GitHubExplorerPill canvas={c} gitCard={props.gitCard} onConnect={props.onConnect} />
                       )}
-                      {!c.jiraProjectKey && !props.swagger && !props.gitConnected && (
+                      {props.figma && (
+                        <ConnectedAppButton
+                          canvas={c}
+                          label={`Figma · ${props.figma.fileName || props.figma.fileKey.slice(0, 8)}`}
+                          icon={<SiFigma size={12} color="#F24E1E" />}
+                          title={props.figma.fileUrl || "Manage connected apps"}
+                          onConnect={props.onConnect}
+                        />
+                      )}
+                      {!c.jiraProjectKey && !props.swagger && !props.gitConnected && !props.figma && (
                         <ConnectedAppButton
                           canvas={c}
                           label="Connect"

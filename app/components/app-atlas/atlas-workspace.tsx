@@ -17,6 +17,7 @@ import {
   TbListCheck,
   TbGitBranch,
   TbLoader2,
+  TbPalette,
 } from "react-icons/tb";
 import { useProjects } from "@/app/lib/projectsStore";
 import type { Canvas, CanvasSummary, PresenceUser, SessionSnapshot } from "@/app/interfaces/appatlas";
@@ -37,10 +38,13 @@ import {
 } from "@/app/lib/session-emulation";
 import { useApiSpec, useApiSpecView } from "@/app/hooks/use-api-spec";
 import { clearCanvasSwagger, getCanvasSwagger, setCanvasSwagger, type CanvasSwagger } from "@/app/lib/canvas-swagger";
+import { getCanvasFigma, setCanvasFigma, type CanvasFigma } from "@/app/lib/canvas-figma";
 import { isLocalAuthBypassEnabled } from "@/app/lib/auth-bypass";
 import { isSitUiV2Enabled } from "@/app/lib/sit-ui-v2";
 import { UserProfileMenu } from "@/app/components/user-profile-menu";
 import { fetchGraphProfilePhotoDataUrl, msalSelfKeys } from "@/app/lib/auth-client";
+
+const FIGMA_DV_ENABLED = process.env.NEXT_PUBLIC_FIGMA_INTEGRATION === "1";
 
 const tabFallback = (
   <div className="flex h-full items-center justify-center gap-2 text-[13px] text-[#7E7E7E]">
@@ -80,6 +84,10 @@ const PerformanceView = dynamic(() => import("./performance-view").then((m) => m
   ssr: false,
   loading: () => tabFallback,
 });
+const DesignValidationView = dynamic(
+  () => import("./design-validation-view").then((m) => m.DesignValidationView),
+  { ssr: false, loading: () => tabFallback },
+);
 
 const BASE_TABS = [
   { id: "canvas", label: "Canvas", icon: TbLayoutGrid },
@@ -87,6 +95,9 @@ const BASE_TABS = [
   { id: "sit", label: "SIT Testing", icon: TbListCheck },
   { id: "cicd", label: "CI/CD", icon: TbGitBranch, trial: "cicdPage" as const },
   { id: "coverage", label: "Coverage", icon: TbChartLine },
+  ...(FIGMA_DV_ENABLED
+    ? ([{ id: "design", label: "Design Validation", icon: TbPalette }] as const)
+    : []),
   { id: "reports", label: "Reports", icon: TbReportSearch },
   { id: "security", label: "Security", icon: TbShieldCheck },
   { id: "performance", label: "Performance", icon: TbBrandSpeedtest },
@@ -166,6 +177,7 @@ export default function AtlasWorkspace() {
 
   // Swagger is connected per canvas and is independent of Jira (canvas.jiraProjectKey).
   const [swagger, setSwagger] = useState<CanvasSwagger | null>(null);
+  const [figma, setFigma] = useState<CanvasFigma | null>(null);
   const [gitConnected, setGitConnected] = useState(false);
   const [gitCard, setGitCard] = useState<{
     repo: string | null;
@@ -209,6 +221,7 @@ export default function AtlasWorkspace() {
 
   useEffect(() => {
     setSwagger(selectedId ? getCanvasSwagger(selectedId) : null);
+    setFigma(selectedId ? getCanvasFigma(selectedId) : null);
     setView("screens");
     setChangedNodeIds([]);
     setChangedSinceRelease(null);
@@ -386,6 +399,17 @@ export default function AtlasWorkspace() {
             specHash: full.swagger.specHash,
           });
           setSwagger(conn);
+        }
+        if (full.figma?.fileKey) {
+          const conn = setCanvasFigma(id, {
+            fileKey: full.figma.fileKey,
+            fileName: full.figma.fileName,
+            fileUrl: full.figma.fileUrl,
+            connectedAt: full.figma.connectedAt,
+          });
+          setFigma(conn);
+        } else {
+          setFigma(getCanvasFigma(id));
         }
       } catch (err) {
         if (err instanceof AtlasError && err.status === 404) {
@@ -765,6 +789,7 @@ export default function AtlasWorkspace() {
             onFocusNode={setFocusNodeId}
             onConnect={setConnectFor}
             swagger={swagger}
+            figma={figma}
             gitConnected={gitConnected}
             gitCard={gitCard}
             view={view}
@@ -833,6 +858,13 @@ export default function AtlasWorkspace() {
                 setPanelNodeId(nodeId);
                 setTab("canvas");
               }}
+            />
+          ) : tab === "design" ? (
+            <DesignValidationView
+              client={client}
+              canvas={canvas}
+              figma={figma}
+              onConnectApps={() => canvas && setConnectFor(canvas)}
             />
           ) : tab === "reports" ? (
             <ReportsView
@@ -1006,6 +1038,23 @@ export default function AtlasWorkspace() {
           canvas={connectFor}
           swagger={getCanvasSwagger(connectFor.id)}
           onSwaggerChange={onSwaggerChange}
+          figma={getCanvasFigma(connectFor.id)}
+          onFigmaChange={(conn) => {
+            setFigma(conn);
+            if (connectFor.id === selectedId && canvas) {
+              setCanvas({
+                ...canvas,
+                figma: conn
+                  ? {
+                      fileKey: conn.fileKey,
+                      fileName: conn.fileName,
+                      fileUrl: conn.fileUrl,
+                      connectedAt: conn.connectedAt,
+                    }
+                  : null,
+              });
+            }
+          }}
           onConnected={onJiraConnected}
           onClose={() => setConnectFor(null)}
           projectId={project?.id || projectId}

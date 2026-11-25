@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      :root {
+        --bg: var(--figma-color-bg, #fff);
+        --text: var(--figma-color-text, #1f1f1f);
+        --muted: var(--figma-color-text-secondary, #7e7e7e);
+        --border: var(--figma-color-border, #e5e7eb);
+        --accent: #8664f2;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font: 12.5px/1.4 Inter, system-ui, sans-serif;
+        color: var(--text);
+        background: var(--bg);
+        padding: 14px;
+      }
+      h1 { font-size: 14px; margin: 0 0 8px; }
+      p { margin: 0 0 10px; color: var(--muted); }
+      label { display: block; font-weight: 600; margin-bottom: 8px; }
+      input, select {
+        width: 100%;
+        margin-top: 4px;
+        padding: 8px 10px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: transparent;
+        color: var(--text);
+      }
+      button {
+        width: 100%;
+        margin-top: 8px;
+        padding: 9px 12px;
+        border: 0;
+        border-radius: 8px;
+        background: var(--accent);
+        color: #fff;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button.secondary {
+        background: transparent;
+        color: var(--accent);
+        border: 1px solid var(--border);
+      }
+      button:disabled { opacity: 0.55; cursor: not-allowed; }
+      .card {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 10px;
+        margin-top: 10px;
+      }
+      .err { color: #b45309; margin-top: 8px; }
+      .ok { color: #166534; margin-top: 8px; }
+      code { font-size: 11px; }
+    </style>
+  </head>
+  <body>
+    <h1>AppAtlas Design Validation</h1>
+    <p>Pair once, then run checks on the selected frame. Results appear under Design Validation in AppAtlas.</p>
+
+    <div id="pairPanel">
+      <label>
+        Hub base URL
+        <input id="baseUrl" value="https://ai-hub-dev.protestcorp.com" />
+      </label>
+      <label>
+        Pairing code (from Connect apps → Figma)
+        <input id="code" placeholder="6-digit code" maxlength="6" />
+      </label>
+      <button id="pairBtn">Pair with AppAtlas</button>
+    </div>
+
+    <div id="runPanel" style="display:none">
+      <div class="card">
+        Paired as <strong id="who">—</strong>
+        <div style="margin-top:6px;color:var(--muted)">Canvas ID (optional override)</div>
+        <input id="canvasId" placeholder="uses pairing canvas when set" />
+      </div>
+      <button id="runBtn">Validate selected frame</button>
+      <button id="unpairBtn" class="secondary">Unpair</button>
+    </div>
+
+    <div id="msg"></div>
+
+    <script>
+      const STORAGE_TOKEN = "appatlas_figma_token";
+      const STORAGE_BASE = "appatlas_figma_base";
+      const STORAGE_USER = "appatlas_figma_user";
+      const STORAGE_CANVAS = "appatlas_figma_canvas";
+
+      const $ = (id) => document.getElementById(id);
+      const msg = (text, cls) => {
+        $("msg").className = cls || "";
+        $("msg").textContent = text || "";
+      };
+
+      async function loadState() {
+        const token = await parentPost("get-storage", STORAGE_TOKEN);
+        const base = (await parentPost("get-storage", STORAGE_BASE)) || "https://ai-hub-dev.protestcorp.com";
+        const user = await parentPost("get-storage", STORAGE_USER);
+        const canvas = await parentPost("get-storage", STORAGE_CANVAS);
+        $("baseUrl").value = base;
+        if (canvas) $("canvasId").value = canvas;
+        if (token) {
+          $("pairPanel").style.display = "none";
+          $("runPanel").style.display = "block";
+          $("who").textContent = user || "plugin user";
+        }
+      }
+
+      // Minimal bridge: UI talks to plugin main for clientStorage via messages.
+      const pending = new Map();
+      let reqId = 0;
+      function parentPost(type, key, value) {
+        return new Promise((resolve) => {
+          const id = ++reqId;
+          pending.set(id, resolve);
+          parent.postMessage({ pluginMessage: { type, id, key, value } }, "*");
+        });
+      }
+      window.onmessage = (event) => {
+        const data = event.data && event.data.pluginMessage;
+        if (!data) return;
+        if (data.type === "storage" && pending.has(data.id)) {
+          pending.get(data.id)(data.value);
+          pending.delete(data.id);
+        }
+        if (data.type === "selection") {
+          void submitAudit(data);
+        }
+        if (data.type === "error") {
+          msg(data.error, "err");
+          $("runBtn").disabled = false;
+        }
+      };
+
+      // clientStorage helpers live in code.js — patch via extended messages
+      // Fallback: use localStorage in UI sandbox when available.
+      const mem = {};
+      async function storeGet(key) {
+        try {
+          return localStorage.getItem(key);
+        } catch {
+          return mem[key] || null;
+        }
+      }
+      async function storeSet(key, value) {
+        try {
+          if (value == null) localStorage.removeItem(key);
+          else localStorage.setItem(key, value);
+        } catch {
+          if (value == null) delete mem[key];
+          else mem[key] = value;
+        }
+      }
+
+      // Override parentPost for storage to use localStorage (plugin iframe).
+      async function getStore(key) { return storeGet(key); }
+      async function setStore(key, value) { return storeSet(key, value); }
+
+      $("pairBtn").onclick = async () => {
+        msg("");
+        const base = $("baseUrl").value.replace(/\/$/, "");
+        const code = $("code").value.trim();
+        $("pairBtn").disabled = true;
+        try {
+          const res = await fetch(base + "/api/app-atlas/figma/plugin/pair", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ code }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "Pairing failed");
+          await setStore(STORAGE_TOKEN, data.token);
+          await setStore(STORAGE_BASE, base);
+          await setStore(STORAGE_USER, (data.user && data.user.name) || "user");
+          if (data.canvasId) await setStore(STORAGE_CANVAS, data.canvasId);
+          $("who").textContent = (data.user && data.user.name) || "user";
+          if (data.canvasId) $("canvasId").value = data.canvasId;
+          $("pairPanel").style.display = "none";
+          $("runPanel").style.display = "block";
+          msg("Paired. Select a frame and run validation.", "ok");
+          parent.postMessage({ pluginMessage: { type: "notify", message: "Paired with AppAtlas" } }, "*");
+        } catch (e) {
+          msg(e.message || "Pairing failed", "err");
+        } finally {
+          $("pairBtn").disabled = false;
+        }
+      };
+
+      $("unpairBtn").onclick = async () => {
+        await setStore(STORAGE_TOKEN, null);
+        $("runPanel").style.display = "none";
+        $("pairPanel").style.display = "block";
+        msg("Unpaired.");
+      };
+
+      $("runBtn").onclick = () => {
+        msg("");
+        $("runBtn").disabled = true;
+        parent.postMessage({ pluginMessage: { type: "get-selection" } }, "*");
+      };
+
+      async function submitAudit(sel) {
+        try {
+          const base = (await getStore(STORAGE_BASE)) || $("baseUrl").value.replace(/\/$/, "");
+          const token = await getStore(STORAGE_TOKEN);
+          const canvasId = $("canvasId").value.trim() || (await getStore(STORAGE_CANVAS));
+          if (!token) throw new Error("Not paired");
+          if (!canvasId) throw new Error("Set a canvas ID (from Connect apps pairing)");
+          const res = await fetch(base + "/api/app-atlas/figma/plugin/audits", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: "Bearer " + token,
+            },
+            body: JSON.stringify({
+              canvasId,
+              fileKey: sel.fileKey,
+              pageId: sel.pageId,
+              pageName: sel.pageName,
+              frameId: sel.frameId,
+              frameName: sel.frameName,
+              tree: sel.tree,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "Audit failed");
+          msg(
+            "Audit saved · score " + data.score + " · " +
+              (data.summary.errors || 0) + " errors, " +
+              (data.summary.warns || 0) + " warnings. Open Design Validation in AppAtlas.",
+            "ok",
+          );
+          parent.postMessage({
+            pluginMessage: { type: "notify", message: "Design Validation score " + data.score },
+          }, "*");
+        } catch (e) {
+          msg(e.message || "Audit failed", "err");
+          parent.postMessage({
+            pluginMessage: { type: "notify", message: e.message || "Audit failed", error: true },
+          }, "*");
+        } finally {
+          $("runBtn").disabled = false;
+        }
+      }
+
+      // init
+      (async () => {
+        const token = await getStore(STORAGE_TOKEN);
+        const base = (await getStore(STORAGE_BASE)) || "https://ai-hub-dev.protestcorp.com";
+        $("baseUrl").value = base;
+        const canvas = await getStore(STORAGE_CANVAS);
+        if (canvas) $("canvasId").value = canvas;
+        if (token) {
+          $("pairPanel").style.display = "none";
+          $("runPanel").style.display = "block";
+          $("who").textContent = (await getStore(STORAGE_USER)) || "plugin user";
+        }
+      })();
+    </script>
+  </body>
+</html>

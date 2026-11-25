@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { TbArrowLeft, TbChevronDown, TbChevronRight, TbCopy, TbExternalLink, TbLink, TbLoader2 } from "react-icons/tb";
-import { SiGithub, SiJira, SiSwagger } from "react-icons/si";
+import { SiFigma, SiGithub, SiJira, SiSwagger } from "react-icons/si";
 import { FaMicrosoft } from "react-icons/fa";
 import type { Canvas, CanvasSummary, JiraProject } from "@/app/interfaces/appatlas";
 import type { AtlasClient } from "@/app/services/appatlas";
@@ -13,6 +13,7 @@ import {
   type SwaggerStatus,
 } from "@/app/hooks/use-integration-status";
 import { clearCanvasSwagger, setCanvasSwagger, type CanvasSwagger } from "@/app/lib/canvas-swagger";
+import { clearCanvasFigma, setCanvasFigma, type CanvasFigma } from "@/app/lib/canvas-figma";
 import { clearToken, getEnvironment, getToken, selectEnvProfile, setEnvironment, setToken, validateBaseUrl, type TestEnvironment } from "@/app/lib/api-testing/environment";
 import { EnvProfileChips } from "@/app/components/app-atlas/endpoint-tests/env-profile-chips";
 import {
@@ -61,6 +62,8 @@ export function ConnectAppsModal({
   canvas,
   swagger,
   onSwaggerChange,
+  figma,
+  onFigmaChange,
   onConnected,
   onClose,
   projectId,
@@ -72,6 +75,8 @@ export function ConnectAppsModal({
   /** Swagger spec already connected to this canvas, if any. */
   swagger: CanvasSwagger | null;
   onSwaggerChange: (conn: CanvasSwagger | null) => void;
+  figma: CanvasFigma | null;
+  onFigmaChange: (conn: CanvasFigma | null) => void;
   onConnected: (c: Canvas) => void;
   onClose: () => void;
   projectId?: string | null;
@@ -84,6 +89,7 @@ export function ConnectAppsModal({
     github,
     swagger: swaggerIntegration,
     teams,
+    figma: figmaIntegration,
     loading: statusLoading,
     probing,
   } = useIntegrationStatus({ live: true, refreshMs: 60_000 });
@@ -109,6 +115,7 @@ export function ConnectAppsModal({
     if (id === "jira") return jira.health;
     if (id === "swagger") return swaggerIntegration.health;
     if (id === "teams") return teams.health;
+    if (id === "figma") return figmaIntegration.health;
     if (id === "github") {
       if (gitAvailable === false) return "disconnected";
       return github.health;
@@ -139,7 +146,9 @@ export function ConnectAppsModal({
           ? "Link Teams channel"
           : step === "github"
             ? "Connect GitHub"
-            : "Connect Swagger";
+            : step === "figma"
+              ? "Connect Figma"
+              : "Connect Swagger";
 
   return (
     <Modal title={stepTitle} onClose={onClose} width={520} scrollBody>
@@ -163,7 +172,8 @@ export function ConnectAppsModal({
                     (app.id === "jira" && !!canvas.jiraProjectKey) ||
                     (app.id === "swagger" && !!swagger) ||
                     (app.id === "teams" && !!linkedTeams?.teamId) ||
-                    (app.id === "github" && gitConnected);
+                    (app.id === "github" && gitConnected) ||
+                    (app.id === "figma" && !!figma);
                   const selected = picked === app.id;
                   const expired = health === "expired";
                   const errored = health === "error";
@@ -306,6 +316,15 @@ export function ConnectAppsModal({
             onClose();
           }}
         />
+      ) : step === "figma" ? (
+        <FigmaStep
+          client={client}
+          canvas={canvas}
+          accountOk={figmaIntegration.connected && figmaIntegration.health === "active"}
+          current={figma}
+          onBack={() => setStep("apps")}
+          onChange={onFigmaChange}
+        />
       ) : (
         <SwaggerStep
           client={client}
@@ -317,6 +336,170 @@ export function ConnectAppsModal({
         />
       )}
     </Modal>
+  );
+}
+
+function FigmaStep({
+  client,
+  canvas,
+  accountOk,
+  current,
+  onBack,
+  onChange,
+}: {
+  client: AtlasClient;
+  canvas: CanvasSummary;
+  accountOk: boolean;
+  current: CanvasFigma | null;
+  onBack: () => void;
+  onChange: (conn: CanvasFigma | null) => void;
+}) {
+  const router = useRouter();
+  const [fileUrl, setFileUrl] = useState(current?.fileUrl || "");
+  const [fileName, setFileName] = useState(current?.fileName || "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [pairingCode, setPairingCode] = useState<string | null>(null);
+  const [pairingExpires, setPairingExpires] = useState<number | null>(null);
+
+  const connect = async () => {
+    setError("");
+    setBusy(true);
+    try {
+      const canvasRes = await client.connectFigma(canvas.id, {
+        fileUrl: fileUrl.trim(),
+        fileName: fileName.trim() || null,
+      });
+      const f = canvasRes.figma;
+      if (!f?.fileKey) throw new Error("Figma connect did not return a file key");
+      const stored = setCanvasFigma(canvas.id, {
+        fileKey: f.fileKey,
+        fileName: f.fileName,
+        fileUrl: f.fileUrl,
+        connectedAt: f.connectedAt,
+      });
+      onChange(stored);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not link Figma file.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const disconnect = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await client.disconnectFigma(canvas.id);
+      clearCanvasFigma(canvas.id);
+      onChange(null);
+      setFileUrl("");
+      setFileName("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not disconnect Figma.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const startPairing = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const r = await client.startFigmaPairing({ canvasId: canvas.id });
+      setPairingCode(r.code);
+      setPairingExpires(r.expiresAt);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not start pairing.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!accountOk) {
+    return (
+      <div className="mt-4 space-y-3">
+        <button type="button" onClick={onBack} className="flex items-center gap-1 text-[12.5px] text-[#8664F2]">
+          <TbArrowLeft size={14} /> Back
+        </button>
+        <p className="text-[13px] text-[#7E7E7E]">
+          Connect your Figma account on Integrations first, then link a file to this canvas.
+        </p>
+        <button
+          type="button"
+          onClick={() => router.push("/integrations")}
+          className={primaryButton}
+        >
+          Open Integrations
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4 space-y-3">
+      <button type="button" onClick={onBack} className="flex items-center gap-1 text-[12.5px] text-[#8664F2]">
+        <TbArrowLeft size={14} /> Back
+      </button>
+      <div className="flex items-center gap-2 text-[13px] font-medium text-[#1F1F1F] dark:text-[#ededed]">
+        <SiFigma size={16} color="#F24E1E" />
+        {current ? `Linked: ${current.fileName || current.fileKey}` : "Link a Figma file to this canvas"}
+      </div>
+      <p className="text-[12.5px] text-[#7E7E7E]">
+        Paste a Figma design URL. Design Validation audits from the AppAtlas plugin will land on this canvas.
+      </p>
+      <label className={fieldLabel} htmlFor="figma-file-url">
+        Figma file URL
+        <input
+          id="figma-file-url"
+          value={fileUrl}
+          onChange={(e) => setFileUrl(e.target.value)}
+          placeholder="https://www.figma.com/design/…"
+          className={`mt-1 ${fieldInput}`}
+        />
+      </label>
+      <label className={fieldLabel} htmlFor="figma-file-name">
+        Display name (optional)
+        <input
+          id="figma-file-name"
+          value={fileName}
+          onChange={(e) => setFileName(e.target.value)}
+          placeholder="Checkout redesign"
+          className={`mt-1 ${fieldInput}`}
+        />
+      </label>
+      {error ? <p className="text-[12px] text-[#D97706]">{error}</p> : null}
+      <div className="flex flex-wrap gap-2">
+        <button type="button" disabled={busy || !fileUrl.trim()} onClick={() => void connect()} className={primaryButton}>
+          {busy ? "Saving…" : current ? "Update link" : "Connect Figma file"}
+        </button>
+        {current ? (
+          <button type="button" disabled={busy} onClick={() => void disconnect()} className={outlineButton}>
+            Disconnect
+          </button>
+        ) : null}
+      </div>
+      {current ? (
+        <div className="rounded-[10px] border border-[#ECECEC] bg-[#FAFAFA] p-3 dark:border-[#2a2a2a] dark:bg-[#101010]">
+          <div className="text-[12.5px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">Plugin pairing</div>
+          <p className="mt-1 text-[12px] text-[#7E7E7E]">
+            Generate a 6-digit code, open the AppAtlas Figma plugin, and enter it to push Design Validation audits.
+          </p>
+          {pairingCode ? (
+            <div className="mt-2 text-center">
+              <div className="text-[28px] font-semibold tracking-[0.35em] text-[#8664F2]">{pairingCode}</div>
+              <div className="text-[11px] text-[#7E7E7E]">
+                Expires {pairingExpires ? new Date(pairingExpires).toLocaleTimeString() : "soon"}
+              </div>
+            </div>
+          ) : (
+            <button type="button" disabled={busy} onClick={() => void startPairing()} className={`mt-2 ${outlineButton}`}>
+              Generate pairing code
+            </button>
+          )}
+        </div>
+      ) : null}
+    </div>
   );
 }
 

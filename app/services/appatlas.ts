@@ -17,6 +17,7 @@ import type {
   PipelineRun,
   PresenceUser,
   CanvasSummary,
+  FigmaAudit,
   JiraProject,
   SessionSnapshot,
   SitDeadAudit,
@@ -348,6 +349,38 @@ export function atlasClient({ instance, accounts }: Msal) {
       request<Canvas>(`/api/app-atlas/canvases/${canvasId}/swagger`, json("POST", body), false, ""),
     disconnectSwagger: (canvasId: string) =>
       request<Canvas>(`/api/app-atlas/canvases/${canvasId}/swagger`, json("DELETE"), false, ""),
+    connectFigma: (canvasId: string, body: { fileUrl?: string; fileKey?: string; fileName?: string | null }) =>
+      request<Canvas>(`/api/app-atlas/canvases/${canvasId}/figma`, json("POST", body), false, ""),
+    disconnectFigma: (canvasId: string) =>
+      request<Canvas>(`/api/app-atlas/canvases/${canvasId}/figma`, json("DELETE"), false, ""),
+    startFigmaPairing: (body: { canvasId?: string } = {}) =>
+      request<{ code: string; expiresAt: number; canvasId: string | null }>(
+        "/api/app-atlas/figma/pairing/start",
+        json("POST", body),
+        false,
+        "",
+      ),
+    listFigmaAudits: (canvasId: string) =>
+      request<{ items: FigmaAudit[] }>(
+        `/api/app-atlas/figma/canvases/${canvasId}/audits`,
+        undefined,
+        false,
+        "",
+      ),
+    getFigmaAudit: (canvasId: string, auditId: string) =>
+      request<FigmaAudit>(
+        `/api/app-atlas/figma/canvases/${canvasId}/audits/${auditId}`,
+        undefined,
+        false,
+        "",
+      ),
+    dryRunFigmaFindingJira: (canvasId: string, auditId: string, findingId: string) =>
+      request<{ dryRun: true; issue: { summary: string; description: string; labels: string[] } }>(
+        `/api/app-atlas/figma/canvases/${canvasId}/audits/${auditId}/findings/${findingId}/jira-dry-run`,
+        json("POST", {}),
+        false,
+        "",
+      ),
     /** Heartbeat: marks the caller present in `room` and returns everyone there. Optional own photo data-URL for peers. */
     presence: (room: string, leaving = false, photo?: string | null) =>
       request<{ users: PresenceUser[] }>(

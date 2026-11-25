@@ -1,0 +1,17 @@
+{
+  "name": "AppAtlas Design Validation",
+  "id": "appatlas-design-validation-dev",
+  "api": "1.0.0",
+  "main": "code.js",
+  "ui": "ui.html",
+  "editorType": ["figma"],
+  "networkAccess": {
+    "allowedDomains": [
+      "https://ai-hub-dev.protestcorp.com",
+      "https://ai-hub.protestcorp.com",
+      "https://ai-hub-sit.protestcorp.com"
+    ],
+    "reasoning": "Plugin pairs with AppAtlas and submits Design Validation audits to the Pro-Test AI Hub API."
+  },
+  "documentAccess": "dynamic-page"
+}
