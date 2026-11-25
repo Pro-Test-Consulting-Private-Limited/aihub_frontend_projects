@@ -179,12 +179,20 @@ export default function ConnectIntegrationModal({
             />
           </label>
           <a
-            href="https://www.figma.com/developers/api#access-tokens"
+            href="https://developers.figma.com/docs/rest-api/personal-access-tokens/"
             target="_blank"
             rel="noreferrer"
             className="text-[12px] text-[#2684FF]"
           >
-            Create a Figma personal access token
+            How to create a Figma personal access token
+          </a>
+          <a
+            href="https://www.figma.com/settings"
+            target="_blank"
+            rel="noreferrer"
+            className="text-[12px] text-[#2684FF]"
+          >
+            Open Figma settings (generate token)
           </a>
         </div>
       ) : (
