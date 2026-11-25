@@ -446,7 +446,8 @@ function FigmaStep({
         {current ? `Linked: ${current.fileName || current.fileKey}` : "Link a Figma file to this canvas"}
       </div>
       <p className="text-[12.5px] text-[#7E7E7E]">
-        Paste a Figma design URL. Design Validation audits from the AppAtlas plugin will land on this canvas.
+        Paste a Figma design URL. AppAtlas reads frames with your Integrations PAT for design checks and visual
+        diff vs crawled screens. The optional Figma plugin is only for in-Figma feedback while designing.
       </p>
       <label className={fieldLabel} htmlFor="figma-file-url">
         Figma file URL

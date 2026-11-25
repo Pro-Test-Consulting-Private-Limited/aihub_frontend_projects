@@ -381,6 +381,32 @@ export function atlasClient({ instance, accounts }: Msal) {
         false,
         "",
       ),
+    figmaVisualDiff: (
+      canvasId: string,
+      body: {
+        nodeId: string;
+        stateId?: string | null;
+        figmaImageUrl: string;
+        frameId?: string | null;
+        frameName?: string | null;
+        threshold?: number;
+      },
+    ) =>
+      request<{
+        canvasId: string;
+        nodeId: string;
+        stateId: string | null;
+        frameId: string | null;
+        frameName: string | null;
+        percentChanged: number;
+        changed: boolean;
+        figmaUrl: string;
+        recordedUrl: string;
+        diffUrl: string;
+        width: number;
+        height: number;
+      }>(`/api/app-atlas/canvases/${canvasId}/figma/visual-diff`, json("POST", body), false, ""),
+
     /** Heartbeat: marks the caller present in `room` and returns everyone there. Optional own photo data-URL for peers. */
     presence: (room: string, leaving = false, photo?: string | null) =>
       request<{ users: PresenceUser[] }>(
