@@ -1,0 +1,146 @@
+[
+  {
+    "file": "checklist-light.png",
+    "url": "http://127.0.0.1:3457/dev/posture-preview?theme=light&tab=checklist",
+    "method": "Playwright chromium 1280x720 against /dev/posture-preview mounting real CanvasPosture with fixtures from live atlas-api (wallet z-47xXi7aWIK). No shared-backend auth bypass.",
+    "at": "2026-11-25T14:05:21.542Z"
+  },
+  {
+    "file": "checklist-filter-fail-light.png",
+    "url": "http://127.0.0.1:3457/dev/posture-preview?theme=light&tab=checklist&status=fail",
+    "method": "Playwright chromium 1280x720 against /dev/posture-preview mounting real CanvasPosture with fixtures from live atlas-api (wallet z-47xXi7aWIK). No shared-backend auth bypass.",
+    "at": "2026-11-25T14:05:22.844Z"
+  },
+  {
+    "file": "failures-light.png",
+    "url": "http://127.0.0.1:3457/dev/posture-preview?theme=light&tab=failures",
+    "method": "Playwright chromium 1280x720 against /dev/posture-preview mounting real CanvasPosture with fixtures from live atlas-api (wallet z-47xXi7aWIK). No shared-backend auth bypass.",
+    "at": "2026-11-25T14:05:24.160Z"
+  },
+  {
+    "file": "screens-light.png",
+    "url": "http://127.0.0.1:3457/dev/posture-preview?theme=light&tab=screens",
+    "method": "Playwright chromium 1280x720 against /dev/posture-preview mounting real CanvasPosture with fixtures from live atlas-api (wallet z-47xXi7aWIK). No shared-backend auth bypass.",
+    "at": "2026-11-25T14:05:32.792Z"
+  },
+  {
+    "file": "runs-light.png",
+    "url": "http://127.0.0.1:3457/dev/posture-preview?theme=light&tab=runs",
+    "method": "Playwright chromium 1280x720 against /dev/posture-preview mounting real CanvasPosture with fixtures from live atlas-api (wallet z-47xXi7aWIK). No shared-backend auth bypass.",
+    "at": "2026-11-25T14:05:34.103Z"
+  },
+  {
+    "file": "runs-pass2-detail-light.png",
+    "url": "http://127.0.0.1:3457/dev/posture-preview?theme=light&tab=runs",
+    "method": "Playwright chromium 1280x720 against /dev/posture-preview mounting real CanvasPosture with fixtures from live atlas-api (wallet z-47xXi7aWIK). No shared-backend auth bypass.",
+    "at": "2026-11-25T14:05:36.418Z"
+  },
+  {
+    "file": "runs-discovery-detail-light.png",
+    "url": "http://127.0.0.1:3457/dev/posture-preview?theme=light&tab=runs",
+    "method": "Playwright chromium 1280x720 against /dev/posture-preview mounting real CanvasPosture with fixtures from live atlas-api (wallet z-47xXi7aWIK). No shared-backend auth bypass.",
+    "at": "2026-11-25T14:05:38.608Z"
+  },
+  {
+    "file": "evidence-light.png",
+    "url": "http://127.0.0.1:3457/dev/posture-preview?theme=light&tab=evidence",
+    "method": "Playwright chromium 1280x720 against /dev/posture-preview mounting real CanvasPosture with fixtures from live atlas-api (wallet z-47xXi7aWIK). No shared-backend auth bypass.",
+    "at": "2026-11-25T14:05:39.917Z"
+  },
+  {
+    "file": "drawer-fail-light.png",
+    "url": "http://127.0.0.1:3457/dev/posture-preview?theme=light&tab=failures",
+    "method": "Playwright chromium 1280x720 against /dev/posture-preview mounting real CanvasPosture with fixtures from live atlas-api (wallet z-47xXi7aWIK). No shared-backend auth bypass.",
+    "at": "2026-11-25T14:05:41.795Z"
+  },
+  {
+    "file": "drawer-partial-light.png",
+    "url": "http://127.0.0.1:3457/dev/posture-preview?theme=light&tab=checklist&status=partial",
+    "method": "Playwright chromium 1280x720 against /dev/posture-preview mounting real CanvasPosture with fixtures from live atlas-api (wallet z-47xXi7aWIK). No shared-backend auth bypass.",
+    "at": "2026-11-25T14:05:43.628Z"
+  },
+  {
+    "file": "summary-strip-light.png",
+    "url": "http://127.0.0.1:3457/dev/posture-preview?theme=light&tab=checklist",
+    "method": "Playwright chromium 1280x720 against /dev/posture-preview mounting real CanvasPosture with fixtures from live atlas-api (wallet z-47xXi7aWIK). No shared-backend auth bypass.",
+    "at": "2026-11-25T14:05:44.990Z"
+  },
+  {
+    "file": "export-vs-checklist-light.png",
+    "url": "http://127.0.0.1:3457/dev/posture-preview?theme=light&compare=1",
+    "method": "Playwright chromium 1280x720 against /dev/posture-preview mounting real CanvasPosture with fixtures from live atlas-api (wallet z-47xXi7aWIK). No shared-backend auth bypass.",
+    "at": "2026-11-25T14:05:46.510Z"
+  },
+  {
+    "file": "checklist-dark.png",
+    "url": "http://127.0.0.1:3457/dev/posture-preview?theme=dark&tab=checklist",
+    "method": "Playwright chromium 1280x720 against /dev/posture-preview mounting real CanvasPosture with fixtures from live atlas-api (wallet z-47xXi7aWIK). No shared-backend auth bypass.",
+    "at": "2026-11-25T14:05:47.911Z"
+  },
+  {
+    "file": "checklist-filter-fail-dark.png",
+    "url": "http://127.0.0.1:3457/dev/posture-preview?theme=dark&tab=checklist&status=fail",
+    "method": "Playwright chromium 1280x720 against /dev/posture-preview mounting real CanvasPosture with fixtures from live atlas-api (wallet z-47xXi7aWIK). No shared-backend auth bypass.",
+    "at": "2026-11-25T14:05:49.158Z"
+  },
+  {
+    "file": "failures-dark.png",
+    "url": "http://127.0.0.1:3457/dev/posture-preview?theme=dark&tab=failures",
+    "method": "Playwright chromium 1280x720 against /dev/posture-preview mounting real CanvasPosture with fixtures from live atlas-api (wallet z-47xXi7aWIK). No shared-backend auth bypass.",
+    "at": "2026-11-25T14:05:50.432Z"
+  },
+  {
+    "file": "screens-dark.png",
+    "url": "http://127.0.0.1:3457/dev/posture-preview?theme=dark&tab=screens",
+    "method": "Playwright chromium 1280x720 against /dev/posture-preview mounting real CanvasPosture with fixtures from live atlas-api (wallet z-47xXi7aWIK). No shared-backend auth bypass.",
+    "at": "2026-11-25T14:05:51.689Z"
+  },
+  {
+    "file": "runs-dark.png",
+    "url": "http://127.0.0.1:3457/dev/posture-preview?theme=dark&tab=runs",
+    "method": "Playwright chromium 1280x720 against /dev/posture-preview mounting real CanvasPosture with fixtures from live atlas-api (wallet z-47xXi7aWIK). No shared-backend auth bypass.",
+    "at": "2026-11-25T14:05:53.012Z"
+  },
+  {
+    "file": "runs-pass2-detail-dark.png",
+    "url": "http://127.0.0.1:3457/dev/posture-preview?theme=dark&tab=runs",
+    "method": "Playwright chromium 1280x720 against /dev/posture-preview mounting real CanvasPosture with fixtures from live atlas-api (wallet z-47xXi7aWIK). No shared-backend auth bypass.",
+    "at": "2026-11-25T14:05:55.234Z"
+  },
+  {
+    "file": "runs-discovery-detail-dark.png",
+    "url": "http://127.0.0.1:3457/dev/posture-preview?theme=dark&tab=runs",
+    "method": "Playwright chromium 1280x720 against /dev/posture-preview mounting real CanvasPosture with fixtures from live atlas-api (wallet z-47xXi7aWIK). No shared-backend auth bypass.",
+    "at": "2026-11-25T14:05:57.433Z"
+  },
+  {
+    "file": "evidence-dark.png",
+    "url": "http://127.0.0.1:3457/dev/posture-preview?theme=dark&tab=evidence",
+    "method": "Playwright chromium 1280x720 against /dev/posture-preview mounting real CanvasPosture with fixtures from live atlas-api (wallet z-47xXi7aWIK). No shared-backend auth bypass.",
+    "at": "2026-11-25T14:05:58.711Z"
+  },
+  {
+    "file": "drawer-fail-dark.png",
+    "url": "http://127.0.0.1:3457/dev/posture-preview?theme=dark&tab=failures",
+    "method": "Playwright chromium 1280x720 against /dev/posture-preview mounting real CanvasPosture with fixtures from live atlas-api (wallet z-47xXi7aWIK). No shared-backend auth bypass.",
+    "at": "2026-11-25T14:06:00.573Z"
+  },
+  {
+    "file": "drawer-partial-dark.png",
+    "url": "http://127.0.0.1:3457/dev/posture-preview?theme=dark&tab=checklist&status=partial",
+    "method": "Playwright chromium 1280x720 against /dev/posture-preview mounting real CanvasPosture with fixtures from live atlas-api (wallet z-47xXi7aWIK). No shared-backend auth bypass.",
+    "at": "2026-11-25T14:06:02.398Z"
+  },
+  {
+    "file": "summary-strip-dark.png",
+    "url": "http://127.0.0.1:3457/dev/posture-preview?theme=dark&tab=checklist",
+    "method": "Playwright chromium 1280x720 against /dev/posture-preview mounting real CanvasPosture with fixtures from live atlas-api (wallet z-47xXi7aWIK). No shared-backend auth bypass.",
+    "at": "2026-11-25T14:06:03.719Z"
+  },
+  {
+    "file": "export-vs-checklist-dark.png",
+    "url": "http://127.0.0.1:3457/dev/posture-preview?theme=dark&compare=1",
+    "method": "Playwright chromium 1280x720 against /dev/posture-preview mounting real CanvasPosture with fixtures from live atlas-api (wallet z-47xXi7aWIK). No shared-backend auth bypass.",
+    "at": "2026-11-25T14:06:05.143Z"
+  }
+]

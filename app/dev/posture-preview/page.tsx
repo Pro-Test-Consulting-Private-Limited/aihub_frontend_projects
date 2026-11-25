@@ -112,18 +112,37 @@ function PreviewInner() {
     return map;
   }, []);
 
+  const passesFixed = useMemo(() => {
+    const raw = passesRaw as { passes: Array<Record<string, unknown>>; jobs?: unknown[]; tooltip?: string };
+    const passes = (raw.passes || []).map((p) =>
+      p.id === "inventory"
+        ? {
+            ...p,
+            title: "Step 0: Site discovery",
+            description:
+              "Headless discovery of canvas screens, responses, cookies, and third parties. Does not cover checklist checks. Never uses the VNC session.",
+          }
+        : p,
+    );
+    return {
+      ...raw,
+      passes,
+      tooltip:
+        report.overlapNote ||
+        "Some checks can be observed by more than one pass. Each check has one primary pass so counts stay consistent and sum to 143.",
+      jobs: (jobsRaw as { items?: unknown[] }).items || raw.jobs || [],
+    };
+  }, [report.overlapNote]);
+
   const client = useMemo(
     () =>
       createFixtureAtlasClient({
         report,
-        passes: {
-          ...(passesRaw as { passes: unknown[]; jobs: unknown[]; tooltip?: string }),
-          jobs: (jobsRaw as { items?: unknown[] }).items || (passesRaw as { jobs?: unknown[] }).jobs || [],
-        },
+        passes: passesFixed,
         eventsByJob,
         exportHtml,
       }),
-    [eventsByJob, exportHtml, report],
+    [eventsByJob, exportHtml, passesFixed, report],
   );
 
   if (!enabled) {
