@@ -582,14 +582,14 @@ export function SecurityCoveragePanel({
                       {String(summary.message || prog.message || "Completed")}
                       {summary.durationMs != null && ` · ${Math.round(Number(summary.durationMs) / 1000)}s`}
                       {summary.triggeredBy ? ` · ${String(summary.triggeredBy)}` : ""}
-                      {summary.tally && (
+                      {summary.tally != null && typeof summary.tally === "object" ? (
                         <div className="mt-0.5">
                           Results: Fail {(summary.tally as Record<string, number>).fail || 0} · Pass{" "}
                           {(summary.tally as Record<string, number>).pass || 0} · Partial{" "}
                           {(summary.tally as Record<string, number>).partial || 0} · Not tested{" "}
                           {(summary.tally as Record<string, number>).not_tested || 0}
                         </div>
-                      )}
+                      ) : null}
                     </div>
                   )}
                   {status === "failed" && (
