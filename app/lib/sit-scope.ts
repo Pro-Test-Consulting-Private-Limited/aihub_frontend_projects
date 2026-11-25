@@ -59,6 +59,22 @@ export function normalizeTicketKey(raw: string | null | undefined): string {
 }
 
 /**
+ * True when key belongs to the canvas Jira project (e.g. DW-6 for project DW).
+ * Foreign/legacy keys like WALLET-101 on a DW canvas return false.
+ * With no projectKey, every non-empty key is kept (unknown context).
+ */
+export function ticketBelongsToProject(
+  key: string | null | undefined,
+  projectKey: string | null | undefined,
+): boolean {
+  const k = normalizeTicketKey(key);
+  if (!k) return false;
+  const pk = normalizeTicketKey(projectKey);
+  if (!pk) return true;
+  return k === pk || k.startsWith(`${pk}-`);
+}
+
+/**
  * Single ticket key for a row: trimmed uppercase requirementId, else issueKey.
  * Used by pills, merge, filters, export, flags, provenance grouping.
  */
@@ -100,7 +116,7 @@ export type ScopeSummary = {
   total: number;
   /** Counts for each working-set key (0 if none). */
   byTicket: Record<string, number>;
-  /** Rows whose ticketKeyOf is empty or unresolvable (R17: never foreign real keys). */
+  /** Keyless rows, plus foreign/legacy keys outside projectKey when that is set. */
   unassigned: number;
   bySource: { total: number; ai: number; human: number };
   edited: number;
@@ -123,10 +139,20 @@ const EMPTY_STATUS = (): ScopeStatusCounts => ({
 
 /**
  * One-pass summary over a rows array. All UI counts for that scope must come from here.
+ * When projectKey is set, keys outside that Jira project (legacy WALLET-* etc.) count as Unassigned
+ * and are omitted from ticket pills — not shown as peer DW-style pills.
  */
-export function buildScopeSummary(rows: SitSheetRow[], workingKeys: string[] = []): ScopeSummary {
-  const keys = sortTicketKeys(workingKeys.map(normalizeTicketKey).filter(Boolean));
-  const keySet = new Set(keys);
+export function buildScopeSummary(
+  rows: SitSheetRow[],
+  workingKeys: string[] = [],
+  projectKey?: string | null,
+): ScopeSummary {
+  const keys = sortTicketKeys(
+    workingKeys
+      .map(normalizeTicketKey)
+      .filter(Boolean)
+      .filter((k) => ticketBelongsToProject(k, projectKey)),
+  );
   const byTicket: Record<string, number> = {};
   for (const k of keys) byTicket[k] = 0;
 
@@ -141,8 +167,8 @@ export function buildScopeSummary(rows: SitSheetRow[], workingKeys: string[] = [
     if (r.cells.deleted === "1") continue;
     total++;
     const key = ticketKeyOf(r);
-    if (!key) {
-      // R17 D3: Unassigned = keyless / unresolvable only.
+    if (!key || !ticketBelongsToProject(key, projectKey)) {
+      // Keyless, or foreign/legacy key not in this canvas Jira project.
       unassigned++;
     } else {
       byTicket[key] = (byTicket[key] || 0) + 1;
