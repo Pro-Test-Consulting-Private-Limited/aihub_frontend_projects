@@ -222,17 +222,44 @@ export function CanvasPosture({
       const latest = scanList.items.find((s) => s.status === "ready") || scanList.items[0] || null;
       const sid = latest?.id || null;
       setScanId(sid);
-      if (sid) {
-        const [f, d] = await Promise.all([client.listSecurityFindings(canvasId, sid), client.getSecurityDiff(canvasId)]);
-        setFindings(f.items);
-        setDiff(d.diff);
-      } else {
-        setFindings([]);
-        setDiff(null);
-      }
       const report = await client.getSecurityReport(canvasId).catch(() => null);
       const grade = report?.grade as { eligible?: boolean; label?: string } | undefined;
       setGradeGateLabel(grade && grade.eligible === false ? grade.label || null : null);
+      const coverageFails: SecurityFinding[] = ((report?.failures as Array<Record<string, unknown>>) || []).map((f, i) => {
+        const screens = (f.screens as string[]) || (f.affectedScreens as string[]) || [];
+        return {
+          id: `cov-${String(f.checkId || i)}`,
+          canvasId,
+          scanId: sid || "coverage",
+          nodeId: screens[0] || null,
+          stateId: null,
+          checkId: String(f.checkId || ""),
+          title: String(f.title || f.checkId || "Finding"),
+          severity: (String(f.severity || "info") as SecuritySeverity),
+          status: "open",
+          owaspCategory: f.owasp ? String(f.owasp) : null,
+          cwe: f.cwe ? String(f.cwe) : null,
+          confidence: "high",
+          remediation: f.remediation ? String(f.remediation) : null,
+          evidence: {
+            statusReason: f.statusReason || f.why || "",
+            screens,
+            why: f.statusReason || f.why || "",
+          },
+          createdAt: Date.now(),
+        };
+      });
+      if (sid) {
+        const [f, d] = await Promise.all([client.listSecurityFindings(canvasId, sid), client.getSecurityDiff(canvasId)]);
+        // Prefer Coverage fails so Findings matches the checklist; keep scan-only rows that are not already covered.
+        const covered = new Set(coverageFails.map((x) => x.checkId));
+        const extras = f.items.filter((x) => x.status === "open" && !covered.has(x.checkId || ""));
+        setFindings(coverageFails.length ? [...coverageFails, ...extras] : f.items);
+        setDiff(d.diff);
+      } else {
+        setFindings(coverageFails);
+        setDiff(null);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load posture");
     } finally {
@@ -441,10 +468,23 @@ export function CanvasPosture({
               <div>Org posture: {orgOn ? "on" : "off"}</div>
               <div>Project passive: {projectOn ? "on" : "off"}</div>
               <div>Env: {env}</div>
-              <div title={hosts.join(", ")}>Allowlist: {hosts.length ? hosts.join(", ") : "none"}</div>
+              <div className="mt-1 text-[#7E7E7E]">Host allowlist is in project settings.</div>
             </div>
           </details>
           <div className="ml-auto flex flex-wrap gap-2">
+            {canvasId && (
+              <button
+                type="button"
+                disabled={scanning}
+                onClick={() => {
+                  setTopView("coverage");
+                  void client.enqueueSecurityRunAll(canvasId).then(() => refresh()).catch((e) => setError(e instanceof Error ? e.message : "Run all failed"));
+                }}
+                className="inline-flex items-center gap-1.5 rounded-[7px] border border-[#8664F2] px-3 py-1.5 text-[12px] font-medium text-[#8664F2] disabled:opacity-50"
+              >
+                Run all passes
+              </button>
+            )}
             <button
               type="button"
               disabled={scanning}
@@ -569,23 +609,28 @@ export function CanvasPosture({
           />
         ) : (
           <>
-            {/* Hero */}
+            {/* Hero: no ungated letter grade or score ring on Findings */}
             <section className="grid grid-cols-12 gap-4" aria-label="Posture summary">
-              <div className="col-span-12 flex flex-wrap items-center gap-6 rounded-[12px] border border-[#E5E7EB] bg-white p-4 dark:border-[#2a2a2a] dark:bg-[#141414] xl:col-span-4">
-                <ScoreRing score={summary.score ?? 0} grade={summary.grade ?? "?"} gatedLabel={gradeGateLabel || "Open Coverage for progress"} />
+              <div className="col-span-12 flex flex-wrap items-center gap-4 rounded-[12px] border border-[#E5E7EB] bg-white p-4 dark:border-[#2a2a2a] dark:bg-[#141414] xl:col-span-4">
                 <div className="min-w-0 flex-1">
-                  <div className="text-[13px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">Testing progress</div>
+                  <div className="text-[13px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">Findings from completed passes</div>
                   <p className="mt-1 text-[11px] leading-relaxed text-[#7E7E7E]">
-                    {gradeGateLabel ||
-                      "Use Coverage for the checklist tally. This tab shows findings merged from completed passes. Letter grades stay gated."}
+                    Queued or running passes never replace this list. Open Coverage for the full 143-check tally and progress card.
+                    Letter grades stay on Coverage after the gate unlocks.
                   </p>
-                  <div className="mt-2 flex gap-3 text-[12px]">
+                  <div className="mt-2 flex flex-wrap gap-3 text-[12px]">
                     <span className="inline-flex items-center gap-1 text-[#DC2626]">
+                      <TbAlertTriangle size={14} /> {findings.filter((f) => f.status === "open").length} open
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-[#7E7E7E]">
                       <TbArrowUp size={14} /> {deltaNew} new
                     </span>
                     <span className="inline-flex items-center gap-1 text-[#16A34A]">
                       <TbArrowDown size={14} /> {deltaFixed} fixed
                     </span>
+                    <button type="button" className="text-[#8664F2]" onClick={() => setTopView("coverage")}>
+                      Open Coverage
+                    </button>
                   </div>
                 </div>
               </div>
