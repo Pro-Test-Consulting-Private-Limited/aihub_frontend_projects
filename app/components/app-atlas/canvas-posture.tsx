@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   TbAlertTriangle,
   TbArrowDown,
@@ -432,13 +432,18 @@ export function CanvasPosture({
           <span className="rounded-full border border-[#E5E7EB] px-2 py-0.5 text-[11px] text-[#5E6066] dark:border-[#2a2a2a]">
             {activeScan?.status || "idle"}
           </span>
-          <span className="text-[11px] text-[#7E7E7E]">Ruleset {activeScan?.rulesetVersion || "posture-demo-1.0"}</span>
-          <span className="rounded-[4px] bg-[#F0FDF4] px-2 py-0.5 text-[10.5px] font-medium text-[#166534] dark:bg-[#0f2418]">
-            Passive analysis of recorded traffic
-          </span>
-          <span className="text-[11px] text-[#7E7E7E]" title={hosts.join(", ")}>
-            Allowlist · {hosts.length ? hosts.join(", ") : "none"}
-          </span>
+          <details className="relative">
+            <summary className="cursor-pointer list-none rounded-[7px] border border-[#E5E7EB] px-2 py-1 text-[11px] dark:border-[#2a2a2a]">
+              Run details
+            </summary>
+            <div className="absolute left-0 z-20 mt-1 w-64 rounded-[8px] border border-[#E5E7EB] bg-white p-2 text-[11px] shadow dark:border-[#2a2a2a] dark:bg-[#141414]">
+              <div>Ruleset: {activeScan?.rulesetVersion || "posture-demo-1.0"}</div>
+              <div>Org posture: {orgOn ? "on" : "off"}</div>
+              <div>Project passive: {projectOn ? "on" : "off"}</div>
+              <div>Env: {env}</div>
+              <div title={hosts.join(", ")}>Allowlist: {hosts.length ? hosts.join(", ") : "none"}</div>
+            </div>
+          </details>
           <div className="ml-auto flex flex-wrap gap-2">
             <button
               type="button"
@@ -457,13 +462,62 @@ export function CanvasPosture({
                 Sample data
               </button>
             )}
-            <button
-              type="button"
-              onClick={exportReport}
-              className="inline-flex items-center gap-1.5 rounded-[7px] border border-[#E5E7EB] px-3 py-1.5 text-[12px] dark:border-[#2a2a2a]"
-            >
-              <TbDownload size={14} /> Export report
-            </button>
+            <div className="relative">
+              <details>
+                <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-[7px] border border-[#E5E7EB] px-3 py-1.5 text-[12px] dark:border-[#2a2a2a]">
+                  <TbDownload size={14} /> Export
+                </summary>
+                <div className="absolute right-0 z-20 mt-1 w-40 rounded-[8px] border border-[#E5E7EB] bg-white p-1 text-[11px] shadow dark:border-[#2a2a2a] dark:bg-[#141414]">
+                  <button type="button" className="block w-full rounded px-2 py-1 text-left hover:bg-[#F5F1FF]" onClick={exportReport}>
+                    Findings JSON
+                  </button>
+                  {canvasId && (
+                    <>
+                      <button
+                        type="button"
+                        className="block w-full rounded px-2 py-1 text-left hover:bg-[#F5F1FF]"
+                        onClick={() => void client.exportSecurityReport(canvasId, "html").then(({ blob, filename }) => {
+                          const url = URL.createObjectURL(blob);
+                          window.open(url, "_blank");
+                          const a = document.createElement("a");
+                          a.href = url;
+                          a.download = filename;
+                          a.click();
+                        })}
+                      >
+                        PDF / HTML
+                      </button>
+                      <button
+                        type="button"
+                        className="block w-full rounded px-2 py-1 text-left hover:bg-[#F5F1FF]"
+                        onClick={() => void client.exportSecurityReport(canvasId, "xlsx").then(({ blob, filename }) => {
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement("a");
+                          a.href = url;
+                          a.download = filename;
+                          a.click();
+                        })}
+                      >
+                        XLSX
+                      </button>
+                      <button
+                        type="button"
+                        className="block w-full rounded px-2 py-1 text-left hover:bg-[#F5F1FF]"
+                        onClick={() => void client.exportSecurityReport(canvasId, "json").then(({ blob, filename }) => {
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement("a");
+                          a.href = url;
+                          a.download = filename;
+                          a.click();
+                        })}
+                      >
+                        Checklist JSON
+                      </button>
+                    </>
+                  )}
+                </div>
+              </details>
+            </div>
           </div>
         </div>
         {error && (
@@ -504,7 +558,9 @@ export function CanvasPosture({
 
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
         {topView === "coverage" && canvasId ? (
-          <SecurityCoveragePanel client={client} canvasId={canvasId} />
+          <Suspense fallback={<div className="h-40 animate-pulse rounded-[12px] bg-[#E5E7EB]/50 dark:bg-[#2a2a2a]/50" />}>
+            <SecurityCoveragePanel client={client} canvasId={canvasId} onOpenNode={onFocusNode} />
+          </Suspense>
         ) : !activeScan ? (
           <EmptyPanel
             title="No scan yet"
@@ -516,15 +572,12 @@ export function CanvasPosture({
             {/* Hero */}
             <section className="grid grid-cols-12 gap-4" aria-label="Posture summary">
               <div className="col-span-12 flex flex-wrap items-center gap-6 rounded-[12px] border border-[#E5E7EB] bg-white p-4 dark:border-[#2a2a2a] dark:bg-[#141414] xl:col-span-4">
-                <ScoreRing score={summary.score ?? 0} grade={summary.grade ?? "?"} gatedLabel={gradeGateLabel} />
+                <ScoreRing score={summary.score ?? 0} grade={summary.grade ?? "?"} gatedLabel={gradeGateLabel || "Open Coverage for progress"} />
                 <div className="min-w-0 flex-1">
-                  <div className="text-[13px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">
-                    {gradeGateLabel ? "Testing progress" : "Posture score"}
-                  </div>
+                  <div className="text-[13px] font-semibold text-[#1F1F1F] dark:text-[#ededed]">Testing progress</div>
                   <p className="mt-1 text-[11px] leading-relaxed text-[#7E7E7E]">
-                    {gradeGateLabel
-                      ? "Letter grade is hidden until enough checks are tested and traffic is observed."
-                      : summary.formula || "Severity-weighted per scan"}
+                    {gradeGateLabel ||
+                      "Use Coverage for the checklist tally. This tab shows findings merged from completed passes. Letter grades stay gated."}
                   </p>
                   <div className="mt-2 flex gap-3 text-[12px]">
                     <span className="inline-flex items-center gap-1 text-[#DC2626]">

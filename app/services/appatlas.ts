@@ -799,13 +799,64 @@ export function atlasClient({ instance, accounts }: Msal) {
 
     listSecurityPasses: (canvasId: string) =>
       request<{
-        passes: Array<{ id: string; title: string; kind: string; built: boolean; unlockCount: number; description: string }>;
-        jobs: Array<{ id: string; passId: string; status: string; progress: Record<string, unknown> }>;
+        passes: Array<{
+          id: string;
+          title: string;
+          kind: string;
+          built: boolean;
+          unlockCount: number;
+          description: string;
+          coverage?: {
+            covers: number;
+            fullyVerifies: number;
+            partiallyObserves: number;
+            cannotAutomate: number;
+            cannotReasons?: string[];
+            byCategory?: Record<string, string[]>;
+            checkIds?: string[];
+            overlapsWithPass1?: string[];
+          } | null;
+        }>;
+        jobs: Array<{
+          id: string;
+          passId: string;
+          status: string;
+          progress: Record<string, unknown>;
+          summary?: Record<string, unknown>;
+          error?: string | null;
+          startedAt?: number | null;
+          finishedAt?: number | null;
+          heartbeatAt?: number | null;
+          createdByName?: string | null;
+        }>;
+        roadmap?: Record<string, number>;
+        overlaps?: string[];
+        totals?: Record<string, number>;
+        tooltip?: string;
       }>(`/canvases/${encodeURIComponent(canvasId)}/security/passes`),
     enqueueSecurityPass: (canvasId: string, passId: string) =>
       request<Record<string, unknown>>(
         `/canvases/${encodeURIComponent(canvasId)}/security/passes/${encodeURIComponent(passId)}`,
         json("POST", {}),
+      ),
+    enqueueSecurityRunAll: (canvasId: string) =>
+      request<{ runId: string; batchId: string; jobs: unknown[] }>(
+        `/canvases/${encodeURIComponent(canvasId)}/security/passes/run-all`,
+        json("POST", {}),
+      ),
+    cancelSecurityPassJob: (canvasId: string, jobId: string) =>
+      request<Record<string, unknown>>(
+        `/canvases/${encodeURIComponent(canvasId)}/security/jobs/${encodeURIComponent(jobId)}/cancel`,
+        json("POST", {}),
+      ),
+    retrySecurityPass: (canvasId: string, passId: string) =>
+      request<Record<string, unknown>>(
+        `/canvases/${encodeURIComponent(canvasId)}/security/passes/${encodeURIComponent(passId)}/retry`,
+        json("POST", {}),
+      ),
+    listSecurityJobEvents: (canvasId: string, jobId: string, after = 0) =>
+      request<{ items: Array<{ id: number; at: number; step: string; detail: string | null; url: string | null; detector: string | null; result: string | null }> }>(
+        `/canvases/${encodeURIComponent(canvasId)}/security/jobs/${encodeURIComponent(jobId)}/events?after=${after}`,
       ),
     getSecurityReport: (canvasId: string) =>
       request<Record<string, unknown>>(`/canvases/${encodeURIComponent(canvasId)}/security/report`),
