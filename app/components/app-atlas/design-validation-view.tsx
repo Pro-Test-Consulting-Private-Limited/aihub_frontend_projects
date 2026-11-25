@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMsal } from "@azure/msal-react";
 import { SiFigma } from "react-icons/si";
-import { TbLayoutGrid, TbList, TbRefresh, TbSearch } from "react-icons/tb";
+import { TbLayoutGrid, TbList, TbRefresh, TbSearch, TbCloudDownload } from "react-icons/tb";
 import { getFreshIdToken } from "@/app/lib/auth-client";
-import { type AtlasClient } from "@/app/services/appatlas";
+import { atlasUrl, type AtlasClient } from "@/app/services/appatlas";
 import type { Canvas, FigmaAudit, FigmaFinding } from "@/app/interfaces/appatlas";
 import type { CanvasFigma } from "@/app/lib/canvas-figma";
 import { DesignValidationCompare } from "./design-validation-compare";
@@ -52,7 +52,9 @@ export function DesignValidationView({
   const [frameQuery, setFrameQuery] = useState("");
   const [frameView, setFrameView] = useState<"grid" | "list">("grid");
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
+  const [thumbsSyncedAt, setThumbsSyncedAt] = useState<number | null>(null);
   const [loadingThumbs, setLoadingThumbs] = useState(false);
+  const [syncProgress, setSyncProgress] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -133,50 +135,81 @@ export function DesignValidationView({
     }
   }, [fileKey, frameId]);
 
-  const thumbRequested = useRef<Set<string>>(new Set());
-  const thumbQueueBusy = useRef(false);
+  const loadCachedThumbs = useCallback(async () => {
+    if (!canvas?.id) return;
+    try {
+      const res = await client.listFigmaThumbs(canvas.id);
+      setThumbsSyncedAt(res.syncedAt);
+      const map: Record<string, string> = {};
+      for (const item of res.items || []) {
+        if (item.frameId && item.url) map[item.frameId] = atlasUrl(item.url);
+      }
+      setThumbs(map);
+    } catch {
+      /* no cache yet */
+    }
+  }, [canvas?.id, client]);
 
-  /** Lazy-load thumbnails slowly (Figma rate-limits /images). */
-  const ensureThumbs = useCallback(
-    async (ids: string[]) => {
-      if (!fileKey || ids.length === 0 || thumbQueueBusy.current) return;
-      const missing = ids.filter((id) => !thumbRequested.current.has(id)).slice(0, 6);
-      if (missing.length === 0) return;
-      missing.forEach((id) => thumbRequested.current.add(id));
-      thumbQueueBusy.current = true;
-      setLoadingThumbs(true);
-      try {
-        const res = await fetch("/api/auth/figma/images", {
+  /** Manual sync: pull Figma previews via PAT in small batches, store on AppAtlas. */
+  const syncFigmaThumbs = useCallback(async () => {
+    if (!canvas?.id || !fileKey || frames.length === 0) return;
+    setBusy("sync");
+    setError("");
+    setLoadingThumbs(true);
+    let savedTotal = 0;
+    let hitLimit = false;
+    try {
+      for (let i = 0; i < frames.length; i += 4) {
+        const batch = frames.slice(i, i + 4);
+        setSyncProgress(`Syncing previews ${Math.min(i + batch.length, frames.length)}/${frames.length}…`);
+        const res = await fetch("/api/auth/figma/sync-thumbs", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ fileKey, ids: missing, scale: 1, format: "jpg" }),
+          body: JSON.stringify({
+            fileKey,
+            frames: batch.map((f) => ({
+              frameId: f.frameId,
+              frameName: f.frameName,
+              pageId: f.pageId,
+              pageName: f.pageName,
+              width: f.width,
+              height: f.height,
+            })),
+          }),
         });
         const data = await res.json();
         if (res.status === 429 || /rate limit/i.test(String(data.error || ""))) {
-          missing.forEach((id) => thumbRequested.current.delete(id));
+          hitLimit = true;
           setError(
             data.error ||
-              "Figma rate limit exceeded — too many preview requests. Wait ~1 minute, then Refresh. Design checks still work without every thumbnail.",
+              "Figma rate limit hit mid-sync. Wait ~1 minute, then Sync again — already saved previews stay cached.",
           );
-          return;
+          break;
         }
-        if (!res.ok) {
-          missing.forEach((id) => thumbRequested.current.delete(id));
-          return;
+        if (!res.ok) throw new Error(data.error || "Sync batch failed");
+        if (data.items?.length) {
+          const saved = await client.saveFigmaThumbs(canvas.id, { items: data.items });
+          savedTotal += saved.saved || 0;
+          setThumbsSyncedAt(saved.syncedAt);
         }
-        setThumbs((prev) => ({ ...prev, ...(data.images || {}) }));
-      } catch {
-        missing.forEach((id) => thumbRequested.current.delete(id));
-      } finally {
-        setLoadingThumbs(false);
-        // Space out the next batch so we don't trip Figma again.
-        setTimeout(() => {
-          thumbQueueBusy.current = false;
-        }, 2500);
+        // Pause between batches to stay under Figma limits.
+        await new Promise((r) => setTimeout(r, 2000));
       }
-    },
-    [fileKey],
-  );
+      await loadCachedThumbs();
+      if (!hitLimit) {
+        setSyncProgress(savedTotal ? `Synced ${savedTotal} previews` : "No new previews");
+        setTimeout(() => setSyncProgress(null), 2500);
+      } else {
+        setSyncProgress(null);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not sync Figma previews");
+      setSyncProgress(null);
+    } finally {
+      setBusy(null);
+      setLoadingThumbs(false);
+    }
+  }, [canvas?.id, client, fileKey, frames, loadCachedThumbs]);
 
   useEffect(() => {
     void refreshAudits();
@@ -187,18 +220,12 @@ export function DesignValidationView({
   }, [linked?.fileKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!nodeId && nodes[0]?.id) setNodeId(nodes[0].id);
-  }, [nodes, nodeId]);
+    if (canvas?.id) void loadCachedThumbs();
+  }, [canvas?.id, loadCachedThumbs]);
 
   useEffect(() => {
-    // Only prefetch a small first page of thumbs — selected frame is enough for compare.
-    const preferred = [
-      ...(frameId ? [frameId] : []),
-      ...filteredFrames.slice(0, 8).map((f) => f.frameId),
-    ];
-    const timer = setTimeout(() => void ensureThumbs(preferred), 400);
-    return () => clearTimeout(timer);
-  }, [filteredFrames, frameId, ensureThumbs]);
+    if (!nodeId && nodes[0]?.id) setNodeId(nodes[0].id);
+  }, [nodes, nodeId]);
 
   const runChecksFromPat = async () => {
     if (!canvas?.id || !fileKey || !selectedFrame) return;
@@ -383,7 +410,17 @@ export function DesignValidationView({
                   <div className="text-[11px] font-semibold uppercase tracking-wide text-[#6B7280]">
                     Frame explorer
                   </div>
-                  <div className="flex gap-1">
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      title="Sync Figma previews to AppAtlas (avoids rate limits on every visit)"
+                      disabled={!!busy || frames.length === 0}
+                      onClick={() => void syncFigmaThumbs()}
+                      className="inline-flex items-center gap-1 rounded-[6px] border border-[#8664f2]/50 px-2 py-0.5 text-[11px] font-medium text-[#8664f2] disabled:opacity-50"
+                    >
+                      <TbCloudDownload size={12} />
+                      {busy === "sync" ? "Syncing…" : "Sync"}
+                    </button>
                     <button
                       type="button"
                       title="Grid"
@@ -436,7 +473,17 @@ export function DesignValidationView({
                     </button>
                   ))}
                 </div>
-                {loadingThumbs || busy === "frames" ? (
+                {syncProgress ? (
+                  <div className="text-[11px] text-[#8664f2]">{syncProgress}</div>
+                ) : thumbsSyncedAt ? (
+                  <div className="text-[11px] text-[#9CA3AF]">
+                    Cached {new Date(thumbsSyncedAt).toLocaleString()} · Sync to refresh
+                  </div>
+                ) : Object.keys(thumbs).length === 0 && frames.length > 0 ? (
+                  <div className="text-[11px] text-[#D97706]">
+                    No cached previews yet — click Sync once (avoids Figma rate limits on every load)
+                  </div>
+                ) : loadingThumbs || busy === "frames" ? (
                   <div className="text-[11px] text-[#9CA3AF]">
                     {busy === "frames" ? "Loading frames…" : "Loading thumbnails…"}
                   </div>
@@ -524,48 +571,114 @@ export function DesignValidationView({
               </div>
             </div>
 
-            <div className="shrink-0 space-y-2 rounded-[12px] border border-[#E5E7EB] p-3 dark:border-[#2a2a2a]">
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-[#6B7280]">Canvas mapping</div>
-              <label className="block text-[12px] font-medium">
-                Screen / node
-                <select
-                  className="mt-1 w-full rounded-[8px] border border-[#E5E7EB] bg-white px-2 py-2 text-[13px] dark:border-[#2a2a2a] dark:bg-[#141414]"
-                  value={nodeId}
-                  onChange={(e) => {
-                    setNodeId(e.target.value);
-                    setStateId("");
-                  }}
-                >
-                  {nodes.map((n) => (
-                    <option key={n.id} value={n.id}>
-                      {n.title || n.path || n.id}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {selectedNode && selectedNode.states.length > 0 ? (
-                <label className="block text-[12px] font-medium">
-                  State
-                  <select
-                    className="mt-1 w-full rounded-[8px] border border-[#E5E7EB] bg-white px-2 py-2 text-[13px] dark:border-[#2a2a2a] dark:bg-[#141414]"
-                    value={stateId}
-                    onChange={(e) => setStateId(e.target.value)}
-                  >
-                    <option value="">Primary screenshot</option>
-                    {selectedNode.states.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.label || s.kind || s.id}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : null}
-              <div className="flex flex-col gap-2 pt-1">
+            <div className="flex max-h-[340px] shrink-0 flex-col overflow-hidden rounded-[12px] border border-[#E5E7EB] dark:border-[#2a2a2a]">
+              <div className="shrink-0 space-y-1 border-b border-[#F0F0F0] p-3 dark:border-[#1f1f1f]">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-[#6B7280]">
+                  Canvas screenshots
+                </div>
+                <div className="text-[11px] text-[#9CA3AF]">
+                  Pick the recorded screen (and state) to compare against the Figma frame
+                </div>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto p-2">
+                {nodes.length === 0 ? (
+                  <div className="p-3 text-[12px] text-[#7E7E7E]">No recorded screens on this canvas.</div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    {nodes.map((n) => {
+                      const selected = n.id === nodeId && !stateId;
+                      const primaryUrl = n.screenshotUrl ? atlasUrl(n.screenshotUrl) : "";
+                      return (
+                        <div key={n.id} className="space-y-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setNodeId(n.id);
+                              setStateId("");
+                            }}
+                            className={`w-full overflow-hidden rounded-[10px] border text-left transition ${
+                              selected
+                                ? "border-[#8664f2] ring-2 ring-[#8664f2]/35"
+                                : "border-[#E5E7EB] hover:border-[#C4B5FD] dark:border-[#2a2a2a]"
+                            }`}
+                          >
+                            <div className="aspect-[4/3] bg-[#F8FAFC] dark:bg-[#0f0f0f]">
+                              {primaryUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={primaryUrl}
+                                  alt={n.title || n.path}
+                                  className="h-full w-full object-cover object-top"
+                                />
+                              ) : (
+                                <div className="flex h-full items-center justify-center text-[10px] text-[#9CA3AF]">
+                                  No shot
+                                </div>
+                              )}
+                            </div>
+                            <div className="space-y-0.5 p-2">
+                              <div className="truncate text-[12px] font-medium text-[#1F1F1F] dark:text-[#ededed]">
+                                {n.title || n.path || n.id}
+                              </div>
+                              <div className="truncate text-[10px] text-[#7E7E7E]">
+                                {n.path || "Primary"}
+                                {n.states.length > 0 ? ` · ${n.states.length} state${n.states.length === 1 ? "" : "s"}` : ""}
+                              </div>
+                            </div>
+                          </button>
+                          {n.id === nodeId && n.states.length > 0 ? (
+                            <div className="grid grid-cols-2 gap-1 pl-0.5">
+                              {n.states.map((s) => {
+                                const stSelected = stateId === s.id;
+                                const stUrl = s.screenshotUrl ? atlasUrl(s.screenshotUrl) : "";
+                                return (
+                                  <button
+                                    key={s.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setNodeId(n.id);
+                                      setStateId(s.id);
+                                    }}
+                                    className={`overflow-hidden rounded-[8px] border text-left ${
+                                      stSelected
+                                        ? "border-[#8664f2] ring-1 ring-[#8664f2]/40"
+                                        : "border-[#E5E7EB] dark:border-[#2a2a2a]"
+                                    }`}
+                                  >
+                                    <div className="aspect-[4/3] bg-[#F8FAFC] dark:bg-[#0f0f0f]">
+                                      {stUrl ? (
+                                        // eslint-disable-next-line @next/next/no-img-element
+                                        <img
+                                          src={stUrl}
+                                          alt={s.label || s.kind}
+                                          className="h-full w-full object-cover object-top"
+                                        />
+                                      ) : (
+                                        <div className="flex h-full items-center justify-center text-[9px] text-[#9CA3AF]">
+                                          —
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div className="truncate px-1.5 py-1 text-[10px] text-[#5E6066]">
+                                      {s.label || s.kind || "State"}
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+              <div className="shrink-0 space-y-2 border-t border-[#F0F0F0] p-3 dark:border-[#1f1f1f]">
                 <button
                   type="button"
                   disabled={!!busy || !selectedFrame}
                   onClick={() => void runChecksFromPat()}
-                  className="rounded-[8px] bg-[#8664f2] px-3 py-2 text-[12.5px] font-medium text-white disabled:opacity-60"
+                  className="w-full rounded-[8px] bg-[#8664f2] px-3 py-2 text-[12.5px] font-medium text-white disabled:opacity-60"
                 >
                   {busy === "checks" ? "Running checks…" : "Run design checks"}
                 </button>
@@ -573,7 +686,7 @@ export function DesignValidationView({
                   type="button"
                   disabled={!!busy || !selectedFrame || !nodeId}
                   onClick={() => void runVisualDiff()}
-                  className="rounded-[8px] border border-[#8664f2] px-3 py-2 text-[12.5px] font-medium text-[#8664f2] disabled:opacity-60"
+                  className="w-full rounded-[8px] border border-[#8664f2] px-3 py-2 text-[12.5px] font-medium text-[#8664f2] disabled:opacity-60"
                 >
                   {busy === "diff" ? "Comparing…" : "Run visual comparison"}
                 </button>

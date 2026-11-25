@@ -406,6 +406,38 @@ export function atlasClient({ instance, accounts }: Msal) {
         width: number;
         height: number;
       }>(`/api/app-atlas/canvases/${canvasId}/figma/visual-diff`, json("POST", body), false, ""),
+    listFigmaThumbs: (canvasId: string) =>
+      request<{
+        syncedAt: number | null;
+        items: Array<{
+          frameId: string;
+          frameName: string | null;
+          pageId: string | null;
+          pageName: string | null;
+          url: string;
+          updatedAt: number;
+        }>;
+      }>(`/api/app-atlas/canvases/${canvasId}/figma/thumbs`, undefined, false, ""),
+    saveFigmaThumbs: (
+      canvasId: string,
+      body: {
+        items: Array<{
+          frameId: string;
+          imageBase64: string;
+          frameName?: string;
+          pageId?: string;
+          pageName?: string;
+          width?: number | null;
+          height?: number | null;
+        }>;
+      },
+    ) =>
+      request<{ syncedAt: number; saved: number; items: Array<{ frameId: string; url: string }> }>(
+        `/api/app-atlas/canvases/${canvasId}/figma/thumbs`,
+        json("POST", body),
+        false,
+        "",
+      ),
 
     /** Heartbeat: marks the caller present in `room` and returns everyone there. Optional own photo data-URL for peers. */
     presence: (room: string, leaving = false, photo?: string | null) =>
