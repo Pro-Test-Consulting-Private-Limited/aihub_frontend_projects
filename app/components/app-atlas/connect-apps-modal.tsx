@@ -39,7 +39,7 @@ type AppId = IntegrationProviderId;
 
 function healthLabel(health: ConnectionHealth, linkedOnCanvas: boolean): string {
   if (health === "active") return linkedOnCanvas ? "Active · linked to this canvas" : "Active · ready to connect";
-  // Canvas mapping can still work for SIT while the user session/cookie is expired.
+  // Canvas binding (Jira project / git repo / etc.) can remain while account health is bad.
   if (health === "expired") {
     return linkedOnCanvas
       ? "Linked to this canvas · reconnect account in Integrations"
@@ -49,6 +49,9 @@ function healthLabel(health: ConnectionHealth, linkedOnCanvas: boolean): string 
     return linkedOnCanvas
       ? "Linked to this canvas · fix connection in Integrations"
       : "Error · check Integrations";
+  }
+  if (linkedOnCanvas) {
+    return "Linked to this canvas · connect GitHub account in Integrations";
   }
   return "Not integrated · open Integrations";
 }
@@ -164,13 +167,16 @@ export function ConnectAppsModal({
                   const selected = picked === app.id;
                   const expired = health === "expired";
                   const errored = health === "error";
-                  /** Mapping still on canvas; account session may need reconnect — don't look "unlinked". */
-                  const linkedNeedsReconnect = linkedOnCanvas && (expired || errored);
+                  const disconnected = health === "disconnected" || health === "unknown";
+                  /** Canvas still linked; account missing/expired/error — show linked chrome, send user to Integrations. */
+                  const linkedNeedsReconnect =
+                    linkedOnCanvas && !ok && (expired || errored || disconnected);
                   const gitAdminOff = app.id === "github" && gitAvailable === false;
                   const needsIntegrate =
                     mappable &&
                     !gitAdminOff &&
-                    (health === "disconnected" || ((expired || errored) && !linkedOnCanvas));
+                    !linkedOnCanvas &&
+                    (disconnected || expired || errored);
                   const showLinked = linkedOnCanvas && (ok || linkedNeedsReconnect);
 
                   const statusText = gitAdminOff
